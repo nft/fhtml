@@ -319,8 +319,10 @@ include ./partials/head
 
 - **Attribute order** (deterministic): id (from `#id`), then paren attrs in source order,
   then merged `class`.
-- **Escaping**: text and attribute values are entity-escaped (`& < > "`); class names and
-  raw passthrough are emitted byte-for-byte; `{!expr}` output is unescaped by definition.
+- **Escaping**: attribute values are entity-escaped `& < > "`; text is escaped `& < >`
+  (a literal `"` in a text node is valid HTML — emitting `&quot;` there would waste tokens
+  for nothing). Class names and raw passthrough are emitted byte-for-byte; `{!expr}` output
+  is unescaped by definition.
 - **Output modes**: `--pretty` (2-space indented, default for `build`) and `--min`
   (no inter-tag whitespace, default for pipelines/stdout). Both modes must produce the same
   **element tree**; inter-element whitespace text nodes are *not* part of the contract and

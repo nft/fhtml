@@ -25,8 +25,13 @@ pub enum Node {
     TextBlock(Vec<String>),
     /// Raw passthrough lines, dedented by the marker's indent (SPEC §8).
     Raw(Vec<String>),
-    /// Emitted `//!` comment lines (SPEC §3.1). Silent `//` comments never reach the AST.
-    Comment(Vec<String>),
+    /// Comment lines (SPEC §3.1). `emit: true` for `//!` (HTML comment output);
+    /// `emit: false` for `//` (kept in the AST so `fhtml fmt` preserves them,
+    /// but never emitted as HTML).
+    Comment {
+        lines: Vec<String>,
+        emit: bool,
+    },
     Doctype,
 }
 
@@ -74,27 +79,40 @@ fn innermost(el: &mut Element) -> &mut Element {
     }
 }
 
+fn describe_indent(s: &str) -> String {
+    if s.is_empty() {
+        "none".to_string()
+    } else {
+        let kind = if s.starts_with('\t') { "tab" } else { "space" };
+        format!("{} {kind}{}", s.len(), if s.len() == 1 { "" } else { "s" })
+    }
+}
+
 struct Line {
     indent: String,
     content: String,
     num: usize,
 }
 
-pub fn parse(src: &str) -> Result<Vec<Node>> {
+/// Parses a source file into nodes plus non-fatal warnings (SPEC §2 rule 5).
+pub fn parse(src: &str) -> Result<(Vec<Node>, Vec<String>)> {
     let mut parser = Parser::new(src);
     let nodes = parser.parse_block(0)?;
     if parser.pos < parser.lines.len() {
         let l = &parser.lines[parser.pos];
         return err(l.num, 1, "unexpected dedent");
     }
-    Ok(nodes)
+    Ok((nodes, parser.warnings))
 }
 
 struct Parser {
     lines: Vec<Line>,
     pos: usize,
-    /// Indent unit, fixed by the first indented line (SPEC §2).
-    unit: Option<String>,
+    /// Stack of open indents, one per level; `stack[0]` is `""` (SPEC §2).
+    stack: Vec<String>,
+    /// First observed indent step (in chars) — deviations warn, not error.
+    step: Option<usize>,
+    warnings: Vec<String>,
 }
 
 impl Parser {
@@ -122,49 +140,65 @@ impl Parser {
         Parser {
             lines,
             pos: 0,
-            unit: None,
+            stack: vec![String::new()],
+            step: None,
+            warnings: Vec::new(),
         }
     }
 
-    /// Depth of the line at `idx`, enforcing SPEC §2 (unit consistency, no mixing).
-    fn depth_of(&mut self, idx: usize) -> Result<usize> {
+    /// Level of the line at `idx` under the Python-style indent-stack rule
+    /// (SPEC §2): exact match with an open level, or any extension of the
+    /// innermost level opens one child level. Repeated calls on the same line
+    /// are stable (pops and pushes are idempotent on re-classification).
+    fn level_of(&mut self, idx: usize) -> Result<usize> {
         let num = self.lines[idx].num;
         let indent = self.lines[idx].indent.clone();
-        if indent.is_empty() {
-            return Ok(0);
-        }
-        let first = indent.chars().next().unwrap();
-        if indent.chars().any(|c| c != first) {
-            return err(num, 1, "mixed tabs and spaces in indentation");
-        }
-        match &self.unit {
-            None => {
-                self.unit = Some(indent);
-                Ok(1)
-            }
-            Some(unit) => {
-                if !unit.starts_with(first) {
-                    return err(
-                        num,
-                        1,
-                        "indentation mixes tabs and spaces across the file (the first indented line fixed the unit)",
-                    );
-                }
-                if !indent.len().is_multiple_of(unit.len()) {
-                    return err(
-                        num,
-                        1,
-                        format!(
-                            "indentation is not a whole number of indent units (unit = {} {}{})",
-                            unit.len(),
-                            if first == '\t' { "tab" } else { "space" },
-                            if unit.len() == 1 { "" } else { "s" },
-                        ),
-                    );
-                }
-                Ok(indent.len() / unit.len())
+        if let Some(first) = indent.chars().next() {
+            if indent.chars().any(|c| c != first) {
+                return err(num, 1, "mixed tabs and spaces in indentation");
             }
         }
+        if let Some(k) = self.stack.iter().position(|s| *s == indent) {
+            self.stack.truncate(k + 1);
+            return Ok(k);
+        }
+        let top = self.stack.last().unwrap().clone();
+        if indent.len() > top.len() && indent.starts_with(&top) {
+            let step = indent.len() - top.len();
+            match self.step {
+                None => self.step = Some(step),
+                Some(usual) if usual != step => self.warnings.push(format!(
+                    "{num}:1: warning: indent step of {step} differs from this file's usual {usual} — check the nesting here (`fhtml fmt` normalizes indentation)"
+                )),
+                _ => {}
+            }
+            self.stack.push(indent);
+            return Ok(self.stack.len() - 1);
+        }
+        let open = self
+            .stack
+            .iter()
+            .map(|s| describe_indent(s))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let hint = match (indent.chars().next(), top.chars().next()) {
+            (Some(a), Some(b)) if a != b => {
+                if a == '\t' {
+                    " (this line indents with tabs but earlier lines use spaces)"
+                } else {
+                    " (this line indents with spaces but earlier lines use tabs)"
+                }
+            }
+            _ => "",
+        };
+        err(
+            num,
+            1,
+            format!(
+                "indentation of {} matches no open level (open: {open}) — align exactly with an open level, or indent past the innermost to nest{hint}",
+                describe_indent(&indent)
+            ),
+        )
     }
 
     fn parse_block(&mut self, depth: usize) -> Result<Vec<Node>> {
@@ -174,7 +208,7 @@ impl Parser {
                 self.pos += 1;
                 continue;
             }
-            let d = self.depth_of(self.pos)?;
+            let d = self.level_of(self.pos)?;
             let num = self.lines[self.pos].num;
             if d < depth {
                 break;
@@ -183,21 +217,20 @@ impl Parser {
                 return err(
                     num,
                     1,
-                    "unexpected indentation (skips a level, or nests under a line that cannot have children)",
+                    "unexpected indentation — the line above cannot have children",
                 );
             }
             let content = self.lines[self.pos].content.clone();
             let indent = self.lines[self.pos].indent.clone();
 
-            if let Some(rest) = content.strip_prefix("//!") {
+            if content.starts_with("//") {
+                let emit = content.starts_with("//!");
+                let rest = &content[if emit { 3 } else { 2 }..];
                 let first = rest.strip_prefix(' ').unwrap_or(rest).to_string();
                 self.pos += 1;
                 let mut lines = vec![first];
                 lines.extend(self.consume_deeper(&indent));
-                nodes.push(Node::Comment(lines));
-            } else if content.starts_with("//") {
-                self.pos += 1;
-                self.consume_deeper(&indent);
+                nodes.push(Node::Comment { lines, emit });
             } else if content.starts_with('<') {
                 self.pos += 1;
                 let mut lines = vec![content];
@@ -281,7 +314,7 @@ impl Parser {
             }
             if j < self.lines.len()
                 && self.lines[j].content.starts_with('|')
-                && self.depth_of(j)? == depth
+                && self.level_of(j)? == depth
             {
                 self.pos = j;
             } else {

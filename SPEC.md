@@ -20,12 +20,30 @@ A file using only §1–§8 constructs compiles to static HTML.
 
 ## 2. Indentation and blocks
 
+fhtml uses **Python's indentation model** — deliberately, because it is the whitespace
+discipline LLMs (and humans) have most deeply internalized. The compiler keeps a stack of
+open indents, one per level:
+
 1. Nesting depth is expressed by leading whitespace on the logical line's first physical line.
-2. The **indent unit** is fixed by the first indented line in the file: either one tab or a
-   run of N spaces (N ≥ 1). Every deeper level must be exactly *parent indent + one unit*.
-3. Mixing tabs and spaces in indentation is an error.
-4. A line indented one unit deeper than line *L* is a child of *L*. Skipping levels
-   (two units deeper at once) is an error. Dedents must return to an existing open level.
+2. A line whose indent **extends** the innermost open level (same prefix, longer) opens
+   exactly **one** child level — whatever the size of the step.
+3. A line at an existing open level must reproduce that level's indent **byte-for-byte**
+   (sibling alignment is exact).
+4. Any other indent is an error; the diagnostic lists the open levels
+   (`indentation of 3 spaces matches no open level (open: none, 2 spaces, 4 spaces) …`).
+5. A line may not mix tabs and spaces in its own indentation. Because a child's indent must
+   extend its parent's, tab/space mixing across levels is impossible by construction.
+6. **Uneven steps warn.** A step that differs from the file's first-observed step (e.g. +3
+   spaces in a file that steps by +2) compiles but emits a warning — under rule 2 a sibling
+   accidentally indented one space deeper silently becomes a child, and this warning is the
+   guard against exactly that. `fhtml fmt` normalizes indentation to the canonical **2
+   spaces per level, spaces only** and makes the warning moot.
+
+Rationale: an earlier draft fixed one indent unit for the whole file — *stricter* than
+Python. That strictness created a failure class Python-trained intuition doesn't guard
+against (a model indenting one subtree by 2 and another by 4 would error). Matching
+Python's rules matches the training distribution; the warning in rule 6 covers the one
+hazard Python avoids only because its simple statements can't open blocks.
 
 ## 3. Line forms
 
@@ -332,7 +350,12 @@ include ./partials/head
   constructs); `--target=js` emits an ES module exporting `(data) => string`.
 - **Errors** carry file, line, column, and the offending token; parsing is strict — there
   is no recovery mode that silently guesses (an agent retry loop needs precise, honest
-  errors more than it needs leniency).
+  errors more than it needs leniency). Non-fatal hazards (uneven indent steps, §2 rule 6)
+  are **warnings** on stderr; the build still succeeds.
+- **Canonical form**: `fhtml fmt` reformats source to 2-space indentation (spaces only),
+  `.` for `div`, and minimal quoting. Invariant: formatting never changes the compiled
+  output, and formatting twice equals formatting once. Silent `//` comments survive
+  formatting. The intended agent workflow is *write → fmt → build*.
 
 ## 12. Reserved words
 

@@ -71,7 +71,8 @@ fn emit_node(out: &mut String, node: &Node, depth: usize, mode: Mode) {
 
     match node {
         Node::Doctype => out.push_str(&format!("{ind}<!DOCTYPE html>{nl}")),
-        Node::Comment(lines) => {
+        Node::Comment { emit: false, .. } => {}
+        Node::Comment { lines, emit: true } => {
             if lines.len() == 1 {
                 out.push_str(&format!("{ind}<!-- {} -->{nl}", lines[0]));
             } else {

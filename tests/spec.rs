@@ -276,15 +276,90 @@ fn error_doctype_arguments() {
 }
 
 #[test]
-fn error_indent_skips_level() {
+fn error_dedent_matches_no_open_level() {
+    // 4 deep opens a level; dedenting to 2 matches nothing open.
     let e = error("div\n    p \"deep\"\n  p \"ok\"");
-    assert!(e.contains("indentation"), "got: {e}");
+    assert!(e.contains("matches no open level"), "got: {e}");
+    assert!(e.contains("4 spaces"), "got: {e}");
 }
 
 #[test]
-fn error_mixed_tabs_and_spaces() {
+fn error_mixed_tabs_and_spaces_same_line() {
+    let e = error("div\n \tp \"a\"");
+    assert!(e.contains("mixed tabs and spaces"), "got: {e}");
+}
+
+#[test]
+fn error_tabs_vs_spaces_across_lines() {
     let e = error("div\n\tp \"a\"\n  p \"b\"");
-    assert!(e.contains("tabs and spaces"), "got: {e}");
+    assert!(e.contains("spaces") && e.contains("tabs"), "got: {e}");
+}
+
+// -------------------------------------------- indent stack (SPEC §2, Python model)
+
+#[test]
+fn indent_steps_may_differ_between_blocks() {
+    // Python-style: each block picks its own step; only alignment must match.
+    let src = "div\n    p \"a\"\nul\n  li \"b\"\n";
+    assert_eq!(min(src), "<div><p>a</p></div><ul><li>b</li></ul>");
+}
+
+#[test]
+fn any_deeper_indent_is_one_child_level() {
+    assert_eq!(min("div\n        p \"x\"\n"), "<div><p>x</p></div>");
+}
+
+#[test]
+fn uneven_step_compiles_with_warning() {
+    // The silent-misnesting hazard: +1 space nests (per the stack rule) but warns.
+    let out = fhtml::compile_full("div\n  p \"a\"\n   p \"b\"\n", Mode::Min).unwrap();
+    assert_eq!(out.html, "<div><p>a<p>b</p></p></div>");
+    assert_eq!(out.warnings.len(), 1, "warnings: {:?}", out.warnings);
+    assert!(
+        out.warnings[0].contains("indent step"),
+        "got: {}",
+        out.warnings[0]
+    );
+}
+
+#[test]
+fn consistent_files_warn_nothing() {
+    let src = "div\n  p \"a\"\n  ul\n    li \"b\"\n";
+    let out = fhtml::compile_full(src, Mode::Min).unwrap();
+    assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
+}
+
+// ------------------------------------------------------------------ fmt
+
+#[test]
+fn fmt_canonicalizes_indent_div_and_classes() {
+    let src = "div flex\n    p(class=\"x y\") text-gray-500 \"hi\"\n";
+    let expected = ". flex\n  p x y text-gray-500 \"hi\"\n";
+    assert_eq!(fhtml::format(src).unwrap(), expected);
+}
+
+#[test]
+fn fmt_roundtrip_preserves_output() {
+    let src = r#"doctype html
+div flex items-center gap-4
+	img(src=/img/ava.jpg alt="Erin's avatar") size-12 rounded-full
+	.
+		p text-lg "Erin Lindford"
+		li > a(href=/docs) hover:underline "Docs"
+"#;
+    let formatted = fhtml::format(src).unwrap();
+    assert_eq!(min(&formatted), min(src), "formatted:\n{formatted}");
+    // Canonical output is stable: formatting twice changes nothing.
+    assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+}
+
+#[test]
+fn fmt_preserves_silent_comments_and_text_blocks() {
+    let src = "// keep me\np text-sm\n  | line \"one\"\n  | line two\n";
+    let formatted = fhtml::format(src).unwrap();
+    assert!(formatted.contains("// keep me"), "got:\n{formatted}");
+    assert!(formatted.contains("| line \"one\""), "got:\n{formatted}");
+    assert_eq!(min(&formatted), min(src));
 }
 
 #[test]

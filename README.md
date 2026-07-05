@@ -51,7 +51,8 @@ That's the whole markup layer. [SPEC.md](SPEC.md) is the normative definition.
 Rust toolchain required (no other dependencies):
 
 ```sh
-cargo install --path .
+cargo install --path .                     # the fhtml compiler (zero-dep)
+cargo install --path . --features convert  # + the html2fhtml converter
 ```
 
 ## Usage
@@ -71,6 +72,21 @@ stderr.
 `fhtml fmt` normalizes to 2-space indentation, `.` for `div`, and minimal quoting.
 Formatting never changes the compiled output. The intended agent workflow is
 *write → fmt → build*.
+
+### html2fhtml
+
+The reverse direction, for migrating existing markup (requires the `convert` feature):
+
+```sh
+html2fhtml page.html                # HTML → fhtml on stdout
+html2fhtml src/ -o out/             # convert a directory tree (.html/.htm → .fhtml)
+html2fhtml --check page.html        # verify the round-trip: HTML → fhtml → same DOM
+html2fhtml --fragment=table row.html  # parse as a fragment (e.g. bare <tr>)
+```
+
+Output is always canonical (`fhtml fmt` on it is a no-op). Anything fhtml can't express
+natively (exotic attribute names, `<svg>` by default) falls back to raw HTML lines, with a
+warning on stderr; `--convert-svg` converts SVG subtrees instead.
 
 ### As a library
 

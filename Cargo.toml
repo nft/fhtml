@@ -12,3 +12,15 @@ path = "src/lib.rs"
 [[bin]]
 name = "fhtml"
 path = "src/main.rs"
+
+[[bin]]
+name = "html2fhtml"
+path = "src/bin/html2fhtml.rs"
+required-features = ["convert"]
+
+[dependencies]
+html5ever = { version = "0.39", optional = true }
+markup5ever_rcdom = { version = "0.39.0", optional = true }
+
+[features]
+convert = ["dep:html5ever", "dep:markup5ever_rcdom"]

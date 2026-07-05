@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme — Ship faster</title>
+  <style>
+    :root { --brand: #4f46e5; }
+    .prose code { background: #f4f4f5; padding: 0 .25rem; }
+  </style>
+</head>
+<body class="bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
+  <!-- Site header -->
+  <header class="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+    <nav class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+      <a href="/" class="text-lg font-bold tracking-tight">Acme</a>
+      <ul class="flex items-center gap-6 text-sm font-medium">
+        <li><a href="/features" class="hover:text-indigo-600">Features</a></li>
+        <li><a href="/pricing" class="hover:text-indigo-600">Pricing</a></li>
+        <li><a href="/docs" class="hover:text-indigo-600">Docs</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <section class="mx-auto max-w-6xl px-4 py-24 text-center">
+      <h1 class="text-5xl font-bold tracking-tight">Ship <em class="text-indigo-600 not-italic">10×</em> faster</h1>
+      <p class="mx-auto mt-6 max-w-2xl text-lg text-zinc-500">
+        Acme compiles your ideas straight to production. No config,
+        no yak-shaving, no regrets.
+      </p>
+      <form action="/signup" method="post" class="mx-auto mt-10 flex max-w-md gap-2">
+        <label for="email" class="sr-only">Email</label>
+        <input id="email" name="email" type="email" required placeholder="you@example.com"
+               class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:outline-2 focus:outline-indigo-600">
+        <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Start free</button>
+      </form>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-4 py-16">
+      <h2 class="text-2xl font-semibold">Install</h2>
+      <pre class="mt-4 overflow-x-auto rounded-lg bg-zinc-900 p-4 text-sm text-zinc-100"><code>$ cargo install acme
+$ acme init my-app
+    --template starter</code></pre>
+      <table class="mt-8 w-full text-left text-sm">
+        <thead class="border-b border-zinc-200 text-zinc-500">
+          <tr><th class="py-2">Plan</th><th class="py-2">Projects</th><th class="py-2">Price</th></tr>
+        </thead>
+        <tbody class="divide-y divide-zinc-100">
+          <tr><td class="py-2">Free</td><td>3</td><td>$0</td></tr>
+          <tr><td class="py-2">Pro</td><td>Unlimited</td><td>$29</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="border-t border-zinc-200 py-10 text-center text-sm text-zinc-500 dark:border-zinc-800">
+    <p>&copy; 2026 Acme Inc. &middot; <a href="/legal" class="underline">Legal</a></p>
+  </footer>
+
+  <script>
+    document.querySelectorAll('a[href^="/"]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        // analytics beacon; failures are fine
+        navigator.sendBeacon('/t', a.href);
+      });
+    });
+  </script>
+</body>
+</html>

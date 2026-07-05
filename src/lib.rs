@@ -5,6 +5,8 @@
 //! formatter. Template-layer constructs (§9–§10) are recognized and rejected
 //! with a clear error.
 
+#[cfg(feature = "convert")]
+pub mod convert;
 mod emit;
 mod error;
 mod fmt;

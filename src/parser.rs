@@ -6,7 +6,7 @@
 use crate::error::{err, Result};
 
 pub const RESERVED: [&str; 8] = [
-    "if", "elif", "else", "for", "empty", "def", "slot", "include",
+    "if", "elif", "else", "for", "empty", "def", "children", "include",
 ];
 
 pub const VOID: [&str; 13] = [

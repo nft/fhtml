@@ -56,7 +56,7 @@ Classified by the logical line's first token:
 | `<` | raw HTML passthrough | §8 |
 | `\|` | text block line | §6.2 |
 | `doctype` | `<!DOCTYPE html>` | §7 |
-| `if` `elif` `else` `for` `empty` `def` `slot` `include` | statement (template layer) | §10 |
+| `if` `elif` `else` `for` `empty` `def` `children` `include` | statement (template layer) | §10 |
 | `+name` | component call (template layer) | §10.4 |
 | anything else | element line | §4 |
 
@@ -287,7 +287,7 @@ Iterates lists (index = position) and maps (name = value, index = key). The opti
 Iterating anything else — a number, boolean, or string — is a render error (strings are not
 character sequences in fhtml). Loop variables shadow outer names within the block.
 
-### 10.3 `def` and `slot`
+### 10.3 `def` and `children`
 
 ```
 def name(param param=default …)
@@ -300,10 +300,12 @@ def name(param param=default …)
   never the strings `"false"`/`"3"`. An unquoted default must contain no whitespace; brace a
   spaced expression: `limit={ctx.pageSize - 1}`. Defaults may reference `ctx` but not other
   parameters, and are evaluated at each call.
-- Inside the body, only the parameters and `slot` are in scope — components are closed over
-  nothing (explicit data flow, no surprise coupling).
-- `slot` (statement, alone on its line) emits the caller's block. Multiple `slot`s repeat
-  it. v0.1 has **default slot only** (named slots: open question).
+- Inside the body, only the parameters and `children` are in scope — components are closed
+  over nothing (explicit data flow, no surprise coupling).
+- `children` (statement, alone on its line) emits the caller's block — the React mental
+  model. Multiple `children` statements repeat it. v0.1 has **the default block only**
+  (named blocks: open question). The word was chosen over `slot` because `<slot>` is a
+  standard HTML element (web components); in fhtml `slot` is an ordinary tag.
 
 ### 10.4 Component call
 
@@ -319,7 +321,7 @@ def name(param param=default …)
   unquoted argument must contain no whitespace; brace anything spaced: `n={a + b}`.
 - Arguments are **named-only**; unknown names are errors; parameters without defaults are
   required.
-- The indented block becomes the slot content, evaluated in the **caller's** scope.
+- The indented block becomes the component's `children`, evaluated in the **caller's** scope.
 
 ### 10.5 `include`
 
@@ -360,7 +362,10 @@ include ./partials/head
 
 ## 12. Reserved words
 
-First-token position only: `doctype if elif else for empty def slot include`.
+First-token position only: `doctype if elif else for empty def children include`.
 In expressions: `true false null ctx`.
+None of these names an HTML element, so every HTML tag — including `<slot>` — is an
+ordinary fhtml element. (A nonstandard `<children>` element would need the raw escape
+hatch, §8; it cannot even be a custom element, which require a hyphen.)
 Sigils with fixed meaning at token start: `" { # > \| // //! < \ + .` (the last three only
 in first-token position). Everything else is a tag name or a class name.

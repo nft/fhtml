@@ -108,6 +108,10 @@ Tailwind v4's scanner picks up fhtml classes as-is — they're plain space-separ
 @source "./src/**/*.fhtml";
 ```
 
+Verified against tailwindcss v4.3.2 (`bench/tailwind_scan.sh`): CSS built from the benchmark
+corpus as fhtml covers every utility the HTML build finds, arbitrary values and `data-[…]:`
+variants included.
+
 One rule: never build class names from expressions (`bg-{color}-100` is invisible to
 Tailwind's static scanner). Interpolate whole class names instead.
 

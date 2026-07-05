@@ -1,10 +1,11 @@
 # fhtml benchmark harness
 
-Measure, don't believe. Three questions, three tools:
+Measure, don't believe. Four questions, three tools:
 
 1. **How many tokens does fhtml actually save?** — `run.py`
 2. **Does the HTML→fhtml round-trip preserve the DOM?** — `run.py` (via `html2fhtml --check`)
 3. **Can LLMs write fhtml without more errors than the incumbent?** — `generate.py`
+4. **Does Tailwind's scanner see fhtml classes?** — `tailwind_scan.sh`
 
 ## Corpus
 
@@ -71,11 +72,27 @@ real fidelity difference, not grader bias.
 Not yet measured (needs a separate task design): free-form generation from a
 visual/text brief, and exact-match *edit* tasks on existing fhtml files.
 
+## Tailwind `@source` scanning: `tailwind_scan.sh`
+
+```sh
+npm install --prefix bench/.tools tailwindcss @tailwindcss/cli
+bench/tailwind_scan.sh
+```
+
+Builds CSS twice from the same corpus — `@source` pointed at the HTML
+originals, then at their fhtml conversions (`source(none)` isolates the
+test) — and diffs. Passes when the fhtml scan covers every utility the HTML
+scan found. Verified against tailwindcss v4.3.2: full coverage including
+arbitrary values, `data-[…]:` variants, fractions, and hex colors; one
+harmless superset artifact (bare tag tokens that name a utility, e.g.
+`table`, add dead CSS).
+
 ## Files
 
 - `run.py` — token + round-trip benchmark, writes `RESULTS.md` and `out/`
 - `pug_emit.py` — HTML → conservative idiomatic Pug
 - `generate.py` — LLM translation benchmark (needs `ANTHROPIC_API_KEY`)
+- `tailwind_scan.sh` — Tailwind `@source` coverage check (needs the npm install above)
 - `cheatsheet.md` — the fhtml syntax reference given to models
 - `corpus/` — the 48-component corpus
-- `out/`, `.tools/` — generated artifacts and the local Pug install (gitignored)
+- `out/`, `.tools/` — generated artifacts and local npm installs (gitignored)

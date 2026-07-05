@@ -55,7 +55,10 @@ fn open_tag(el: &Element) -> String {
         }
     }
     if !el.classes.is_empty() {
-        s.push_str(&format!(" class=\"{}\"", el.classes.join(" ")));
+        // Classes are byte-for-byte except `"`, which would end the attribute;
+        // &quot; is DOM-transparent (SPEC §11).
+        let joined = el.classes.join(" ").replace('"', "&quot;");
+        s.push_str(&format!(" class=\"{joined}\""));
     }
     s.push('>');
     s

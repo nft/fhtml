@@ -354,6 +354,25 @@ div flex items-center gap-4
 }
 
 #[test]
+fn class_with_quote_is_escaped_in_output() {
+    // A `"` inside a class must not end the emitted attribute.
+    assert_eq!(
+        min(r#"div(class="x\"y")"#),
+        r#"<div class="x&quot;y"></div>"#
+    );
+}
+
+#[test]
+fn fmt_hostile_classes_ride_in_class_attr() {
+    // `#b` printed bare would reparse as an id token — it must stay quoted.
+    let src = "div(class=\"a #b\") c\n";
+    let formatted = fhtml::format(src).unwrap();
+    assert_eq!(formatted, ".(class=\"a #b c\")\n");
+    assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    assert_eq!(min(&formatted), min(src));
+}
+
+#[test]
 fn fmt_preserves_silent_comments_and_text_blocks() {
     let src = "// keep me\np text-sm\n  | line \"one\"\n  | line two\n";
     let formatted = fhtml::format(src).unwrap();

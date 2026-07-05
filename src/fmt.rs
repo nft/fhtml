@@ -67,29 +67,54 @@ fn innermost(el: &Element) -> &Element {
     }
 }
 
+/// A class that, printed bare, would reparse as a different token kind
+/// (text, id, interpolation, or chain). Such classes can only enter the AST
+/// via a `class="…"` attribute, and must leave the same way.
+fn hostile_class(c: &str) -> bool {
+    c.starts_with('"') || c.starts_with('{') || c.starts_with('#') || c == ">"
+}
+
 fn element_line(el: &Element) -> String {
     let mut s = String::new();
     s.push_str(if el.tag == "div" { "." } else { &el.tag });
-    if !el.attrs.is_empty() {
+    // If any class can't survive as a bare token, the whole list rides in a
+    // quoted class attr (the parser merges it back losslessly, in order).
+    let class_attr = if el.classes.iter().any(|c| hostile_class(c)) {
+        Some(el.classes.join(" "))
+    } else {
+        None
+    };
+    if !el.attrs.is_empty() || class_attr.is_some() {
         s.push('(');
-        for (i, (name, value)) in el.attrs.iter().enumerate() {
-            if i > 0 {
+        let mut first = true;
+        for (name, value) in &el.attrs {
+            if !first {
                 s.push(' ');
             }
+            first = false;
             s.push_str(name);
             if let AttrValue::Str(v) = value {
                 s.push('=');
                 s.push_str(&attr_value(v));
             }
         }
+        if let Some(v) = &class_attr {
+            if !first {
+                s.push(' ');
+            }
+            s.push_str("class=");
+            s.push_str(&attr_value(v));
+        }
         s.push(')');
     }
     if let Some(id) = &el.id {
         s.push_str(&format!(" #{id}"));
     }
-    for class in &el.classes {
-        s.push(' ');
-        s.push_str(class);
+    if class_attr.is_none() {
+        for class in &el.classes {
+            s.push(' ');
+            s.push_str(class);
+        }
     }
     if let Some(text) = &el.text {
         s.push(' ');

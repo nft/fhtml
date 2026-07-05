@@ -339,8 +339,9 @@ include ./partials/head
   then merged `class`.
 - **Escaping**: attribute values are entity-escaped `& < > "`; text is escaped `& < >`
   (a literal `"` in a text node is valid HTML — emitting `&quot;` there would waste tokens
-  for nothing). Class names and raw passthrough are emitted byte-for-byte; `{!expr}` output
-  is unescaped by definition.
+  for nothing). Class names and raw passthrough are emitted byte-for-byte, with one
+  exception: a `"` inside a class name is emitted as `&quot;` (it would otherwise end the
+  attribute; the entity is DOM-transparent). `{!expr}` output is unescaped by definition.
 - **Output modes**: `--pretty` (2-space indented, default for `build`) and `--min`
   (no inter-tag whitespace, default for pipelines/stdout). Both modes must produce the same
   **element tree**; inter-element whitespace text nodes are *not* part of the contract and

@@ -1,0 +1,64 @@
+<div class="mx-auto max-w-lg">
+  <label for="file-upload" class="block text-sm font-medium text-gray-900">Attachments</label>
+  <div class="mt-2 flex justify-center rounded-lg border-2 border-dashed border-gray-300 px-6 py-10 hover:border-indigo-400 hover:bg-indigo-50/30">
+    <div class="text-center">
+      <svg class="mx-auto size-12 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0 0 21 18v-1.94l-2.69-2.689a1.5 1.5 0 0 0-2.12 0l-.88.879.97.97a.75.75 0 1 1-1.06 1.06l-5.16-5.159a1.5 1.5 0 0 0-2.12 0L3 16.061Zm10.125-7.81a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z" clip-rule="evenodd" />
+      </svg>
+      <div class="mt-4 flex text-sm text-gray-600">
+        <label for="file-upload" class="relative cursor-pointer rounded-md font-semibold text-indigo-600 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-indigo-600 hover:text-indigo-500">
+          <span>Upload a file</span>
+          <input id="file-upload" name="file-upload" type="file" multiple class="sr-only" />
+        </label>
+        <p class="pl-1">or drag and drop</p>
+      </div>
+      <p class="mt-1 text-xs text-gray-500">PNG, PDF or ZIP up to 25MB each</p>
+    </div>
+  </div>
+  <ul role="list" class="mt-4 space-y-3">
+    <li class="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3">
+      <svg class="size-8 shrink-0 text-rose-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0 0 16.5 9h-1.875a1.875 1.875 0 0 1-1.875-1.875V5.25A3.75 3.75 0 0 0 9 1.5H5.625Z" clip-rule="evenodd" />
+        <path d="M12.971 1.816A5.23 5.23 0 0 1 14.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 0 1 3.434 1.279 9.768 9.768 0 0 0-6.963-6.963Z" />
+      </svg>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center justify-between gap-2">
+          <p class="truncate text-sm font-medium text-gray-900">brand-guidelines-v3.pdf</p>
+          <span class="shrink-0 text-xs text-gray-500">8.4 MB &middot; 72%</span>
+        </div>
+        <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+          <div class="h-full w-[72%] rounded-full bg-indigo-600"></div>
+        </div>
+      </div>
+      <button type="button" class="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Cancel upload of brand-guidelines-v3.pdf">
+        <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+        </svg>
+      </button>
+    </li>
+    <li class="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3">
+      <svg class="size-8 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0 0 21 18v-1.94l-2.69-2.689a1.5 1.5 0 0 0-2.12 0l-.88.879.97.97a.75.75 0 1 1-1.06 1.06l-5.16-5.159a1.5 1.5 0 0 0-2.12 0L3 16.061Zm10.125-7.81a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z" clip-rule="evenodd" />
+      </svg>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center justify-between gap-2">
+          <p class="truncate text-sm font-medium text-gray-900">homepage-hero-final.png</p>
+          <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+            <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd" />
+            </svg>
+            Uploaded
+          </span>
+        </div>
+        <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+          <div class="h-full w-full rounded-full bg-emerald-500"></div>
+        </div>
+      </div>
+      <button type="button" class="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Remove homepage-hero-final.png">
+        <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193v-.443A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+    </li>
+  </ul>
+</div>

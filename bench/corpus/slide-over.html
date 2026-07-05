@@ -1,0 +1,99 @@
+<div class="relative z-50" role="dialog" aria-modal="true" aria-labelledby="slide-over-title">
+  <div class="fixed inset-0 bg-gray-500/75 transition-opacity" aria-hidden="true"></div>
+  <div class="fixed inset-0 overflow-hidden">
+    <div class="absolute inset-0 overflow-hidden">
+      <div class="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10 sm:pl-16">
+        <div class="pointer-events-auto w-screen max-w-md transform transition duration-500 ease-in-out sm:max-w-lg">
+          <form action="#" method="POST" class="flex h-full flex-col divide-y divide-gray-200 bg-white shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_8px_10px_-6px_rgba(0,0,0,0.1)]">
+            <div class="h-0 flex-1 overflow-y-auto">
+              <div class="bg-indigo-700 px-4 py-6 sm:px-6">
+                <div class="flex items-center justify-between">
+                  <h2 class="text-base font-semibold text-white" id="slide-over-title">New project</h2>
+                  <div class="ml-3 flex h-7 items-center">
+                    <button type="button" class="relative rounded-md bg-indigo-700 text-indigo-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" aria-label="Close panel">
+                      <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="mt-1">
+                  <p class="text-sm text-indigo-300">Get started by filling in the information below to create your new project.</p>
+                </div>
+              </div>
+              <div class="flex flex-1 flex-col justify-between">
+                <div class="divide-y divide-gray-200 px-4 sm:px-6">
+                  <div class="space-y-6 pb-5 pt-6">
+                    <div>
+                      <label for="project-name" class="block text-sm font-medium text-gray-900">Project name</label>
+                      <div class="mt-2">
+                        <input type="text" name="project-name" id="project-name" placeholder="Atlas migration" class="block w-full rounded-md border-0 px-3 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm" />
+                      </div>
+                    </div>
+                    <div>
+                      <label for="project-description" class="block text-sm font-medium text-gray-900">Description</label>
+                      <div class="mt-2">
+                        <textarea id="project-description" name="project-description" rows="4" class="block w-full rounded-md border-0 px-3 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm">Migrate the reporting pipeline off the legacy warehouse before the October contract renewal.</textarea>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-medium text-gray-900">Team members</h3>
+                      <div class="mt-2 flex space-x-2" aria-label="Current team members">
+                        <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="/avatars/tom-cook.jpg" alt="Tom Cook" />
+                        <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="/avatars/whitney-francis.jpg" alt="Whitney Francis" />
+                        <img class="inline-block h-8 w-8 rounded-full ring-2 ring-white" src="/avatars/leonard-krasner.jpg" alt="Leonard Krasner" />
+                        <button type="button" class="relative inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-dashed border-gray-200 bg-white text-gray-400 hover:border-gray-300 hover:text-gray-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" aria-label="Add team member">
+                          <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <fieldset>
+                      <legend class="text-sm font-medium text-gray-900">Privacy</legend>
+                      <div class="mt-2 space-y-4">
+                        <div class="relative flex items-start">
+                          <div class="absolute flex h-6 items-center">
+                            <input id="privacy-public" name="privacy" type="radio" checked aria-describedby="privacy-public-description" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600" />
+                          </div>
+                          <div class="pl-7 text-sm">
+                            <label for="privacy-public" class="font-medium text-gray-900">Public access</label>
+                            <p id="privacy-public-description" class="text-gray-500">Everyone with the link will see this project.</p>
+                          </div>
+                        </div>
+                        <div class="relative flex items-start">
+                          <div class="absolute flex h-6 items-center">
+                            <input id="privacy-private" name="privacy" type="radio" aria-describedby="privacy-private-description" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600" />
+                          </div>
+                          <div class="pl-7 text-sm">
+                            <label for="privacy-private" class="font-medium text-gray-900">Private to project members</label>
+                            <p id="privacy-private-description" class="text-gray-500">Only members of this project would be able to access.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </fieldset>
+                  </div>
+                  <div class="pb-6 pt-4">
+                    <div class="flex text-sm">
+                      <a href="#" class="group inline-flex items-center font-medium text-indigo-600 hover:text-indigo-900">
+                        <svg class="h-5 w-5 text-indigo-500 group-hover:text-indigo-900" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path d="M12.232 4.232a2.5 2.5 0 0 1 3.536 3.536l-1.225 1.224a.75.75 0 0 0 1.061 1.06l1.224-1.224a4 4 0 0 0-5.656-5.656l-3 3a4 4 0 0 0 .225 5.865.75.75 0 0 0 .977-1.138 2.5 2.5 0 0 1-.142-3.667l3-3Z" />
+                          <path d="M11.603 7.963a.75.75 0 0 0-.977 1.138 2.5 2.5 0 0 1 .142 3.667l-3 3a2.5 2.5 0 0 1-3.536-3.536l1.225-1.224a.75.75 0 0 0-1.061-1.06l-1.224 1.224a4 4 0 1 0 5.656 5.656l3-3a4 4 0 0 0-.225-5.865Z" />
+                        </svg>
+                        <span class="ml-2">Copy link</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-shrink-0 justify-end gap-4 px-4 py-4">
+              <button type="button" class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">Cancel</button>
+              <button type="submit" class="inline-flex justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:opacity-50">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

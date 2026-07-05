@@ -4,7 +4,9 @@ A whitespace-based markup language (`.fhtml`) that compiles 1:1 to HTML. Like Pu
 for two things Pug wasn't:
 
 - **Token-cheap LLM/agent output** — no closing tags, no angle brackets, no `class="…"`
-  wrappers. Roughly 25–40% fewer output tokens on class-heavy markup.
+  wrappers. Measured on a 48-component Tailwind corpus: **14% fewer tokens than pretty
+  HTML** overall, 20–25% on markup that isn't dominated by inline SVG payload
+  ([bench/RESULTS.md](bench/RESULTS.md)).
 - **Tailwind-native** — bare tokens after the tag *are* the class list, copied to output
   byte-for-byte. `hover:bg-blue-500`, `w-1/2`, `data-[state=open]:bg-red-500` — no escaping,
   ever.

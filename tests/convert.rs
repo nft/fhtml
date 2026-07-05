@@ -2,7 +2,7 @@
 //! Run with `cargo test --features convert`.
 #![cfg(feature = "convert")]
 
-use fhtml::convert::{check, convert, Options};
+use fhtml::convert::{check, compare_html, convert, Options};
 use fhtml::{compile, format, Mode};
 
 fn conv(html: &str) -> String {
@@ -376,6 +376,24 @@ fn reverse_goldens() {
             }
         }
     }
+}
+
+// ── DOM equivalence (benchmark grader) ──────────────────────────────────────
+
+#[test]
+fn compare_html_normalizes_like_check() {
+    let opts = Options::default();
+    // Formatting, comments, attr order, and boolean attr forms don't count.
+    compare_html(
+        "<div class=\"a b\"   id=x><!-- c --><input disabled></div>",
+        "<div id=\"x\" class=\"a  b\">\n  <input disabled=\"disabled\">\n</div>",
+        &opts,
+    )
+    .unwrap();
+    // Real differences do.
+    let err = compare_html("<p>hi</p>", "<p>ho</p>", &opts).unwrap_err();
+    assert!(err.contains("text"), "unexpected diff message: {err}");
+    compare_html("<p class=\"a\">x</p>", "<p class=\"b\">x</p>", &opts).unwrap_err();
 }
 
 // ── Corpus (plan §6.4) ──────────────────────────────────────────────────────

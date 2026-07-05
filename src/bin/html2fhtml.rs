@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{env, fs, io};
 
-use fhtml::convert::{check, convert, Options};
+use fhtml::convert::{check, compare_html, convert, Options};
 
 const USAGE: &str = "\
 html2fhtml — convert HTML to fhtml
@@ -21,6 +21,9 @@ OPTIONS:
                      mangles, e.g. a bare <tr>
   --check            convert, recompile with fhtml, compare normalized
                      DOMs; exit 1 on mismatch
+  --dom-eq <A> <B>   compare two HTML files for normalized-DOM
+                     equivalence (no conversion); exit 1 and describe
+                     the first difference on mismatch
   -h, --help         show this help
   -V, --version      print version
 
@@ -44,6 +47,7 @@ fn run() -> Result<(), String> {
     let mut opts = Options::default();
     let mut out_path: Option<PathBuf> = None;
     let mut do_check = false;
+    let mut dom_eq: Option<(String, String)> = None;
     let mut input: Option<String> = None;
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -53,6 +57,16 @@ fn run() -> Result<(), String> {
             "--convert-svg" => opts.convert_svg = true,
             "--no-chains" => opts.chains = false,
             "--check" => do_check = true,
+            "--dom-eq" => {
+                let a = args
+                    .get(i + 1)
+                    .ok_or("`--dom-eq` requires two file paths")?;
+                let b = args
+                    .get(i + 2)
+                    .ok_or("`--dom-eq` requires two file paths")?;
+                dom_eq = Some((a.clone(), b.clone()));
+                i += 2;
+            }
             "--fragment" => opts.fragment = Some("body".to_string()),
             s if s.starts_with("--fragment=") => {
                 let ctx = &s["--fragment=".len()..];
@@ -85,6 +99,15 @@ fn run() -> Result<(), String> {
             }
         }
         i += 1;
+    }
+
+    if let Some((a, b)) = dom_eq {
+        if input.is_some() || out_path.is_some() || do_check {
+            return Err("`--dom-eq` takes exactly two files and no other input".to_string());
+        }
+        let read = |p: &str| fs::read_to_string(p).map_err(|e| format!("{p}: {e}"));
+        return compare_html(&read(&a)?, &read(&b)?, &opts)
+            .map_err(|e| format!("DOM mismatch\n  {e}"));
     }
 
     if let Some(path) = input.as_deref().map(Path::new) {

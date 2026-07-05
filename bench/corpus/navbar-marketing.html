@@ -1,0 +1,48 @@
+<header class="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/80">
+  <nav class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8" aria-label="Main navigation">
+    <div class="flex items-center gap-x-10">
+      <a href="/" class="flex items-center gap-x-2">
+        <svg class="h-7 w-7 text-sky-500" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path d="M14 2a12 12 0 100 24 12 12 0 000-24z" stroke="currentColor" stroke-width="2" />
+          <path d="M8 14c2-4 4-6 6-6s4 2 6 6c-2 4-4 6-6 6s-4-2-6-6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+        </svg>
+        <span class="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">Orbitdesk</span>
+      </a>
+      <div class="hidden items-center gap-x-8 lg:flex">
+        <a href="/product" class="text-sm font-medium text-slate-700 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Product</a>
+        <a href="/solutions" class="text-sm font-medium text-slate-700 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Solutions</a>
+        <a href="/pricing" class="text-sm font-medium text-slate-700 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Pricing</a>
+        <a href="/customers" class="text-sm font-medium text-slate-700 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Customers</a>
+        <a href="/docs" class="text-sm font-medium text-slate-700 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Docs</a>
+      </div>
+    </div>
+    <div class="hidden items-center gap-x-4 lg:flex">
+      <a href="/login" class="text-sm font-medium text-slate-700 transition hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Log in</a>
+      <a href="/signup" class="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
+        Start free
+      </a>
+    </div>
+    <button type="button" data-state="closed" aria-expanded="false" aria-controls="mobile-menu" class="group inline-flex items-center justify-center rounded-md p-2 text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800">
+      <span class="sr-only">Open main menu</span>
+      <svg class="h-6 w-6 group-data-[state=open]:hidden" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+      <svg class="hidden h-6 w-6 group-data-[state=open]:block" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+    </button>
+  </nav>
+  <div id="mobile-menu" data-state="closed" class="hidden border-t border-slate-200 px-6 pt-4 pb-6 data-[state=open]:block lg:hidden dark:border-slate-800">
+    <div class="space-y-1">
+      <a href="/product" class="block rounded-md px-3 py-2 text-base font-medium text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800">Product</a>
+      <a href="/solutions" class="block rounded-md px-3 py-2 text-base font-medium text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800">Solutions</a>
+      <a href="/pricing" class="block rounded-md px-3 py-2 text-base font-medium text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800">Pricing</a>
+      <a href="/customers" class="block rounded-md px-3 py-2 text-base font-medium text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800">Customers</a>
+      <a href="/docs" class="block rounded-md px-3 py-2 text-base font-medium text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800">Docs</a>
+    </div>
+    <div class="mt-4 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <a href="/login" class="block rounded-md px-3 py-2 text-base font-medium text-slate-900 hover:bg-slate-50 dark:text-white dark:hover:bg-slate-800">Log in</a>
+      <a href="/signup" class="block rounded-md bg-sky-600 px-3 py-2 text-center text-base font-semibold text-white hover:bg-sky-500">Start free</a>
+    </div>
+  </div>
+</header>

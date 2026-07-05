@@ -1,0 +1,87 @@
+<header class="relative border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+  <p class="bg-indigo-600 px-4 py-2 text-center text-sm font-medium text-white">Free shipping on orders over $75 &middot; Easy 30-day returns</p>
+  <nav aria-label="Store navigation" class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="flex h-16 items-center justify-between gap-x-4">
+      <div class="flex items-center gap-x-8">
+        <a href="/" class="flex items-center gap-x-2">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="h-7 w-7 text-indigo-600 dark:text-indigo-400">
+            <path d="M12 2 2 8v8l10 6 10-6V8L12 2Zm0 2.31 7.5 4.5-7.5 4.5-7.5-4.5L12 4.31Z" />
+          </svg>
+          <span class="text-lg font-bold tracking-tight text-gray-900 dark:text-white">Alderwood Supply</span>
+        </a>
+        <div class="hidden lg:flex lg:gap-x-6">
+          <div class="group relative">
+            <button type="button" class="flex items-center gap-x-1 py-5 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" aria-expanded="false">
+              Shop
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-4 w-4 text-gray-400 transition-transform group-hover:rotate-180">
+                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <div class="invisible absolute left-0 top-full z-20 w-64 rounded-lg border border-gray-200 bg-white p-2 opacity-0 shadow-lg transition group-hover:visible group-hover:opacity-100 dark:border-gray-800 dark:bg-gray-900">
+              <a href="/collections/outerwear" class="flex items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800">
+                Outerwear
+                <span class="text-xs text-gray-400">31</span>
+              </a>
+              <a href="/collections/knitwear" class="flex items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800">
+                Knitwear
+                <span class="text-xs text-gray-400">24</span>
+              </a>
+              <a href="/collections/footwear" class="flex items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800">
+                Footwear
+                <span class="text-xs text-gray-400">18</span>
+              </a>
+              <a href="/collections/home-goods" class="flex items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800">
+                Home Goods
+                <span class="text-xs text-gray-400">57</span>
+              </a>
+              <div class="my-2 border-t border-gray-100 dark:border-gray-800"></div>
+              <a href="/collections/sale" class="flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950">
+                Midsummer Sale
+                <span class="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700 dark:bg-rose-900 dark:text-rose-300">-40%</span>
+              </a>
+            </div>
+          </div>
+          <a href="/new-arrivals" class="py-5 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">New Arrivals</a>
+          <a href="/journal" class="py-5 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">Journal</a>
+          <a href="/stores" class="py-5 text-sm font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">Stores</a>
+        </div>
+      </div>
+      <div class="flex flex-1 items-center justify-end gap-x-4">
+        <form action="/search" class="hidden w-full max-w-xs md:block">
+          <label for="store-search" class="sr-only">Search products</label>
+          <div class="relative">
+            <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400">
+              <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd" />
+            </svg>
+            <input type="search" id="store-search" name="q" placeholder="Search waxed jackets, mugs&hellip;" class="block w-full rounded-full border-0 bg-gray-100 py-2 pl-9 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-indigo-500 dark:bg-gray-900 dark:text-white dark:focus:bg-gray-800" />
+          </div>
+        </form>
+        <button type="button" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 md:hidden">
+          <span class="sr-only">Search</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="h-6 w-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+        </button>
+        <a href="/account" class="hidden p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 sm:block">
+          <span class="sr-only">Account</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="h-6 w-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+          </svg>
+        </a>
+        <a href="/cart" class="group relative p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+          <span class="sr-only">Cart, 3 items</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="h-6 w-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+          </svg>
+          <span class="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold text-white group-hover:bg-indigo-500">3</span>
+        </a>
+        <button type="button" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 lg:hidden">
+          <span class="sr-only">Open menu</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="h-6 w-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+</header>

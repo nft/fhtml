@@ -77,6 +77,17 @@ pub fn check(html: &str, opts: &Options) -> Result<String, String> {
     Ok(conv.fhtml)
 }
 
+/// Compares two HTML texts for normalized-DOM equivalence — the same
+/// normalization `check` uses (comments dropped, inter-element whitespace
+/// non-contractual, attrs sorted, boolean forms unified). `Err` describes
+/// the first difference. This is the benchmark harness's grader: "did the
+/// generated markup render the same DOM as the reference?"
+pub fn compare_html(a: &str, b: &str, opts: &Options) -> Result<(), String> {
+    let na = normalize_roots(a, opts);
+    let nb = normalize_roots(b, opts);
+    compare(&na, &nb, "root")
+}
+
 // ── DOM parsing ─────────────────────────────────────────────────────────────
 
 fn parse_dom(html: &str) -> RcDom {

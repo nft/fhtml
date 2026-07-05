@@ -1,0 +1,89 @@
+<div class="flex h-full flex-col bg-white shadow-xl">
+  <div class="flex items-start justify-between border-b border-gray-200 px-4 py-6 sm:px-6">
+    <h2 class="text-lg font-medium text-gray-900">Shopping cart</h2>
+    <button type="button" class="-m-2 p-2 text-gray-400 hover:text-gray-500">
+      <span class="sr-only">Close panel</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" class="h-6 w-6">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+      </svg>
+    </button>
+  </div>
+  <ul role="list" class="flex-1 divide-y divide-gray-200 overflow-y-auto px-4 sm:px-6">
+    <li class="flex py-6">
+      <div class="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200">
+        <img src="/img/products/harlow-tote-oat.jpg" alt="Harlow canvas tote in oat." class="h-full w-full object-cover object-center" />
+      </div>
+      <div class="ml-4 flex flex-1 flex-col">
+        <div class="flex justify-between text-base font-medium text-gray-900">
+          <h3><a href="/products/harlow-canvas-tote" class="hover:underline">Harlow Canvas Tote</a></h3>
+          <p class="ml-4">$68.00</p>
+        </div>
+        <p class="mt-1 text-sm text-gray-500">Oat / Saddle</p>
+        <div class="mt-auto flex items-center justify-between pt-2">
+          <div class="flex items-center rounded-md border border-gray-300">
+            <button type="button" class="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease quantity of Harlow Canvas Tote">&minus;</button>
+            <span class="w-8 border-x border-gray-300 py-1.5 text-center text-sm text-gray-900" aria-live="polite">1</span>
+            <button type="button" class="px-3 py-1.5 text-gray-600 hover:bg-gray-50" aria-label="Increase quantity of Harlow Canvas Tote">+</button>
+          </div>
+          <button type="button" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Remove</button>
+        </div>
+      </div>
+    </li>
+    <li class="flex py-6">
+      <div class="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200">
+        <img src="/img/products/atlas-bottle-fern.jpg" alt="Atlas insulated bottle in fern." class="h-full w-full object-cover object-center" />
+      </div>
+      <div class="ml-4 flex flex-1 flex-col">
+        <div class="flex justify-between text-base font-medium text-gray-900">
+          <h3><a href="/products/atlas-insulated-bottle" class="hover:underline">Atlas Insulated Bottle</a></h3>
+          <p class="ml-4">$58.00</p>
+        </div>
+        <p class="mt-1 text-sm text-gray-500">Fern, 24 oz &middot; Qty 2</p>
+        <div class="mt-auto flex items-center justify-between pt-2">
+          <div class="flex items-center rounded-md border border-gray-300">
+            <button type="button" class="px-3 py-1.5 text-gray-600 hover:bg-gray-50" aria-label="Decrease quantity of Atlas Insulated Bottle">&minus;</button>
+            <span class="w-8 border-x border-gray-300 py-1.5 text-center text-sm text-gray-900" aria-live="polite">2</span>
+            <button type="button" class="px-3 py-1.5 text-gray-600 hover:bg-gray-50" aria-label="Increase quantity of Atlas Insulated Bottle">+</button>
+          </div>
+          <button type="button" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Remove</button>
+        </div>
+      </div>
+    </li>
+    <li class="flex py-6">
+      <div class="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200">
+        <img src="/img/products/juno-mug-set.jpg" alt="Juno stoneware mug set in glacier." class="h-full w-full object-cover object-center" />
+      </div>
+      <div class="ml-4 flex flex-1 flex-col">
+        <div class="flex justify-between text-base font-medium text-gray-900">
+          <h3><a href="/products/juno-stoneware-mug-set" class="hover:underline">Juno Stoneware Mug Set</a></h3>
+          <p class="ml-4">$52.00</p>
+        </div>
+        <p class="mt-1 text-sm text-gray-500">Set of 4, Glacier</p>
+        <p class="mt-1 text-xs font-medium text-amber-600">Only 3 left in stock</p>
+        <div class="mt-auto flex items-center justify-between pt-2">
+          <div class="flex items-center rounded-md border border-gray-300">
+            <button type="button" class="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-40" aria-label="Decrease quantity of Juno Stoneware Mug Set">&minus;</button>
+            <span class="w-8 border-x border-gray-300 py-1.5 text-center text-sm text-gray-900" aria-live="polite">1</span>
+            <button type="button" class="px-3 py-1.5 text-gray-600 hover:bg-gray-50" aria-label="Increase quantity of Juno Stoneware Mug Set">+</button>
+          </div>
+          <button type="button" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Remove</button>
+        </div>
+      </div>
+    </li>
+  </ul>
+  <div class="border-t border-gray-200 px-4 py-6 sm:px-6">
+    <div class="flex justify-between text-base font-medium text-gray-900">
+      <p>Subtotal</p>
+      <p>$178.00</p>
+    </div>
+    <p class="mt-0.5 text-sm text-gray-500">Shipping and taxes calculated at checkout.</p>
+    <a href="/checkout" class="mt-6 flex w-full items-center justify-center rounded-md bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700">Checkout</a>
+    <p class="mt-6 text-center text-sm text-gray-500">
+      or
+      <button type="button" class="font-medium text-indigo-600 hover:text-indigo-500">
+        Continue shopping
+        <span aria-hidden="true"> &rarr;</span>
+      </button>
+    </p>
+  </div>
+</div>

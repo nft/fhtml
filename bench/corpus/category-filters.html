@@ -1,0 +1,96 @@
+<aside aria-label="Product filters" class="w-full max-w-xs border-r border-gray-200 px-4 py-6 lg:px-6">
+  <div class="flex items-center justify-between">
+    <h2 class="text-lg font-medium text-gray-900">Filters</h2>
+    <button type="button" class="text-sm font-medium text-indigo-600 hover:text-indigo-500">Clear all</button>
+  </div>
+  <form class="mt-4 divide-y divide-gray-200">
+    <fieldset class="py-6">
+      <legend class="text-sm font-semibold text-gray-900">Category</legend>
+      <div class="mt-4 space-y-3">
+        <div class="flex items-center gap-x-3">
+          <input id="filter-cat-outerwear" name="category[]" value="outerwear" type="checkbox" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-cat-outerwear" class="text-sm text-gray-600">Outerwear <span class="text-gray-400">(31)</span></label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-cat-knitwear" name="category[]" value="knitwear" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-cat-knitwear" class="text-sm text-gray-600">Knitwear <span class="text-gray-400">(24)</span></label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-cat-footwear" name="category[]" value="footwear" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-cat-footwear" class="text-sm text-gray-600">Footwear <span class="text-gray-400">(18)</span></label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-cat-accessories" name="category[]" value="accessories" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-cat-accessories" class="text-sm text-gray-600">Accessories <span class="text-gray-400">(42)</span></label>
+        </div>
+      </div>
+    </fieldset>
+    <fieldset class="py-6">
+      <legend class="text-sm font-semibold text-gray-900">Brand</legend>
+      <div class="mt-4 space-y-3">
+        <div class="flex items-center gap-x-3">
+          <input id="filter-brand-fenwick" name="brand[]" value="fenwick" type="checkbox" class="peer h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-brand-fenwick" class="text-sm text-gray-600 peer-checked:font-medium peer-checked:text-gray-900">Fenwick &amp; Co. <span class="text-gray-400">(12)</span></label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-brand-alderwood" name="brand[]" value="alderwood" type="checkbox" class="peer h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-brand-alderwood" class="text-sm text-gray-600 peer-checked:font-medium peer-checked:text-gray-900">Alderwood Supply <span class="text-gray-400">(9)</span></label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-brand-tidemark" name="brand[]" value="tidemark" type="checkbox" class="peer h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-brand-tidemark" class="text-sm text-gray-600 peer-checked:font-medium peer-checked:text-gray-900">Tidemark <span class="text-gray-400">(16)</span></label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-brand-larkfield" name="brand[]" value="larkfield" type="checkbox" class="peer h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-brand-larkfield" class="text-sm text-gray-600 peer-checked:font-medium peer-checked:text-gray-900">Larkfield <span class="text-gray-400">(7)</span></label>
+        </div>
+      </div>
+      <button type="button" class="mt-4 flex items-center gap-x-1 text-sm font-medium text-indigo-600 hover:text-indigo-500">
+        Show 6 more
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="h-4 w-4">
+          <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+        </svg>
+      </button>
+    </fieldset>
+    <fieldset class="py-6">
+      <legend class="text-sm font-semibold text-gray-900">Price</legend>
+      <div class="mt-4 grid grid-cols-2 gap-x-3">
+        <div>
+          <label for="price-min" class="block text-xs font-medium text-gray-500">Min</label>
+          <div class="relative mt-1">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+            <input type="number" id="price-min" name="price-min" min="0" placeholder="0" class="block w-full rounded-md border-gray-300 pl-7 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          </div>
+        </div>
+        <div>
+          <label for="price-max" class="block text-xs font-medium text-gray-500">Max</label>
+          <div class="relative mt-1">
+            <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+            <input type="number" id="price-max" name="price-max" min="0" placeholder="500" class="block w-full rounded-md border-gray-300 pl-7 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+          </div>
+        </div>
+      </div>
+      <input type="range" min="0" max="500" step="10" value="250" aria-label="Maximum price" class="mt-4 h-2 w-full cursor-pointer appearance-none rounded-full bg-gray-200 accent-indigo-600" />
+      <div class="mt-1 flex justify-between text-xs text-gray-400">
+        <span>$0</span>
+        <span>$500+</span>
+      </div>
+    </fieldset>
+    <fieldset class="py-6">
+      <legend class="text-sm font-semibold text-gray-900">Availability</legend>
+      <div class="mt-4 space-y-3">
+        <div class="flex items-center gap-x-3">
+          <input id="filter-in-stock" name="availability" value="in-stock" type="radio" checked class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-in-stock" class="text-sm text-gray-600">In stock only</label>
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input id="filter-include-backorder" name="availability" value="all" type="radio" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          <label for="filter-include-backorder" class="text-sm text-gray-600">Include backordered</label>
+        </div>
+      </div>
+    </fieldset>
+    <div class="pt-6">
+      <button type="submit" class="w-full rounded-md bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2">Apply filters</button>
+    </div>
+  </form>
+</aside>

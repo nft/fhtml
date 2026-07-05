@@ -1,0 +1,113 @@
+<section aria-labelledby="order-history-heading" class="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+  <div class="sm:flex sm:items-center sm:justify-between">
+    <div>
+      <h1 id="order-history-heading" class="text-2xl font-bold tracking-tight text-gray-900">Order history</h1>
+      <p class="mt-1 text-sm text-gray-500">Check the status of recent orders, download invoices, and reorder favorites.</p>
+    </div>
+    <form action="/account/orders" class="mt-4 sm:mt-0 sm:w-1/2 lg:w-1/3">
+      <label for="order-search" class="sr-only">Search orders</label>
+      <input type="search" id="order-search" name="q" placeholder="Search by order number or product" class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+    </form>
+  </div>
+  <div class="mt-8 overflow-x-auto rounded-lg border border-gray-200">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-6">Order</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-6">Date placed</th>
+          <th scope="col" class="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-6 md:table-cell">Items</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-6">Total</th>
+          <th scope="col" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 sm:px-6">Status</th>
+          <th scope="col" class="relative px-4 py-3 sm:px-6">
+            <span class="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200 bg-white">
+        <tr class="hover:bg-gray-50">
+          <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-indigo-600 sm:px-6">
+            <a href="/account/orders/AW-10482" class="hover:underline">AW-10482</a>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 sm:px-6">
+            <time datetime="2026-06-28">Jun 28, 2026</time>
+          </td>
+          <td class="hidden px-4 py-4 text-sm text-gray-600 sm:px-6 md:table-cell">Rambler Waxed Jacket, Atlas Bottle &times;2</td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 sm:px-6">$360.94</td>
+          <td class="whitespace-nowrap px-4 py-4 sm:px-6">
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+              <svg viewBox="0 0 8 8" fill="currentColor" aria-hidden="true" class="h-1.5 w-1.5"><circle cx="4" cy="4" r="3" /></svg>
+              In transit
+            </span>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-right text-sm sm:px-6">
+            <a href="/account/orders/AW-10482/track" class="font-medium text-indigo-600 hover:text-indigo-500">Track</a>
+          </td>
+        </tr>
+        <tr class="hover:bg-gray-50">
+          <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-indigo-600 sm:px-6">
+            <a href="/account/orders/AW-10317" class="hover:underline">AW-10317</a>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 sm:px-6">
+            <time datetime="2026-05-19">May 19, 2026</time>
+          </td>
+          <td class="hidden px-4 py-4 text-sm text-gray-600 sm:px-6 md:table-cell">Juno Stoneware Mug Set</td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 sm:px-6">$56.16</td>
+          <td class="whitespace-nowrap px-4 py-4 sm:px-6">
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+              <svg viewBox="0 0 8 8" fill="currentColor" aria-hidden="true" class="h-1.5 w-1.5"><circle cx="4" cy="4" r="3" /></svg>
+              Delivered
+            </span>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-right text-sm sm:px-6">
+            <a href="/account/orders/AW-10317/reorder" class="font-medium text-indigo-600 hover:text-indigo-500">Buy again</a>
+          </td>
+        </tr>
+        <tr class="hover:bg-gray-50">
+          <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-indigo-600 sm:px-6">
+            <a href="/account/orders/AW-10233" class="hover:underline">AW-10233</a>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 sm:px-6">
+            <time datetime="2026-04-30">Apr 30, 2026</time>
+          </td>
+          <td class="hidden px-4 py-4 text-sm text-gray-600 sm:px-6 md:table-cell">Harlow Canvas Tote, Fenwick Beanie</td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 sm:px-6">$110.16</td>
+          <td class="whitespace-nowrap px-4 py-4 sm:px-6">
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+              <svg viewBox="0 0 8 8" fill="currentColor" aria-hidden="true" class="h-1.5 w-1.5"><circle cx="4" cy="4" r="3" /></svg>
+              Return pending
+            </span>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-right text-sm sm:px-6">
+            <a href="/account/orders/AW-10233/return" class="font-medium text-indigo-600 hover:text-indigo-500">View return</a>
+          </td>
+        </tr>
+        <tr class="hover:bg-gray-50">
+          <td class="whitespace-nowrap px-4 py-4 text-sm font-medium text-indigo-600 sm:px-6">
+            <a href="/account/orders/AW-09871" class="hover:underline">AW-09871</a>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-600 sm:px-6">
+            <time datetime="2026-03-07">Mar 7, 2026</time>
+          </td>
+          <td class="hidden px-4 py-4 text-sm text-gray-600 sm:px-6 md:table-cell">Mesa Woven Throw</td>
+          <td class="whitespace-nowrap px-4 py-4 text-sm text-gray-900 sm:px-6">$102.60</td>
+          <td class="whitespace-nowrap px-4 py-4 sm:px-6">
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+              <svg viewBox="0 0 8 8" fill="currentColor" aria-hidden="true" class="h-1.5 w-1.5"><circle cx="4" cy="4" r="3" /></svg>
+              Cancelled
+            </span>
+          </td>
+          <td class="whitespace-nowrap px-4 py-4 text-right text-sm sm:px-6">
+            <a href="/account/orders/AW-09871/invoice" class="font-medium text-indigo-600 hover:text-indigo-500">Invoice</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <nav aria-label="Order history pagination" class="mt-6 flex items-center justify-between text-sm text-gray-600">
+    <p>Showing <span class="font-medium">1</span> to <span class="font-medium">4</span> of <span class="font-medium">23</span> orders</p>
+    <div class="flex gap-x-2">
+      <button type="button" disabled class="rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-400">Previous</button>
+      <button type="button" class="rounded-md border border-gray-300 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">Next</button>
+    </div>
+  </nav>
+</section>

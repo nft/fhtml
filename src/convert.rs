@@ -15,7 +15,7 @@ use html5ever::{ns, parse_document, parse_fragment, Attribute, LocalName, QualNa
 use markup5ever_rcdom::{Handle, NodeData, RcDom, SerializableHandle};
 
 use crate::fmt::format_nodes;
-use crate::parser::{AttrValue, Element, Node, RESERVED};
+use crate::parser::{lit_parts, AttrValue, ClassItem, Element, Node, TextPart, RESERVED};
 
 pub struct Options {
     /// Convert `<svg>`/`<math>` subtrees to fhtml elements instead of raw
@@ -344,10 +344,8 @@ impl Conv<'_> {
                 // Trailing whitespace on a source line is never significant
                 // (parser trims it), so a rendered trailing space rides as an
                 // explicit empty `|` line: its newline collapses to the space.
-                Some(stripped) => {
-                    out.push(Node::TextBlock(vec![stripped.to_string(), String::new()]))
-                }
-                None => out.push(Node::TextBlock(vec![t.clone()])),
+                Some(stripped) => out.push(Node::TextBlock(vec![lit_parts(stripped), Vec::new()])),
+                None => out.push(Node::TextBlock(vec![lit_parts(t)])),
             },
             Item::Node(handle) => match &handle.data {
                 NodeData::Element { .. } => self.convert_element(handle, out),
@@ -456,15 +454,17 @@ impl Conv<'_> {
             }
             match aname.as_str() {
                 "id" if id_token_ok(&value) => el.id = Some(value),
-                "class" => el
-                    .classes
-                    .extend(value.split_ascii_whitespace().map(String::from)),
+                "class" => el.classes.extend(
+                    value
+                        .split_ascii_whitespace()
+                        .map(|c| ClassItem::Lit(c.to_string())),
+                ),
                 n if BOOLEAN_ATTRS.contains(&n)
                     && (value.is_empty() || value.eq_ignore_ascii_case(n)) =>
                 {
                     el.attrs.push((aname, AttrValue::Bool));
                 }
-                _ => el.attrs.push((aname, AttrValue::Str(value))),
+                _ => el.attrs.push((aname, AttrValue::Str(lit_parts(&value)))),
             }
         }
         drop(attr_list);
@@ -474,9 +474,16 @@ impl Conv<'_> {
         // Sole short text child → inline `"text"`; long text or text with a
         // quote reads better as a `|` line (plan §4.3).
         if let [Node::TextBlock(lines)] = children.as_slice() {
-            if lines.len() == 1 && lines[0].len() <= 80 && !lines[0].contains('"') {
-                el.text = Some(lines[0].clone());
-                children.clear();
+            if let [[TextPart::Lit(t)]] = lines
+                .iter()
+                .map(Vec::as_slice)
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                if t.len() <= 80 && !t.contains('"') {
+                    el.text = Some(lit_parts(t));
+                    children.clear();
+                }
             }
         }
 

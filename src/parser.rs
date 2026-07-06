@@ -1,13 +1,20 @@
-//! Parser for the fhtml static markup layer (SPEC §1–§8).
+//! Parser for the fhtml markup layer (SPEC §1–§8) and the template layer
+//! (SPEC §9 interpolation, §10.1–§10.2 statements).
 //!
-//! Template-layer constructs (SPEC §9–§10) are recognized and rejected with a
-//! clear "not implemented in v0.1" error so the syntax space stays reserved.
+//! Composition constructs (SPEC §10.3–§10.5: `def`, `children`, `include`,
+//! `+call`) are recognized and rejected with a clear "composition layer, not implemented"
+//! error so the syntax space stays reserved. Parsing with `templates: false`
+//! enforces static-only (SPEC §9.2): any template construct is an error.
 
 use crate::error::{err, Result};
+use crate::expr::{self, Expr};
 
 pub const RESERVED: [&str; 8] = [
     "if", "elif", "else", "for", "empty", "def", "children", "include",
 ];
+
+/// Composition-layer keywords deferred.
+const P2_RESERVED: [&str; 3] = ["def", "children", "include"];
 
 pub const VOID: [&str; 13] = [
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
@@ -18,12 +25,59 @@ pub fn is_void(tag: &str) -> bool {
     VOID.contains(&tag)
 }
 
+/// An expression embedded in the template layer: the parsed AST plus the
+/// trimmed source text between the braces / after the keyword (`fhtml fmt`
+/// reprints this text — it never re-serializes the AST) and the expression's
+/// 1-based position (line; column of the `{` or of the expression start,
+/// counted within the logical line's content).
+#[derive(Debug, Clone)]
+pub struct TplExpr {
+    pub src: String,
+    // TODO: read by the evaluating renderer; only parsed for
+    // validation until then.
+    #[allow(dead_code)]
+    pub expr: Expr,
+    pub line: usize,
+    pub col: usize,
+}
+
+/// One segment of interpolatable text (SPEC §9.1): inline `"…"` text, `|`
+/// block lines, and quoted attribute values are sequences of these.
+#[derive(Debug, Clone)]
+pub enum TextPart {
+    Lit(String),
+    /// `{expr}` (escaped on output) or `{!expr}` (raw; content positions only).
+    Interp {
+        expr: TplExpr,
+        raw: bool,
+    },
+}
+
+/// Builds the segment list for literal-only text (used by the converter).
+pub fn lit_parts(s: &str) -> Vec<TextPart> {
+    if s.is_empty() {
+        Vec::new()
+    } else {
+        vec![TextPart::Lit(s.to_string())]
+    }
+}
+
+/// One entry of an element's class list: a verbatim class token, or a
+/// `{expr}` whose result splits on whitespace into class names at render
+/// time (SPEC §9.2; always attribute-escaped, `{!…}` forbidden here).
+#[derive(Debug, Clone)]
+pub enum ClassItem {
+    Lit(String),
+    Interp(TplExpr),
+}
+
 #[derive(Debug)]
 pub enum Node {
     Element(Element),
-    /// Consecutive `|` lines, one string per line (SPEC §6.2).
-    TextBlock(Vec<String>),
+    /// Consecutive `|` lines, one segment list per line (SPEC §6.2).
+    TextBlock(Vec<Vec<TextPart>>),
     /// Raw passthrough lines, dedented by the marker's indent (SPEC §8).
+    /// Verbatim by definition — no interpolation.
     Raw(Vec<String>),
     /// Comment lines (SPEC §3.1). `emit: true` for `//!` (HTML comment output);
     /// `emit: false` for `//` (kept in the AST so `fhtml fmt` preserves them,
@@ -33,21 +87,55 @@ pub enum Node {
         emit: bool,
     },
     Doctype,
+    /// `if`/`elif`/`else` chain (SPEC §10.1).
+    If(IfChain),
+    /// `for … in …` with optional `empty` block (SPEC §10.2).
+    For(ForLoop),
+}
+
+#[derive(Debug)]
+pub struct IfChain {
+    /// The `if` arm followed by any `elif` arms, in source order.
+    pub arms: Vec<IfArm>,
+    pub else_body: Option<Vec<Node>>,
+    pub line: usize,
+}
+
+#[derive(Debug)]
+pub struct IfArm {
+    pub cond: TplExpr,
+    pub body: Vec<Node>,
+}
+
+#[derive(Debug)]
+pub struct ForLoop {
+    pub var: String,
+    /// `for name, index in expr` — position for lists, key for maps.
+    pub index: Option<String>,
+    pub iter: TplExpr,
+    pub body: Vec<Node>,
+    /// Renders when the iterable is empty or `null`.
+    pub empty: Option<Vec<Node>>,
+    pub line: usize,
 }
 
 #[derive(Debug)]
 pub enum AttrValue {
     Bool,
-    Str(String),
+    /// Quoted (or literal unquoted) value as text segments. Raw `{!…}` is
+    /// forbidden in attribute values (SPEC §9.1).
+    Str(Vec<TextPart>),
+    /// Unquoted `name={expr}` — the expression is the entire value.
+    Expr(TplExpr),
 }
 
 #[derive(Debug)]
 pub struct Element {
     pub tag: String,
     pub id: Option<String>,
-    pub classes: Vec<String>,
+    pub classes: Vec<ClassItem>,
     pub attrs: Vec<(String, AttrValue)>,
-    pub text: Option<String>,
+    pub text: Option<Vec<TextPart>>,
     /// Sole inline child via `>` (SPEC §4.6).
     pub chain: Option<Box<Element>>,
     /// Indented children; for chains these belong to the innermost element.
@@ -79,6 +167,64 @@ fn innermost(el: &mut Element) -> &mut Element {
     }
 }
 
+/// Finds the first template construct in the tree, for the static-only
+/// `compile` path and for error reporting. Returns (line, col, description).
+pub fn first_template_use(nodes: &[Node]) -> Option<(usize, usize, String)> {
+    for node in nodes {
+        match node {
+            Node::If(c) => return Some((c.line, 1, "`if`".to_string())),
+            Node::For(f) => return Some((f.line, 1, "`for`".to_string())),
+            Node::TextBlock(lines) => {
+                if let Some(t) = lines.iter().find_map(|parts| interp_in(parts)) {
+                    return Some((t.line, t.col, "`{…}` interpolation".to_string()));
+                }
+            }
+            Node::Element(el) => {
+                if let Some(found) = element_template_use(el) {
+                    return Some(found);
+                }
+            }
+            Node::Raw(_) | Node::Comment { .. } | Node::Doctype => {}
+        }
+    }
+    None
+}
+
+fn interp_in(parts: &[TextPart]) -> Option<&TplExpr> {
+    parts.iter().find_map(|p| match p {
+        TextPart::Interp { expr, .. } => Some(expr),
+        TextPart::Lit(_) => None,
+    })
+}
+
+fn element_template_use(el: &Element) -> Option<(usize, usize, String)> {
+    for class in &el.classes {
+        if let ClassItem::Interp(t) = class {
+            return Some((t.line, t.col, "`{…}` interpolation".to_string()));
+        }
+    }
+    for (_, value) in &el.attrs {
+        match value {
+            AttrValue::Expr(t) => return Some((t.line, t.col, "`{…}` interpolation".to_string())),
+            AttrValue::Str(parts) => {
+                if let Some(t) = interp_in(parts) {
+                    return Some((t.line, t.col, "`{…}` interpolation".to_string()));
+                }
+            }
+            AttrValue::Bool => {}
+        }
+    }
+    if let Some(t) = el.text.as_deref().and_then(interp_in) {
+        return Some((t.line, t.col, "`{…}` interpolation".to_string()));
+    }
+    if let Some(chain) = &el.chain {
+        if let Some(found) = element_template_use(chain) {
+            return Some(found);
+        }
+    }
+    first_template_use(&el.children)
+}
+
 fn describe_indent(s: &str) -> String {
     if s.is_empty() {
         "none".to_string()
@@ -95,8 +241,9 @@ struct Line {
 }
 
 /// Parses a source file into nodes plus non-fatal warnings (SPEC §2 rule 5).
-pub fn parse(src: &str) -> Result<(Vec<Node>, Vec<String>)> {
-    let mut parser = Parser::new(src);
+/// With `templates: false`, any template construct is an error (SPEC §9.2).
+pub fn parse(src: &str, templates: bool) -> Result<(Vec<Node>, Vec<String>)> {
+    let mut parser = Parser::new(src, templates);
     let nodes = parser.parse_block(0)?;
     if parser.pos < parser.lines.len() {
         let l = &parser.lines[parser.pos];
@@ -113,10 +260,11 @@ struct Parser {
     /// First observed indent step (in chars) — deviations warn, not error.
     step: Option<usize>,
     warnings: Vec<String>,
+    templates: bool,
 }
 
 impl Parser {
-    fn new(src: &str) -> Self {
+    fn new(src: &str, templates: bool) -> Self {
         let normalized = src.replace("\r\n", "\n");
         let lines = normalized
             .split('\n')
@@ -143,6 +291,7 @@ impl Parser {
             stack: vec![String::new()],
             step: None,
             warnings: Vec::new(),
+            templates,
         }
     }
 
@@ -254,17 +403,11 @@ impl Parser {
                 } else if RESERVED.contains(&first_tok)
                     || (first_tok.starts_with('+') && first_tok.len() > 1)
                 {
-                    return err(
-                        num,
-                        1,
-                        format!(
-                            "`{first_tok}` is part of the template layer and is not implemented in v0.1"
-                        ),
-                    );
+                    nodes.push(self.parse_statement(depth, first_tok, num)?);
                 } else {
                     let (logical, start) = self.join_continuations()?;
                     let mut cur = Cur::new(&logical, start);
-                    let mut el = parse_element(&mut cur)?;
+                    let mut el = parse_element(&mut cur, self.templates)?;
                     let children = self.parse_block(depth + 1)?;
                     innermost(&mut el).children = children;
                     check_void_content(&el)?;
@@ -273,6 +416,167 @@ impl Parser {
             }
         }
         Ok(nodes)
+    }
+
+    /// Dispatches a line whose first token is a statement keyword or `+call`.
+    fn parse_statement(&mut self, depth: usize, first_tok: &str, num: usize) -> Result<Node> {
+        if !self.templates {
+            return err(
+                num,
+                1,
+                format!(
+                    "`{first_tok}` is a template construct — not allowed with `--no-templates` (SPEC §9.2)"
+                ),
+            );
+        }
+        match first_tok {
+            "if" => self.parse_if_chain(depth),
+            "for" => self.parse_for(depth),
+            "elif" => err(
+                num,
+                1,
+                "`elif` must directly follow an `if` or `elif` block at the same indent",
+            ),
+            "else" => err(
+                num,
+                1,
+                "`else` must directly follow an `if` or `elif` block at the same indent",
+            ),
+            "empty" => err(
+                num,
+                1,
+                "`empty` must directly follow a `for` block at the same indent",
+            ),
+            kw if P2_RESERVED.contains(&kw) => err(
+                num,
+                1,
+                format!("`{kw}` is part of the composition layer and is not implemented yet"),
+            ),
+            call => err(
+                num,
+                1,
+                format!(
+                    "`{call}` component calls are part of the composition layer and are not implemented yet"
+                ),
+            ),
+        }
+    }
+
+    /// `if expr` + block, then any directly-following `elif`/`else` siblings
+    /// at the same indent (SPEC §10.1 — no other siblings between).
+    fn parse_if_chain(&mut self, depth: usize) -> Result<Node> {
+        let (content, line) = self.join_continuations()?;
+        let if_line = line;
+        let cond = statement_expr(&content, 2, line, "if")?;
+        let body = self.statement_body(depth, line, "if")?;
+        let mut arms = vec![IfArm { cond, body }];
+        let mut else_body = None;
+        while let Some(idx) = self.peek_sibling(depth)? {
+            let first = self.lines[idx].content.split_whitespace().next().unwrap();
+            match first {
+                "elif" => {
+                    self.pos = idx;
+                    let (content, line) = self.join_continuations()?;
+                    let cond = statement_expr(&content, 4, line, "elif")?;
+                    let body = self.statement_body(depth, line, "elif")?;
+                    arms.push(IfArm { cond, body });
+                }
+                "else" => {
+                    self.pos = idx;
+                    let (content, line) = self.join_continuations()?;
+                    if content.trim() != "else" {
+                        return err(
+                            line,
+                            1,
+                            "`else` takes no condition — use `elif <expr>` for another branch",
+                        );
+                    }
+                    else_body = Some(self.statement_body(depth, line, "else")?);
+                    break;
+                }
+                _ => break,
+            }
+        }
+        Ok(Node::If(IfChain {
+            arms,
+            else_body,
+            line: if_line,
+        }))
+    }
+
+    /// `for name[, name] in expr` + block, then an optional directly-following
+    /// `empty` sibling at the same indent (SPEC §10.2).
+    fn parse_for(&mut self, depth: usize) -> Result<Node> {
+        let (content, line) = self.join_continuations()?;
+        let mut cur = Cur::at(&content, 3, line);
+        cur.eat_ws();
+        let var = loop_name(&mut cur, line, "a loop variable: `for item in items`")?;
+        cur.eat_ws();
+        let index = if cur.peek() == Some(',') {
+            cur.bump();
+            cur.eat_ws();
+            let name = loop_name(&mut cur, line, "an index name after `,`")?;
+            if name == var {
+                return err(line, cur.col(), "loop variable and index must differ");
+            }
+            Some(name)
+        } else {
+            None
+        };
+        cur.eat_ws();
+        let kw_col = cur.col();
+        if read_name(&mut cur).as_deref() != Some("in") {
+            return err(line, kw_col, "expected `in`: `for item[, index] in expr`");
+        }
+        let iter = statement_expr(&content, cur.i, line, "for")?;
+        let body = self.statement_body(depth, line, "for")?;
+        let mut empty = None;
+        if let Some(idx) = self.peek_sibling(depth)? {
+            if self.lines[idx].content.split_whitespace().next() == Some("empty") {
+                self.pos = idx;
+                let (content, eline) = self.join_continuations()?;
+                if content.trim() != "empty" {
+                    return err(
+                        eline,
+                        1,
+                        "`empty` takes nothing — it renders when the `for` iterable is empty",
+                    );
+                }
+                empty = Some(self.statement_body(depth, eline, "empty")?);
+            }
+        }
+        Ok(Node::For(ForLoop {
+            var,
+            index,
+            iter,
+            body,
+            empty,
+            line,
+        }))
+    }
+
+    /// A statement's indented block; empty is an error (a bare statement is
+    /// always an indentation mistake).
+    fn statement_body(&mut self, depth: usize, line: usize, kw: &str) -> Result<Vec<Node>> {
+        let body = self.parse_block(depth + 1)?;
+        if body.is_empty() {
+            return err(line, 1, format!("`{kw}` needs an indented block"));
+        }
+        Ok(body)
+    }
+
+    /// Index of the next non-blank line if it sits at exactly `depth`.
+    /// Does not consume — used to chain `elif`/`else`/`empty` siblings.
+    fn peek_sibling(&mut self, depth: usize) -> Result<Option<usize>> {
+        let mut j = self.pos;
+        while j < self.lines.len() && self.lines[j].content.is_empty() {
+            j += 1;
+        }
+        if j < self.lines.len() && self.level_of(j)? == depth {
+            Ok(Some(j))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Consumes physical lines deeper-indented than `marker` (plus interior blanks),
@@ -299,13 +603,14 @@ impl Parser {
     }
 
     /// Consecutive `|` lines at the same depth form one text block (SPEC §6.2).
-    fn parse_text_block(&mut self, depth: usize) -> Result<Vec<String>> {
+    fn parse_text_block(&mut self, depth: usize) -> Result<Vec<Vec<TextPart>>> {
         let mut lines = Vec::new();
         loop {
-            let content = &self.lines[self.pos].content;
+            let content = self.lines[self.pos].content.clone();
+            let num = self.lines[self.pos].num;
             let rest = &content[1..];
-            let rest = rest.strip_prefix(' ').unwrap_or(rest);
-            lines.push(rest.replace("\\{", "{"));
+            let skip = if rest.starts_with(' ') { 2 } else { 1 };
+            lines.push(parse_block_text_line(&content, skip, num, self.templates)?);
             self.pos += 1;
 
             let mut j = self.pos;
@@ -325,7 +630,8 @@ impl Parser {
     }
 
     /// Joins `\`-continued physical lines into one logical line (SPEC §1).
-    /// Only called for element lines — comments, raw, and text blocks never join.
+    /// Called for element and statement lines — comments, raw, and text
+    /// blocks never join.
     fn join_continuations(&mut self) -> Result<(String, usize)> {
         let start = self.lines[self.pos].num;
         let mut s = self.lines[self.pos].content.clone();
@@ -340,6 +646,65 @@ impl Parser {
             self.pos += 1;
         }
         Ok((s, start))
+    }
+}
+
+/// Parses the expression that trails a statement keyword. `from` is the byte
+/// offset in `content` where the expression region starts (whitespace ok).
+fn statement_expr(content: &str, from: usize, line: usize, kw: &str) -> Result<TplExpr> {
+    let rest = &content[from..];
+    let expr_off = from + (rest.len() - rest.trim_start().len());
+    let src = rest.trim();
+    if src.is_empty() {
+        return err(
+            line,
+            1,
+            format!("`{kw}` needs an expression, e.g. `{}`", kw_example(kw)),
+        );
+    }
+    match expr::parse(src) {
+        Ok(e) => Ok(TplExpr {
+            src: src.to_string(),
+            expr: e,
+            line,
+            col: content[..expr_off].chars().count() + 1,
+        }),
+        Err(pe) => err(
+            line,
+            content[..expr_off + pe.offset].chars().count() + 1,
+            pe.msg,
+        ),
+    }
+}
+
+fn kw_example(kw: &str) -> &'static str {
+    match kw {
+        "elif" => "elif user.invited",
+        "for" => "for item in items",
+        _ => "if user.active",
+    }
+}
+
+/// A loop-binding name for `for` (SPEC §10.2). Expression literals and the
+/// unshadowable `ctx` root (SPEC §9.4) are rejected.
+fn loop_name(cur: &mut Cur, line: usize, what: &str) -> Result<String> {
+    let col = cur.col();
+    match read_name(cur) {
+        Some(name) => match name.as_str() {
+            "ctx" => err(
+                line,
+                col,
+                "`ctx` is the reserved context root and cannot be shadowed (SPEC §9.4)",
+            ),
+            "true" | "false" | "null" => err(
+                line,
+                col,
+                format!("`{name}` is an expression literal and cannot be a loop variable"),
+            ),
+            "in" => err(line, col, "`in` cannot be a loop variable"),
+            _ => Ok(name),
+        },
+        None => err(line, col, format!("`for` needs {what}")),
     }
 }
 
@@ -380,8 +745,19 @@ impl<'a> Cur<'a> {
         Cur { s, i: 0, line }
     }
 
+    /// A cursor starting mid-line (statement bodies, text-block rests).
+    fn at(s: &'a str, i: usize, line: usize) -> Self {
+        Cur { s, i, line }
+    }
+
     fn peek(&self) -> Option<char> {
         self.s[self.i..].chars().next()
+    }
+
+    fn peek2(&self) -> Option<char> {
+        let mut it = self.s[self.i..].chars();
+        it.next();
+        it.next()
     }
 
     fn bump(&mut self) -> Option<char> {
@@ -392,6 +768,10 @@ impl<'a> Cur<'a> {
 
     fn col(&self) -> usize {
         self.s[..self.i].chars().count() + 1
+    }
+
+    fn col_at(&self, byte: usize) -> usize {
+        self.s[..byte].chars().count() + 1
     }
 
     fn eat_ws(&mut self) {
@@ -418,8 +798,71 @@ impl<'a> Cur<'a> {
     }
 }
 
+/// `[A-Za-z_][A-Za-z0-9_]*`, or `None` if the cursor doesn't start one.
+fn read_name(cur: &mut Cur) -> Option<String> {
+    match cur.peek() {
+        Some(c) if c == '_' || c.is_ascii_alphabetic() => {}
+        _ => return None,
+    }
+    let start = cur.i;
+    while matches!(cur.peek(), Some(c) if c == '_' || c.is_ascii_alphanumeric()) {
+        cur.bump();
+    }
+    Some(cur.s[start..cur.i].to_string())
+}
+
+const NO_TEMPLATES_INTERP: &str =
+    "`{` starts an interpolation — not allowed with `--no-templates`; write `\\{` for a literal brace (SPEC §9.2)";
+
+/// Scans a brace-delimited expression; the cursor sits just past `{` (and any
+/// `!`). Consumes through the matching `}` — the first `}` outside the
+/// expression's own string literals — and parses the inside (SPEC §9.3).
+fn scan_expr(cur: &mut Cur, brace_col: usize) -> Result<TplExpr> {
+    let line = cur.line;
+    let start = cur.i;
+    let mut quote: Option<char> = None;
+    loop {
+        match cur.peek() {
+            None => {
+                return err(
+                    line,
+                    brace_col,
+                    "unclosed `{` — expected `}` to end the interpolation",
+                )
+            }
+            Some('}') if quote.is_none() => break,
+            Some(q @ ('\'' | '"')) => {
+                match quote {
+                    Some(open) if open == q => quote = None,
+                    None => quote = Some(q),
+                    _ => {}
+                }
+                cur.bump();
+            }
+            Some('\\') if quote.is_some() => {
+                cur.bump();
+                cur.bump();
+            }
+            Some(_) => {
+                cur.bump();
+            }
+        }
+    }
+    let inner = &cur.s[start..cur.i];
+    cur.bump(); // }
+    match expr::parse(inner) {
+        Ok(e) => Ok(TplExpr {
+            src: inner.trim().to_string(),
+            expr: e,
+            line,
+            col: brace_col,
+        }),
+        Err(pe) => err(line, cur.col_at(start + pe.offset), pe.msg),
+    }
+}
+
 /// Parses one element from the cursor (SPEC §4). Recurses for `>` chains.
-fn parse_element(cur: &mut Cur) -> Result<Element> {
+fn parse_element(cur: &mut Cur, templates: bool) -> Result<Element> {
     let src = cur.s;
     let line = cur.line;
     cur.eat_ws();
@@ -498,7 +941,7 @@ fn parse_element(cur: &mut Cur) -> Result<Element> {
     let mut el = Element::new(&tag, line);
 
     if cur.peek() == Some('(') {
-        parse_attrs(cur, &mut el)?;
+        parse_attrs(cur, &mut el, templates)?;
         match cur.peek() {
             None | Some(' ') | Some('\t') => {}
             Some(c) => {
@@ -524,7 +967,22 @@ fn parse_element(cur: &mut Cur) -> Result<Element> {
                     "an element may have at most one inline text segment",
                 );
             }
-            el.text = Some(parse_quoted(cur, '"', true)?);
+            el.text = Some(parse_quoted(cur, '"', true, templates)?);
+            continue;
+        }
+
+        if c == '{' {
+            // Class-position interpolation (SPEC §9.2): whole token, escaped
+            // output, result splits on whitespace at render time.
+            if el.text.is_some() {
+                return err(
+                    line,
+                    col,
+                    "only a `>` chain may follow inline text (order is `tag(attrs) classes \"text\"`)",
+                );
+            }
+            el.classes
+                .push(ClassItem::Interp(parse_class_interp(cur, templates)?));
             continue;
         }
 
@@ -534,7 +992,7 @@ fn parse_element(cur: &mut Cur) -> Result<Element> {
             if cur.at_end() {
                 return err(line, cur.col(), "expected an element after `>`");
             }
-            el.chain = Some(Box::new(parse_element(cur)?));
+            el.chain = Some(Box::new(parse_element(cur, templates)?));
             break;
         }
         if el.text.is_some() {
@@ -542,13 +1000,6 @@ fn parse_element(cur: &mut Cur) -> Result<Element> {
                 line,
                 col,
                 "only a `>` chain may follow inline text (order is `tag(attrs) classes \"text\"`)",
-            );
-        }
-        if tok.starts_with('{') {
-            return err(
-                line,
-                col,
-                "`{…}` interpolation is part of the template layer and is not implemented in v0.1",
             );
         }
         if let Some(id) = tok.strip_prefix('#') {
@@ -561,14 +1012,41 @@ fn parse_element(cur: &mut Cur) -> Result<Element> {
             el.id = Some(id.to_string());
             continue;
         }
-        el.classes.push(tok.to_string());
+        el.classes.push(ClassItem::Lit(tok.to_string()));
     }
 
     Ok(el)
 }
 
+/// A `{expr}` token in class position. The cursor sits on `{`.
+fn parse_class_interp(cur: &mut Cur, templates: bool) -> Result<TplExpr> {
+    let line = cur.line;
+    let col = cur.col();
+    if !templates {
+        return err(line, col, NO_TEMPLATES_INTERP);
+    }
+    cur.bump(); // {
+    if cur.peek() == Some('!') {
+        return err(
+            line,
+            col,
+            "raw interpolation `{!…}` is not allowed in class position (SPEC §9.1) — for raw HTML content, use a text-block line: `| {!expr}`",
+        );
+    }
+    let t = scan_expr(cur, col)?;
+    match cur.peek() {
+        None | Some(' ') | Some('\t') => Ok(t),
+        Some(_) => err(
+            line,
+            cur.col(),
+            "a class interpolation must be a whole token — never glue interpolation to class text \
+             (Tailwind's scanner cannot see built names); interpolate whole class names instead",
+        ),
+    }
+}
+
 /// Parses `(name name=value …)` (SPEC §4.3). The cursor sits on `(`.
-fn parse_attrs(cur: &mut Cur, el: &mut Element) -> Result<()> {
+fn parse_attrs(cur: &mut Cur, el: &mut Element, templates: bool) -> Result<()> {
     let src = cur.s;
     let line = cur.line;
     cur.bump(); // (
@@ -596,13 +1074,35 @@ fn parse_attrs(cur: &mut Cur, el: &mut Element) -> Result<()> {
                 let value = if cur.peek() == Some('=') {
                     cur.bump();
                     match cur.peek() {
-                        Some(q @ ('"' | '\'')) => AttrValue::Str(parse_quoted(cur, q, false)?),
+                        Some(q @ ('"' | '\'')) => {
+                            AttrValue::Str(parse_quoted(cur, q, false, templates)?)
+                        }
                         Some('{') => {
-                            return err(
-                                line,
-                                cur.col(),
-                                "`{…}` expressions are part of the template layer and are not implemented in v0.1",
-                            )
+                            let bcol = cur.col();
+                            if !templates {
+                                return err(line, bcol, NO_TEMPLATES_INTERP);
+                            }
+                            cur.bump(); // {
+                            if cur.peek() == Some('!') {
+                                return err(
+                                    line,
+                                    bcol,
+                                    "raw interpolation `{!…}` is forbidden inside attribute values (SPEC §9.1)",
+                                );
+                            }
+                            let t = scan_expr(cur, bcol)?;
+                            match cur.peek() {
+                                None | Some(' ') | Some('\t') | Some(')') => AttrValue::Expr(t),
+                                Some(_) => {
+                                    return err(
+                                        line,
+                                        cur.col(),
+                                        format!(
+                                            "an unquoted `{{expr}}` must be the entire attribute value — quote to mix text: {name}=\"…\""
+                                        ),
+                                    )
+                                }
+                            }
                         }
                         None | Some(' ') | Some('\t') | Some(')') => {
                             return err(line, cur.col(), format!("missing value after `{name}=`"))
@@ -615,7 +1115,7 @@ fn parse_attrs(cur: &mut Cur, el: &mut Element) -> Result<()> {
                                 }
                                 cur.bump();
                             }
-                            AttrValue::Str(src[vstart..cur.i].to_string())
+                            AttrValue::Str(lit_parts(&src[vstart..cur.i]))
                         }
                     }
                 } else {
@@ -624,9 +1124,8 @@ fn parse_attrs(cur: &mut Cur, el: &mut Element) -> Result<()> {
 
                 if name == "class" {
                     match value {
-                        AttrValue::Str(v) => {
-                            el.classes.extend(v.split_whitespace().map(String::from))
-                        }
+                        AttrValue::Str(parts) => merge_class_attr(el, parts)?,
+                        AttrValue::Expr(t) => el.classes.push(ClassItem::Interp(t)),
                         AttrValue::Bool => {
                             return err(line, col, "`class` attribute requires a value")
                         }
@@ -642,26 +1141,144 @@ fn parse_attrs(cur: &mut Cur, el: &mut Element) -> Result<()> {
     }
 }
 
-/// Parses a quoted string with SPEC escapes. Inline text (§6.1) allows
-/// `\" \\ \{ \n`; attribute values (§4.3) allow `\" \' \\ \{`.
-fn parse_quoted(cur: &mut Cur, quote: char, is_text: bool) -> Result<String> {
+/// Merges a quoted `class="…"` value into the class list: literal runs split
+/// on whitespace; an interpolation becomes one class item and must stand
+/// whitespace-separated (glued fragments are invisible to Tailwind's scanner
+/// and are rejected, the footgun rule).
+fn merge_class_attr(el: &mut Element, parts: Vec<TextPart>) -> Result<()> {
+    let mut boundary = true; // at value start / after whitespace
+    for part in parts {
+        match part {
+            TextPart::Lit(s) => {
+                if !boundary && !s.starts_with([' ', '\t']) {
+                    let t = match el.classes.last() {
+                        Some(ClassItem::Interp(t)) => t,
+                        _ => unreachable!("boundary is false only after an interp"),
+                    };
+                    return err(t.line, t.col, GLUED_CLASS_ATTR);
+                }
+                el.classes
+                    .extend(s.split_whitespace().map(|c| ClassItem::Lit(c.to_string())));
+                boundary = s.ends_with([' ', '\t']);
+            }
+            TextPart::Interp { expr, .. } => {
+                if !boundary {
+                    return err(expr.line, expr.col, GLUED_CLASS_ATTR);
+                }
+                el.classes.push(ClassItem::Interp(expr));
+                boundary = false;
+            }
+        }
+    }
+    Ok(())
+}
+
+const GLUED_CLASS_ATTR: &str =
+    "interpolation in a class list must be a whole, whitespace-separated token — never glue \
+     interpolation to class text (Tailwind's scanner cannot see built names)";
+
+/// Parses a quoted string with SPEC escapes into text segments. Inline text
+/// (§6.1) allows `\" \\ \{ \n` and raw `{!…}`; attribute values (§4.3) allow
+/// `\" \' \\ \{`, raw forbidden (SPEC §9.1).
+fn parse_quoted(
+    cur: &mut Cur,
+    quote: char,
+    is_text: bool,
+    templates: bool,
+) -> Result<Vec<TextPart>> {
     let line = cur.line;
     cur.bump(); // opening quote
-    let mut out = String::new();
+    let mut parts = Vec::new();
+    let mut lit = String::new();
     loop {
-        match cur.bump() {
+        let col = cur.col();
+        match cur.peek() {
             None => return err(line, cur.col(), "unclosed string"),
-            Some(c) if c == quote => return Ok(out),
-            Some('\\') => match cur.bump() {
-                Some('"') => out.push('"'),
-                Some('\'') if !is_text => out.push('\''),
-                Some('\\') => out.push('\\'),
-                Some('{') => out.push('{'),
-                Some('n') if is_text => out.push('\n'),
-                Some(c) => return err(line, cur.col(), format!("unknown escape `\\{c}`")),
-                None => return err(line, cur.col(), "unclosed string"),
-            },
-            Some(c) => out.push(c),
+            Some(c) if c == quote => {
+                cur.bump();
+                flush(&mut parts, &mut lit);
+                return Ok(parts);
+            }
+            Some('\\') => {
+                cur.bump();
+                match cur.bump() {
+                    Some('"') => lit.push('"'),
+                    Some('\'') if !is_text => lit.push('\''),
+                    Some('\\') => lit.push('\\'),
+                    Some('{') => lit.push('{'),
+                    Some('n') if is_text => lit.push('\n'),
+                    Some(c) => return err(line, cur.col(), format!("unknown escape `\\{c}`")),
+                    None => return err(line, cur.col(), "unclosed string"),
+                }
+            }
+            Some('{') => {
+                if !templates {
+                    return err(line, col, NO_TEMPLATES_INTERP);
+                }
+                cur.bump(); // {
+                let raw = cur.peek() == Some('!');
+                if raw {
+                    if !is_text {
+                        return err(
+                            line,
+                            col,
+                            "raw interpolation `{!…}` is forbidden inside attribute values (SPEC §9.1)",
+                        );
+                    }
+                    cur.bump(); // !
+                }
+                let expr = scan_expr(cur, col)?;
+                flush(&mut parts, &mut lit);
+                parts.push(TextPart::Interp { expr, raw });
+            }
+            Some(_) => lit.push(cur.bump().unwrap()),
         }
+    }
+}
+
+/// One `|` text-block line into segments. Verbatim except `\{` (literal
+/// brace) and `{…}`/`{!…}` interpolation (SPEC §6.2, §9.1).
+fn parse_block_text_line(
+    content: &str,
+    from: usize,
+    line: usize,
+    templates: bool,
+) -> Result<Vec<TextPart>> {
+    let mut cur = Cur::at(content, from, line);
+    let mut parts = Vec::new();
+    let mut lit = String::new();
+    loop {
+        let col = cur.col();
+        match cur.peek() {
+            None => {
+                flush(&mut parts, &mut lit);
+                return Ok(parts);
+            }
+            Some('\\') if cur.peek2() == Some('{') => {
+                cur.bump();
+                cur.bump();
+                lit.push('{');
+            }
+            Some('{') => {
+                if !templates {
+                    return err(line, col, NO_TEMPLATES_INTERP);
+                }
+                cur.bump(); // {
+                let raw = cur.peek() == Some('!');
+                if raw {
+                    cur.bump(); // !
+                }
+                let expr = scan_expr(&mut cur, col)?;
+                flush(&mut parts, &mut lit);
+                parts.push(TextPart::Interp { expr, raw });
+            }
+            Some(_) => lit.push(cur.bump().unwrap()),
+        }
+    }
+}
+
+fn flush(parts: &mut Vec<TextPart>, lit: &mut String) {
+    if !lit.is_empty() {
+        parts.push(TextPart::Lit(std::mem::take(lit)));
     }
 }

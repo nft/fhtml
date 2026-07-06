@@ -1,7 +1,11 @@
 //! HTML emitter (SPEC §11). Two modes producing the same element tree:
 //! `Pretty` (2-space indented) and `Min` (no inter-tag whitespace).
+//!
+//! This is the static path: template constructs are rejected by
+//! `compile`/`compile_full` before emit runs, so every segment here is
+//! literal (the evaluating renderer is not implemented yet).
 
-use crate::parser::{is_void, AttrValue, Element, Node};
+use crate::parser::{is_void, AttrValue, ClassItem, Element, Node, TextPart};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -42,6 +46,19 @@ fn esc(s: &str, quotes: bool) -> String {
     out
 }
 
+/// Concatenates literal-only segments (the static path invariant).
+fn lit_text(parts: &[TextPart]) -> String {
+    parts
+        .iter()
+        .map(|p| match p {
+            TextPart::Lit(s) => s.as_str(),
+            TextPart::Interp { .. } => {
+                unreachable!("template constructs are rejected before static emit")
+            }
+        })
+        .collect()
+}
+
 /// Attribute order per SPEC §11: id, paren attrs in source order, merged class.
 fn open_tag(el: &Element) -> String {
     let mut s = format!("<{}", el.tag);
@@ -51,13 +68,27 @@ fn open_tag(el: &Element) -> String {
     for (name, value) in &el.attrs {
         match value {
             AttrValue::Bool => s.push_str(&format!(" {name}")),
-            AttrValue::Str(v) => s.push_str(&format!(" {name}=\"{}\"", esc_attr(v))),
+            AttrValue::Str(v) => s.push_str(&format!(" {name}=\"{}\"", esc_attr(&lit_text(v)))),
+            AttrValue::Expr(_) => {
+                unreachable!("template constructs are rejected before static emit")
+            }
         }
     }
     if !el.classes.is_empty() {
         // Classes are byte-for-byte except `"`, which would end the attribute;
         // &quot; is DOM-transparent (SPEC §11).
-        let joined = el.classes.join(" ").replace('"', "&quot;");
+        let joined = el
+            .classes
+            .iter()
+            .map(|c| match c {
+                ClassItem::Lit(s) => s.as_str(),
+                ClassItem::Interp(_) => {
+                    unreachable!("template constructs are rejected before static emit")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+            .replace('"', "&quot;");
         s.push_str(&format!(" class=\"{joined}\""));
     }
     s.push('>');
@@ -110,10 +141,13 @@ fn emit_node(out: &mut String, node: &Node, depth: usize, mode: Mode) {
                 if mode == Mode::Min && i > 0 {
                     out.push('\n');
                 }
-                out.push_str(&format!("{ind}{}{nl}", esc_text(l)));
+                out.push_str(&format!("{ind}{}{nl}", esc_text(&lit_text(l))));
             }
         }
         Node::Element(el) => emit_element(out, el, depth, mode),
+        Node::If(_) | Node::For(_) => {
+            unreachable!("template constructs are rejected before static emit")
+        }
     }
 }
 
@@ -127,7 +161,7 @@ fn emit_element(out: &mut String, el: &Element, depth: usize, mode: Mode) {
     loop {
         opens.push_str(&open_tag(cur));
         if let Some(text) = &cur.text {
-            opens.push_str(&esc_text(text));
+            opens.push_str(&esc_text(&lit_text(text)));
         }
         if !is_void(&cur.tag) {
             closings = format!("</{}>{}", cur.tag, closings);

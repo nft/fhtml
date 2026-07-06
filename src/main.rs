@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{env, fs, io};
 
-use fhtml::{compile_full, format, Mode};
+use fhtml::{compile_opts, format, Mode, Options};
 
 const USAGE: &str = "\
 fhtml — compiler for Fluid HTML (see SPEC.md)
@@ -19,6 +19,8 @@ OPTIONS:
                  (default: dist)
   --pretty       indented output (default when writing files)
   --min          minified output (default when writing to stdout)
+  --no-templates enforce static markup (SPEC §9.2): any template construct —
+                 statements, `{…}` interpolation, unescaped `{` — is an error
   -h, --help     show this help
   -V, --version  print version
 ";
@@ -38,6 +40,7 @@ fn run() -> Result<(), String> {
     let mut out_path: Option<PathBuf> = None;
     let mut build = false;
     let mut fmt = false;
+    let mut templates = true;
     let mut input: Option<String> = None;
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -46,6 +49,7 @@ fn run() -> Result<(), String> {
         match args[i].as_str() {
             "--pretty" => pretty = Some(true),
             "--min" => pretty = Some(false),
+            "--no-templates" => templates = false,
             "-o" => {
                 i += 1;
                 let val = args.get(i).ok_or("`-o` requires a path")?;
@@ -82,10 +86,11 @@ fn run() -> Result<(), String> {
                 &src,
                 &out_path.unwrap_or_else(|| PathBuf::from("dist")),
                 pretty,
+                templates,
             )
         } else {
             let out = out_path.unwrap_or_else(|| src.with_extension("html"));
-            build_file(&src, &out, pretty)
+            build_file(&src, &out, pretty, templates)
         }
     } else if fmt {
         run_fmt(input.as_deref(), out_path)
@@ -99,7 +104,8 @@ fn run() -> Result<(), String> {
         };
         // SPEC §11: pretty when writing files, min for pipelines/stdout.
         let mode = mode_for(pretty, out_path.is_some());
-        let output = compile_full(&source, mode).map_err(|e| format!("{name}:{e}"))?;
+        let opts = Options { mode, templates };
+        let output = compile_opts(&source, &opts).map_err(|e| format!("{name}:{e}"))?;
         print_warnings(&name, &output.warnings);
         match out_path {
             Some(path) => {
@@ -178,10 +184,13 @@ fn mode_for(pretty: Option<bool>, writing_file: bool) -> Mode {
     }
 }
 
-fn build_file(src: &Path, out: &Path, pretty: Option<bool>) -> Result<(), String> {
+fn build_file(src: &Path, out: &Path, pretty: Option<bool>, templates: bool) -> Result<(), String> {
     let source = fs::read_to_string(src).map_err(|e| format!("{}: {e}", src.display()))?;
-    let output = compile_full(&source, mode_for(pretty, true))
-        .map_err(|e| format!("{}:{e}", src.display()))?;
+    let opts = Options {
+        mode: mode_for(pretty, true),
+        templates,
+    };
+    let output = compile_opts(&source, &opts).map_err(|e| format!("{}:{e}", src.display()))?;
     print_warnings(&src.display().to_string(), &output.warnings);
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -189,7 +198,12 @@ fn build_file(src: &Path, out: &Path, pretty: Option<bool>) -> Result<(), String
     fs::write(out, output.html).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-fn build_dir(src: &Path, out_dir: &Path, pretty: Option<bool>) -> Result<(), String> {
+fn build_dir(
+    src: &Path,
+    out_dir: &Path,
+    pretty: Option<bool>,
+    templates: bool,
+) -> Result<(), String> {
     let mut files = Vec::new();
     collect_fhtml(src, &mut files).map_err(|e| format!("{}: {e}", src.display()))?;
     if files.is_empty() {
@@ -201,7 +215,7 @@ fn build_dir(src: &Path, out_dir: &Path, pretty: Option<bool>) -> Result<(), Str
     for file in &files {
         let rel = file.strip_prefix(src).unwrap();
         let out = out_dir.join(rel).with_extension("html");
-        if let Err(msg) = build_file(file, &out, pretty) {
+        if let Err(msg) = build_file(file, &out, pretty, templates) {
             eprintln!("{msg}");
             failures += 1;
         }

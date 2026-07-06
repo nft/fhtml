@@ -222,21 +222,24 @@ fn error_pug_tag_suffix() {
 }
 
 #[test]
-fn error_template_layer_keyword() {
+fn error_template_constructs_are_not_static() {
+    // SPEC §11: `compile` is the static path; template files need `render`.
     let e = error("if user\n  p \"hi\"");
-    assert!(e.contains("template layer"), "got: {e}");
-}
-
-#[test]
-fn error_template_interpolation_class_position() {
+    assert!(e.contains("static"), "got: {e}");
     let e = error("div {active}");
-    assert!(e.contains("template layer"), "got: {e}");
+    assert!(e.contains("static"), "got: {e}");
 }
 
 #[test]
-fn error_component_call() {
+fn error_component_call_is_p2() {
     let e = error("+card(title=\"x\")");
-    assert!(e.contains("template layer"), "got: {e}");
+    assert!(e.contains("composition layer"), "got: {e}");
+    let e = error("def card(title)\n  p \"x\"");
+    assert!(e.contains("composition layer"), "got: {e}");
+    let e = error("children");
+    assert!(e.contains("composition layer"), "got: {e}");
+    let e = error("include ./partials/head");
+    assert!(e.contains("composition layer"), "got: {e}");
 }
 
 #[test]
@@ -714,5 +717,281 @@ mod expr {
             .unwrap_err()
             .to_string()
             .contains("map"));
+    }
+}
+
+// ---------------------------------- template-layer parsing §9.1–§9.2, §10
+
+mod template_parse {
+    use fhtml::{compile_opts, Mode, Options};
+
+    /// Parses via the static path; template files fail with the static-only
+    /// message, so use `parses` to assert the *parse* succeeded.
+    fn error(src: &str) -> String {
+        compile_opts(src, &Options::default())
+            .unwrap_err()
+            .to_string()
+    }
+
+    fn parses(src: &str) {
+        match compile_opts(src, &Options::default()) {
+            Ok(_) => {}
+            Err(e) => assert!(
+                e.to_string().contains("static"),
+                "parse error in {src:?}: {e}"
+            ),
+        }
+    }
+
+    fn no_templates_error(src: &str) -> String {
+        compile_opts(
+            src,
+            &Options {
+                mode: Mode::Min,
+                templates: false,
+            },
+        )
+        .unwrap_err()
+        .to_string()
+    }
+
+    // ------------------------------------------ §10.1 if / elif / else
+
+    #[test]
+    fn if_chain_parses() {
+        parses("if user\n  p \"a\"\nelif invited\n  p \"b\"\nelse\n  p \"c\"\n");
+        // blank lines between chain parts are fine
+        parses("if user\n  p \"a\"\n\nelse\n  p \"c\"\n");
+    }
+
+    #[test]
+    fn error_elif_without_if() {
+        let e = error("elif user\n  p \"x\"");
+        assert!(e.contains("directly follow"), "got: {e}");
+    }
+
+    #[test]
+    fn error_else_without_if() {
+        let e = error("else\n  p \"x\"");
+        assert!(e.contains("directly follow"), "got: {e}");
+    }
+
+    #[test]
+    fn error_sibling_between_if_and_elif() {
+        let e = error("if user\n  p \"a\"\np \"between\"\nelif x\n  p \"b\"");
+        assert!(e.contains("directly follow"), "got: {e}");
+    }
+
+    #[test]
+    fn error_elif_at_wrong_indent() {
+        let e = error("div\n  if user\n    p \"a\"\nelif x\n  p \"b\"");
+        assert!(e.contains("directly follow"), "got: {e}");
+    }
+
+    #[test]
+    fn error_else_takes_no_condition() {
+        let e = error("if user\n  p \"a\"\nelse invited\n  p \"b\"");
+        assert!(e.contains("no condition"), "got: {e}");
+    }
+
+    #[test]
+    fn error_statement_needs_block() {
+        let e = error("if user\np \"next\"");
+        assert!(e.contains("indented block"), "got: {e}");
+        let e = error("for x in items\np \"next\"");
+        assert!(e.contains("indented block"), "got: {e}");
+    }
+
+    #[test]
+    fn error_if_needs_expression() {
+        let e = error("if\n  p \"x\"");
+        assert!(e.contains("needs an expression"), "got: {e}");
+    }
+
+    #[test]
+    fn error_bad_condition_reports_expression_position() {
+        // `1 +` — the expression error lands after the `+`
+        let e = error("if 1 +\n  p \"x\"");
+        assert!(e.starts_with("1:7:"), "got: {e}");
+    }
+
+    // ------------------------------------------------ §10.2 for / empty
+
+    #[test]
+    fn for_forms_parse() {
+        parses("for item in items\n  p \"{item}\"\n");
+        parses("for item, i in items\n  p \"{i}: {item}\"\n");
+        parses("for item in items\n  p \"{item}\"\nempty\n  p \"none\"\n");
+    }
+
+    #[test]
+    fn error_empty_without_for() {
+        let e = error("empty\n  p \"x\"");
+        assert!(e.contains("directly follow"), "got: {e}");
+    }
+
+    #[test]
+    fn error_empty_takes_nothing() {
+        let e = error("for x in items\n  p \"a\"\nempty handed\n  p \"b\"");
+        assert!(e.contains("`empty` takes nothing"), "got: {e}");
+    }
+
+    #[test]
+    fn error_for_missing_in() {
+        let e = error("for item items\n  p \"x\"");
+        assert!(e.contains("expected `in`"), "got: {e}");
+    }
+
+    #[test]
+    fn error_for_missing_variable() {
+        let e = error("for\n  p \"x\"");
+        assert!(e.contains("loop variable"), "got: {e}");
+    }
+
+    #[test]
+    fn error_for_cannot_bind_ctx_or_literals() {
+        let e = error("for ctx in items\n  p \"x\"");
+        assert!(e.contains("cannot be shadowed"), "got: {e}");
+        let e = error("for x, ctx in items\n  p \"x\"");
+        assert!(e.contains("cannot be shadowed"), "got: {e}");
+        let e = error("for true in items\n  p \"x\"");
+        assert!(e.contains("literal"), "got: {e}");
+    }
+
+    #[test]
+    fn error_for_duplicate_names() {
+        let e = error("for x, x in items\n  p \"x\"");
+        assert!(e.contains("must differ"), "got: {e}");
+    }
+
+    // ------------------------------------------- §9.1–§9.2 interpolation
+
+    #[test]
+    fn interpolation_contexts_parse() {
+        parses("p \"Hi, {user.name}\"\n");
+        parses("p\n  | total: {n}\n  | raw: {!html}\n");
+        parses("a(href={user.url} title=\"Profile of {user.name}\")\n");
+        parses("button px-4 {active ? 'bg-blue-600' : 'bg-gray-100'} \"Go\"\n");
+        parses("div(class=\"a {x} b\")\n");
+    }
+
+    #[test]
+    fn error_raw_bare_token_is_class_position() {
+        // SPEC §9.1: class position is not a content position. (The raw-HTML
+        // idiom is a `| {!expr}` text-block line — the spec's inline
+        // example predates this ruling; flagged for a later doc pass.)
+        let e = error("article prose {!post.html}");
+        assert!(e.contains("class position"), "got: {e}");
+        assert!(e.contains("| {!expr}"), "got: {e}");
+    }
+
+    #[test]
+    fn error_raw_in_quoted_attr() {
+        let e = error("a(title=\"x {!evil} y\")");
+        assert!(e.contains("forbidden inside attribute"), "got: {e}");
+    }
+
+    #[test]
+    fn error_raw_in_unquoted_attr() {
+        let e = error("a(href={!evil})");
+        assert!(e.contains("forbidden inside attribute"), "got: {e}");
+    }
+
+    #[test]
+    fn error_raw_in_class_position() {
+        let e = error("div {!classes}");
+        assert!(e.contains("class position"), "got: {e}");
+    }
+
+    #[test]
+    fn error_unquoted_attr_expr_must_be_whole_value() {
+        let e = error("a(href={base}/path)");
+        assert!(e.contains("entire attribute value"), "got: {e}");
+    }
+
+    #[test]
+    fn error_glued_class_interpolation() {
+        // `{` mid-token is inert (SPEC §4.2: tokens classify by leading char
+        // only) — `bg-{color}-100` stays one literal class, static-compatible.
+        assert_eq!(
+            fhtml::compile("div bg-{color}-100", Mode::Min).unwrap(),
+            "<div class=\"bg-{color}-100\"></div>"
+        );
+        // but a token *starting* with `{` must be the whole token:
+        let e = error("div {color}-100");
+        assert!(e.contains("whole token"), "got: {e}");
+        // and inside class="…" interpolation must be whitespace-separated:
+        let e = error("div(class=\"bg-{color}-100\")");
+        assert!(e.contains("whitespace-separated"), "got: {e}");
+    }
+
+    #[test]
+    fn error_unclosed_interpolation() {
+        let e = error("p \"hi {name\"");
+        assert!(e.contains("unclosed"), "got: {e}");
+    }
+
+    #[test]
+    fn expression_strings_may_contain_braces_and_quotes() {
+        parses("p \"{open ? '{' : '}'}\"\n");
+        parses("p \"{a == \"x\" ? 'y' : 'z'}\"\n");
+    }
+
+    #[test]
+    fn escaped_brace_is_literal() {
+        // static behavior preserved: `\{` is a literal brace, no interpolation.
+        assert_eq!(
+            fhtml::compile("p \"set \\{x}\"", Mode::Min).unwrap(),
+            "<p>set {x}</p>"
+        );
+    }
+
+    // ------------------------------------------------- §9.2 --no-templates
+
+    #[test]
+    fn no_templates_rejects_all_constructs() {
+        let e = no_templates_error("if user\n  p \"x\"");
+        assert!(e.contains("--no-templates"), "got: {e}");
+        let e = no_templates_error("p \"hi {name}\"");
+        assert!(e.contains("--no-templates"), "got: {e}");
+        let e = no_templates_error("div {active}");
+        assert!(e.contains("--no-templates"), "got: {e}");
+        let e = no_templates_error("a(href={x})");
+        assert!(e.contains("--no-templates"), "got: {e}");
+        let e = no_templates_error("p\n  | count: {n}");
+        assert!(e.contains("--no-templates"), "got: {e}");
+    }
+
+    #[test]
+    fn no_templates_still_compiles_p0() {
+        let out = compile_opts(
+            "p \"escaped \\{brace}\"",
+            &Options {
+                mode: Mode::Min,
+                templates: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(out.html, "<p>escaped {brace}</p>");
+    }
+
+    // ------------------------------------------------ fmt on template files
+
+    #[test]
+    fn fmt_reprints_statements_and_interpolation() {
+        let src = "if user\n    p   text-sm \"Hi, { user.name }\"\nelif invited\n    p \"{'#' + n}\"\nelse\n    a(href=/login class=\"x {cls} y\") \"Sign in\"\nfor item,   i in items\n    li \"{i}: {item.title}\"\nempty\n    li \"none\"\n";
+        let formatted = fhtml::format(src).unwrap();
+        let expected = "if user\n  p text-sm \"Hi, {user.name}\"\nelif invited\n  p \"{'#' + n}\"\nelse\n  a(href=/login) x {cls} y \"Sign in\"\nfor item, i in items\n  li \"{i}: {item.title}\"\nempty\n  li \"none\"\n";
+        assert_eq!(formatted, expected);
+        // idempotent
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    }
+
+    #[test]
+    fn fmt_preserves_raw_interpolation_and_text_blocks() {
+        let src =
+            "article prose\n  | {!post.html}\np\n  | total: {n} items\n  | raw: {!html} \\{lit}\n";
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(formatted, src);
     }
 }

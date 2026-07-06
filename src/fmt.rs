@@ -1,8 +1,10 @@
 //! Canonical formatter: 2-space indentation, spaces only, `.` for `div`,
-//! minimal quoting. Invariant: `compile(format(src)) == compile(src)`.
-//! Silent `//` comments are preserved (they live in the AST for this reason).
+//! minimal quoting. Invariant: `compile(format(src)) == compile(src)` (and
+//! `render` likewise). Silent `//` comments are preserved (they live in the
+//! AST for this reason). Expressions are reprinted from their trimmed source
+//! text, never re-serialized from the AST — formatting must not change output.
 
-use crate::parser::{AttrValue, Element, Node};
+use crate::parser::{AttrValue, ClassItem, Element, IfChain, Node, TextPart};
 
 pub fn format_nodes(nodes: &[Node]) -> String {
     let mut out = String::new();
@@ -43,11 +45,11 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
             }
         }
         Node::TextBlock(lines) => {
-            for l in lines {
-                if l.is_empty() {
+            for parts in lines {
+                if parts.is_empty() {
                     out.push_str(&format!("{ind}|\n"));
                 } else {
-                    out.push_str(&format!("{ind}| {}\n", l.replace('{', "\\{")));
+                    out.push_str(&format!("{ind}| {}\n", block_text(parts)));
                 }
             }
         }
@@ -56,6 +58,41 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
             for child in &innermost(el).children {
                 fmt_node(out, child, depth + 1);
             }
+        }
+        Node::If(chain) => fmt_if(out, chain, depth),
+        Node::For(f) => {
+            match &f.index {
+                Some(idx) => {
+                    out.push_str(&format!("{ind}for {}, {idx} in {}\n", f.var, f.iter.src))
+                }
+                None => out.push_str(&format!("{ind}for {} in {}\n", f.var, f.iter.src)),
+            }
+            for child in &f.body {
+                fmt_node(out, child, depth + 1);
+            }
+            if let Some(empty) = &f.empty {
+                out.push_str(&format!("{ind}empty\n"));
+                for child in empty {
+                    fmt_node(out, child, depth + 1);
+                }
+            }
+        }
+    }
+}
+
+fn fmt_if(out: &mut String, chain: &IfChain, depth: usize) {
+    let ind = "  ".repeat(depth);
+    for (i, arm) in chain.arms.iter().enumerate() {
+        let kw = if i == 0 { "if" } else { "elif" };
+        out.push_str(&format!("{ind}{kw} {}\n", arm.cond.src));
+        for child in &arm.body {
+            fmt_node(out, child, depth + 1);
+        }
+    }
+    if let Some(else_body) = &chain.else_body {
+        out.push_str(&format!("{ind}else\n"));
+        for child in else_body {
+            fmt_node(out, child, depth + 1);
         }
     }
 }
@@ -67,8 +104,8 @@ fn innermost(el: &Element) -> &Element {
     }
 }
 
-/// A class that, printed bare, would reparse as a different token kind
-/// (text, id, interpolation, or chain). Such classes can only enter the AST
+/// A literal class that, printed bare, would reparse as a different token kind
+/// (text, interpolation, id, or chain). Such classes can only enter the AST
 /// via a `class="…"` attribute, and must leave the same way.
 fn hostile_class(c: &str) -> bool {
     c.starts_with('"') || c.starts_with('{') || c.starts_with('#') || c == ">"
@@ -77,10 +114,24 @@ fn hostile_class(c: &str) -> bool {
 fn element_line(el: &Element) -> String {
     let mut s = String::new();
     s.push_str(if el.tag == "div" { "." } else { &el.tag });
-    // If any class can't survive as a bare token, the whole list rides in a
-    // quoted class attr (the parser merges it back losslessly, in order).
-    let class_attr = if el.classes.iter().any(|c| hostile_class(c)) {
-        Some(el.classes.join(" "))
+    // If any literal class can't survive as a bare token, the whole list rides
+    // in a quoted class attr (the parser merges it back losslessly, in order;
+    // interpolations print as whitespace-separated `{expr}` inside it).
+    let hostile = el
+        .classes
+        .iter()
+        .any(|c| matches!(c, ClassItem::Lit(s) if hostile_class(s)));
+    let class_attr = if hostile {
+        Some(
+            el.classes
+                .iter()
+                .map(|c| match c {
+                    ClassItem::Lit(s) => escape_attr_lit(s),
+                    ClassItem::Interp(t) => format!("{{{}}}", t.src),
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
     } else {
         None
     };
@@ -93,17 +144,22 @@ fn element_line(el: &Element) -> String {
             }
             first = false;
             s.push_str(name);
-            if let AttrValue::Str(v) = value {
-                s.push('=');
-                s.push_str(&attr_value(v));
+            match value {
+                AttrValue::Bool => {}
+                AttrValue::Str(parts) => {
+                    s.push('=');
+                    s.push_str(&attr_value(parts));
+                }
+                AttrValue::Expr(t) => {
+                    s.push_str(&format!("={{{}}}", t.src));
+                }
             }
         }
         if let Some(v) = &class_attr {
             if !first {
                 s.push(' ');
             }
-            s.push_str("class=");
-            s.push_str(&attr_value(v));
+            s.push_str(&format!("class=\"{v}\""));
         }
         s.push(')');
     }
@@ -113,7 +169,10 @@ fn element_line(el: &Element) -> String {
     if class_attr.is_none() {
         for class in &el.classes {
             s.push(' ');
-            s.push_str(class);
+            match class {
+                ClassItem::Lit(c) => s.push_str(c),
+                ClassItem::Interp(t) => s.push_str(&format!("{{{}}}", t.src)),
+            }
         }
     }
     if let Some(text) = &el.text {
@@ -128,37 +187,75 @@ fn element_line(el: &Element) -> String {
 }
 
 /// Bare when the reparse would read it back identically; quoted otherwise.
-fn attr_value(v: &str) -> String {
-    let needs_quoting =
-        v.is_empty() || v.starts_with('{') || v.contains([' ', '\t', ')', '"', '\'', '\\']);
-    if needs_quoting {
-        let mut s = String::from("\"");
-        for c in v.chars() {
-            match c {
-                '\\' => s.push_str("\\\\"),
-                '"' => s.push_str("\\\""),
-                '{' => s.push_str("\\{"),
-                _ => s.push(c),
-            }
+/// Segments with interpolation always print quoted.
+fn attr_value(parts: &[TextPart]) -> String {
+    if let [TextPart::Lit(v)] = parts {
+        let needs_quoting =
+            v.is_empty() || v.starts_with('{') || v.contains([' ', '\t', ')', '"', '\'', '\\']);
+        if !needs_quoting {
+            return v.to_string();
         }
-        s.push('"');
-        s
-    } else {
-        v.to_string()
     }
+    let mut s = String::from("\"");
+    for part in parts {
+        match part {
+            TextPart::Lit(v) => s.push_str(&escape_attr_lit(v)),
+            TextPart::Interp { expr, .. } => s.push_str(&format!("{{{}}}", expr.src)),
+        }
+    }
+    s.push('"');
+    s
 }
 
-fn quoted_text(t: &str) -> String {
-    let mut s = String::from("\"");
-    for c in t.chars() {
+fn escape_attr_lit(v: &str) -> String {
+    let mut s = String::with_capacity(v.len());
+    for c in v.chars() {
         match c {
             '\\' => s.push_str("\\\\"),
             '"' => s.push_str("\\\""),
             '{' => s.push_str("\\{"),
-            '\n' => s.push_str("\\n"),
             _ => s.push(c),
         }
     }
+    s
+}
+
+fn quoted_text(parts: &[TextPart]) -> String {
+    let mut s = String::from("\"");
+    for part in parts {
+        match part {
+            TextPart::Lit(t) => {
+                for c in t.chars() {
+                    match c {
+                        '\\' => s.push_str("\\\\"),
+                        '"' => s.push_str("\\\""),
+                        '{' => s.push_str("\\{"),
+                        '\n' => s.push_str("\\n"),
+                        _ => s.push(c),
+                    }
+                }
+            }
+            TextPart::Interp { expr, raw } => {
+                let bang = if *raw { "!" } else { "" };
+                s.push_str(&format!("{{{bang}{}}}", expr.src));
+            }
+        }
+    }
     s.push('"');
+    s
+}
+
+/// A `|` line's content: literal except `\{` escapes and interpolation.
+fn block_text(parts: &[TextPart]) -> String {
+    let mut s = String::new();
+    for part in parts {
+        match part {
+            TextPart::Lit(t) => s.push_str(&t.replace('{', "\\{")),
+            TextPart::Interp { expr, raw } => {
+                let bang = if *raw { "!" } else { "" };
+                s.push_str(&format!("{{{bang}{}}}", expr.src));
+            }
+        }
+    }
     s
 }

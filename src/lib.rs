@@ -9,6 +9,7 @@
 pub mod convert;
 mod emit;
 mod error;
+pub mod expr;
 mod fmt;
 mod parser;
 

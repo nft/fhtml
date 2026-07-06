@@ -392,3 +392,327 @@ fn error_positions_are_reported() {
     let err = compile("div\n  p \"unclosed", Mode::Min).unwrap_err();
     assert_eq!(err.line, 2);
 }
+
+// ------------------------------------- expression mini-language §9.3/§9.4
+
+mod expr {
+    use fhtml::expr::{deep_eq, eval, parse, stringify, Scope, Value};
+
+    /// Evaluates `src` against a data map built from `data` pairs, null ctx.
+    fn ev_with(src: &str, data: Value) -> Result<Value, String> {
+        let e = parse(src).map_err(|e| e.to_string())?;
+        eval(&e, &Scope::new(&data), &Value::Null).map_err(|e| e.to_string())
+    }
+
+    fn ev(src: &str) -> Value {
+        ev_with(src, sample_data()).unwrap()
+    }
+
+    fn ev_err(src: &str) -> String {
+        ev_with(src, sample_data()).unwrap_err()
+    }
+
+    /// Interpolation-style result: eval + stringify.
+    fn show(src: &str) -> String {
+        stringify(&ev(src)).unwrap()
+    }
+
+    fn map(pairs: &[(&str, Value)]) -> Value {
+        Value::Map(
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
+        )
+    }
+
+    fn sample_data() -> Value {
+        map(&[
+            ("n", Value::from(3.0)),
+            ("s", Value::from("hi")),
+            ("flag", Value::from(true)),
+            ("items", Value::from(vec![10i64, 20, 30])),
+            (
+                "user",
+                map(&[("name", Value::from("Erin")), ("age", Value::from(29i64))]),
+            ),
+        ])
+    }
+
+    // -------------------------------------------------- §9.3 precedence
+
+    #[test]
+    fn precedence_mult_over_add() {
+        assert_eq!(ev("1 + 2 * 3"), Value::Number(7.0));
+        assert_eq!(ev("(1 + 2) * 3"), Value::Number(9.0));
+    }
+
+    #[test]
+    fn precedence_add_over_compare_over_equality() {
+        // `1 + 1 < 3 == true` = ((1+1) < 3) == true
+        assert_eq!(ev("1 + 1 < 3 == true"), Value::Bool(true));
+    }
+
+    #[test]
+    fn precedence_and_binds_tighter_than_or() {
+        assert_eq!(ev("false || true && false"), Value::Bool(false));
+        assert_eq!(ev("true || false && false"), Value::Bool(true));
+    }
+
+    #[test]
+    fn precedence_ternary_is_lowest_and_right_associative() {
+        assert_eq!(ev("0 ? 'a' : 1 ? 'b' : 'c'"), Value::from("b"));
+        assert_eq!(ev("flag || false ? 'y' : 'n'"), Value::from("y"));
+    }
+
+    #[test]
+    fn precedence_unary_and_postfix() {
+        assert_eq!(ev("-user.age"), Value::Number(-29.0));
+        assert_eq!(ev("!user.age"), Value::Bool(false));
+        assert_eq!(ev("2 - -3"), Value::Number(5.0));
+        assert_eq!(ev("!!s"), Value::Bool(true));
+    }
+
+    #[test]
+    fn postfix_paths_and_indexing() {
+        assert_eq!(ev("user.name"), Value::from("Erin"));
+        assert_eq!(ev("items[0]"), Value::Number(10.0));
+        assert_eq!(ev("items[1 + 1]"), Value::Number(30.0));
+        assert_eq!(ev("user['name']"), Value::from("Erin"));
+    }
+
+    #[test]
+    fn logical_operators_yield_operand_values() {
+        // `||`/`&&` short-circuit and yield the deciding operand, enabling
+        // `{name || 'anonymous'}` defaults.
+        assert_eq!(ev("null || 'default'"), Value::from("default"));
+        assert_eq!(ev("s || 'default'"), Value::from("hi"));
+        assert_eq!(ev("s && 'next'"), Value::from("next"));
+        assert_eq!(ev("0 && 'next'"), Value::Number(0.0));
+    }
+
+    #[test]
+    fn short_circuit_skips_errors_in_untaken_branch() {
+        assert_eq!(ev("false && 1 / 0 == 1"), Value::Bool(false));
+        assert_eq!(ev("true || 1 / 0 == 1"), Value::Bool(true));
+        assert_eq!(ev("flag ? 'ok' : 1 / 0"), Value::from("ok"));
+    }
+
+    // ------------------------------------------------ §9.3 parse errors
+
+    #[test]
+    fn parse_errors_carry_byte_offsets() {
+        assert_eq!(parse("").unwrap_err().offset, 0);
+        assert_eq!(parse("1 +").unwrap_err().offset, 3);
+        // trailing garbage after a complete expression
+        let e = parse("a b").unwrap_err();
+        assert_eq!(e.offset, 2);
+        assert!(e.msg.contains("unexpected `b`"), "got: {}", e.msg);
+        assert!(parse("a ? b").unwrap_err().msg.contains("`:`"));
+        assert!(parse("x[1").unwrap_err().msg.contains("`]`"));
+        assert!(parse("a.").unwrap_err().msg.contains("name after `.`"));
+        assert!(parse("'unclosed").unwrap_err().msg.contains("unclosed"));
+        assert!(parse("(1 + 2").unwrap_err().msg.contains("`)`"));
+    }
+
+    #[test]
+    fn no_host_language_escape() {
+        // The grammar is closed: no calls, no assignment.
+        assert!(parse("foo(1)").is_err());
+        assert!(parse("a = 1").is_err());
+        assert!(parse("a | b").is_err());
+    }
+
+    #[test]
+    fn string_literals_and_escapes() {
+        assert_eq!(ev("'it\\'s'"), Value::from("it's"));
+        assert_eq!(ev(r#""a\"b""#), Value::from("a\"b"));
+        assert_eq!(ev(r"'a\\b'"), Value::from("a\\b"));
+        assert!(parse(r"'\n'").unwrap_err().msg.contains("unknown escape"));
+    }
+
+    #[test]
+    fn number_literals() {
+        assert_eq!(ev("42"), Value::Number(42.0));
+        assert_eq!(ev("2.5"), Value::Number(2.5));
+        assert_eq!(ev("1e3"), Value::Number(1000.0));
+        assert_eq!(ev("1.5e-2"), Value::Number(0.015));
+    }
+
+    // -------------------------------------------------- §9.4 falsiness
+
+    #[test]
+    fn falsiness_table() {
+        for falsy in ["null", "false", "0", "''", "missing"] {
+            assert_eq!(
+                ev(&format!("{falsy} ? 1 : 0")),
+                Value::Number(0.0),
+                "{falsy}"
+            );
+        }
+        let empties = map(&[("l", Value::List(vec![])), ("m", Value::Map(vec![]))]);
+        assert_eq!(
+            ev_with("l ? 1 : 0", empties.clone()).unwrap(),
+            Value::Number(0.0)
+        );
+        assert_eq!(ev_with("m ? 1 : 0", empties).unwrap(), Value::Number(0.0));
+        for truthy in ["true", "1", "0.5", "-1", "'0'", "' '", "items", "user"] {
+            assert_eq!(
+                ev(&format!("{truthy} ? 1 : 0")),
+                Value::Number(1.0),
+                "{truthy}"
+            );
+        }
+    }
+
+    // ---------------------------------------------- §9.4 deep equality
+
+    #[test]
+    fn equality_is_deep_and_structural() {
+        let data = map(&[
+            ("a", Value::from(vec![1i64, 2])),
+            ("b", Value::from(vec![1i64, 2])),
+            ("c", Value::from(vec![1i64, 3])),
+            (
+                "m1",
+                map(&[("x", Value::from(1i64)), ("y", Value::from(2i64))]),
+            ),
+            (
+                "m2",
+                map(&[("y", Value::from(2i64)), ("x", Value::from(1i64))]),
+            ),
+        ]);
+        assert_eq!(ev_with("a == b", data.clone()).unwrap(), Value::Bool(true));
+        assert_eq!(ev_with("a == c", data.clone()).unwrap(), Value::Bool(false));
+        assert_eq!(ev_with("a != c", data.clone()).unwrap(), Value::Bool(true));
+        // maps compare by key set, not insertion order
+        assert_eq!(ev_with("m1 == m2", data).unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    fn equality_never_coerces_across_types() {
+        assert_eq!(ev("null == 0"), Value::Bool(false));
+        assert_eq!(ev("'1' == 1"), Value::Bool(false));
+        assert_eq!(ev("true == 1"), Value::Bool(false));
+        assert_eq!(ev("'' == null"), Value::Bool(false));
+        assert!(deep_eq(&Value::Null, &Value::Null));
+    }
+
+    // ------------------------------------------- §9.4 `+` coercion matrix
+
+    #[test]
+    fn plus_adds_numbers_and_concats_strings() {
+        assert_eq!(ev("1 + 2"), Value::Number(3.0));
+        assert_eq!(ev("'#' + 7"), Value::from("#7"));
+        assert_eq!(ev("7 + '#'"), Value::from("7#"));
+        assert_eq!(ev("'a' + 'b'"), Value::from("ab"));
+        assert_eq!(ev("'x=' + null"), Value::from("x="));
+        assert_eq!(ev("'x=' + true"), Value::from("x=true"));
+    }
+
+    #[test]
+    fn plus_rejects_other_combinations() {
+        assert!(ev_err("null + 1").contains("`+`"));
+        assert!(ev_err("true + 1").contains("`+`"));
+        assert!(ev_err("'a' + items").contains("list"));
+        assert!(ev_err("user + 'a'").contains("map"));
+        assert!(ev_err("items + items").contains("`+`"));
+    }
+
+    #[test]
+    fn other_arithmetic_and_comparison_require_numbers() {
+        assert!(ev_err("1 - '2'").contains("requires numbers"));
+        assert!(ev_err("'a' < 'b'").contains("requires numbers"));
+        assert!(ev_err("s * 2").contains("requires numbers"));
+        assert!(ev_err("-s").contains("requires a number"));
+        assert_eq!(ev_err("1 / 0"), "division by zero");
+        assert_eq!(ev_err("1 % 0"), "modulo by zero");
+    }
+
+    // -------------------------------------- §9.4 missing paths are null
+
+    #[test]
+    fn missing_paths_keys_and_indexes_are_null() {
+        for miss in [
+            "missing",
+            "user.missing",
+            "user.missing.deeper",
+            "missing.x",
+            "items[99]",
+            "items[-1]",
+            "items[0.5]",
+            "items['x']",
+            "user[0]",
+            "n.field",
+            "s[0]",
+            "null.x",
+        ] {
+            assert_eq!(ev(&format!("{miss} == null")), Value::Bool(true), "{miss}");
+        }
+    }
+
+    // ------------------------------------------------- §9.4 ctx root
+
+    #[test]
+    fn ctx_resolves_in_every_scope_and_cannot_be_shadowed() {
+        let e = parse("ctx.theme").unwrap();
+        let ctx = map(&[("theme", Value::from("dark"))]);
+        // a data key named `ctx` does not shadow the host ctx
+        let data = map(&[("ctx", Value::from("decoy"))]);
+        let mut scope = Scope::new(&data);
+        assert_eq!(eval(&e, &scope, &ctx).unwrap(), Value::from("dark"));
+        // nor does a local binding (the renderer also rejects `for ctx in …`
+        // at parse time — covered when it lands; TODO)
+        scope.push("ctx", Value::from("decoy2"));
+        assert_eq!(eval(&e, &scope, &ctx).unwrap(), Value::from("dark"));
+    }
+
+    #[test]
+    fn scope_locals_shadow_data_innermost_first() {
+        let data = map(&[("x", Value::from(1i64))]);
+        let e = parse("x").unwrap();
+        let mut scope = Scope::new(&data);
+        scope.push("x", Value::from(2i64));
+        scope.push("x", Value::from(3i64));
+        assert_eq!(eval(&e, &scope, &Value::Null).unwrap(), Value::Number(3.0));
+        scope.pop();
+        assert_eq!(eval(&e, &scope, &Value::Null).unwrap(), Value::Number(2.0));
+        scope.pop();
+        assert_eq!(eval(&e, &scope, &Value::Null).unwrap(), Value::Number(1.0));
+    }
+
+    // --------------------------------------------- §9.4 stringification
+
+    #[test]
+    fn stringification_rules() {
+        assert_eq!(show("null"), "");
+        assert_eq!(show("missing"), "");
+        assert_eq!(show("true"), "true");
+        assert_eq!(show("false"), "false");
+        assert_eq!(show("'hi'"), "hi");
+    }
+
+    #[test]
+    fn number_stringification_is_shortest_round_trip_without_exponent() {
+        assert_eq!(show("3"), "3");
+        assert_eq!(show("3.0"), "3");
+        assert_eq!(show("2.5"), "2.5");
+        assert_eq!(show("0.1"), "0.1");
+        assert_eq!(show("-0"), "0");
+        assert_eq!(show("1e21"), "1000000000000000000000");
+        assert_eq!(show("1e-7"), "0.0000001");
+        assert_eq!(show("1 / 3"), (1.0f64 / 3.0).to_string());
+    }
+
+    #[test]
+    fn lists_and_maps_do_not_stringify() {
+        assert!(stringify(&ev("items"))
+            .unwrap_err()
+            .to_string()
+            .contains("list"));
+        assert!(stringify(&ev("user"))
+            .unwrap_err()
+            .to_string()
+            .contains("map"));
+    }
+}

@@ -11,6 +11,7 @@ mod emit;
 mod error;
 pub mod expr;
 mod fmt;
+pub mod json;
 mod parser;
 
 pub use emit::Mode;

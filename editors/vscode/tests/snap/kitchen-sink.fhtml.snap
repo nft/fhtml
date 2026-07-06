@@ -1,0 +1,447 @@
+>// fhtml kitchen sink — full-construct snapshot for the TextMate grammar
+#^^ source.fhtml comment.line.double-slash.fhtml punctuation.definition.comment.fhtml
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ source.fhtml comment.line.double-slash.fhtml
+>doctype
+#^^^^^^^ source.fhtml meta.tag.metadata.doctype.fhtml keyword.other.doctype.fhtml
+>html(lang=en)
+#^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#    ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#     ^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#         ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#          ^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#            ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+>  head
+#^^ source.fhtml meta.element.fhtml
+#  ^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+>    meta(charset=utf-8)
+#^^^^ source.fhtml meta.element.fhtml
+#    ^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#        ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#         ^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                 ^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                      ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+>    title "fhtml kitchen sink"
+#^^^^ source.fhtml meta.element.fhtml
+#    ^^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#         ^ source.fhtml meta.element.fhtml
+#          ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#           ^^^^^^^^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                             ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>  body min-h-screen bg-gray-50 dark:bg-gray-900
+#^^ source.fhtml meta.element.fhtml
+#  ^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#      ^ source.fhtml meta.element.fhtml
+#       ^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                   ^ source.fhtml meta.element.fhtml
+#                    ^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                              ^ source.fhtml meta.element.fhtml
+#                               ^^^^^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>    //! layout root
+#^^^^ source.fhtml comment.block.documentation.fhtml
+#    ^^^ source.fhtml comment.block.documentation.fhtml punctuation.definition.comment.fhtml
+#       ^^^^^^^^^^^^^ source.fhtml comment.block.documentation.fhtml
+>    . #app container mx-auto p-6
+#^^^^ source.fhtml meta.element.fhtml
+#    ^ source.fhtml meta.element.fhtml entity.name.tag.div.fhtml
+#     ^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.other.attribute-name.id.fhtml punctuation.definition.entity.id.fhtml
+#       ^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.id.fhtml
+#          ^ source.fhtml meta.element.fhtml
+#           ^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                    ^ source.fhtml meta.element.fhtml
+#                     ^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                            ^ source.fhtml meta.element.fhtml
+#                             ^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>      nav flex items-center gap-4
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#         ^ source.fhtml meta.element.fhtml
+#          ^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#              ^ source.fhtml meta.element.fhtml
+#               ^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                           ^ source.fhtml meta.element.fhtml
+#                            ^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>        li > a(href=/docs target=_blank) font-medium hover:underline "Docs"
+#^^^^^^^^ source.fhtml meta.element.fhtml
+#        ^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#          ^ source.fhtml meta.element.fhtml
+#           ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml keyword.operator.chain.fhtml
+#            ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml
+#             ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml entity.name.tag.fhtml
+#              ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#               ^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                   ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                    ^^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                         ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml
+#                          ^^^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                                ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                                 ^^^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                                       ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+#                                        ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml
+#                                         ^^^^^^^^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml entity.other.attribute-name.class.fhtml
+#                                                    ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml
+#                                                     ^^^^^^^^^^^^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml entity.other.attribute-name.class.fhtml
+#                                                                    ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml
+#                                                                     ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                                                                      ^^^^ source.fhtml meta.element.fhtml meta.element.chained.fhtml string.quoted.double.fhtml
+#                                                                          ^ source.fhtml meta.element.fhtml meta.element.chained.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>      img(src=/img/ava.jpg alt="Erin's avatar" disabled) size-12 rounded-full
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#         ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#          ^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#             ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#              ^^^^^^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                          ^ source.fhtml meta.element.fhtml meta.attributes.fhtml
+#                           ^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                              ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                               ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                                ^^^^^^^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml
+#                                             ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+#                                              ^ source.fhtml meta.element.fhtml meta.attributes.fhtml
+#                                               ^^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                                                       ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+#                                                        ^ source.fhtml meta.element.fhtml
+#                                                         ^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                                                                ^ source.fhtml meta.element.fhtml
+#                                                                 ^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>      button(onclick="alert('(hi)')") rounded-full px-4 "Click"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#            ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#             ^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                    ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                     ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                      ^^^^^^^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml
+#                                   ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+#                                    ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+#                                     ^ source.fhtml meta.element.fhtml
+#                                      ^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                                                  ^ source.fhtml meta.element.fhtml
+#                                                   ^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                                                       ^ source.fhtml meta.element.fhtml
+#                                                        ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                                                         ^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                                                              ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>      input(type=text name=q placeholder="Search…") w-full
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#           ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#            ^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                 ^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                     ^ source.fhtml meta.element.fhtml meta.attributes.fhtml
+#                      ^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                          ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                           ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                            ^ source.fhtml meta.element.fhtml meta.attributes.fhtml
+#                             ^^^^^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#                                        ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#                                         ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                                          ^^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml
+#                                                 ^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+#                                                  ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+#                                                   ^ source.fhtml meta.element.fhtml
+#                                                    ^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>      hr my-4
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#        ^ source.fhtml meta.element.fhtml
+#         ^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>      p text-sm text-gray-600 w-1/2 data-[state=open]:bg-red-500 bg-[#0f172a]
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#               ^ source.fhtml meta.element.fhtml
+#                ^^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                             ^ source.fhtml meta.element.fhtml
+#                              ^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                                   ^ source.fhtml meta.element.fhtml
+#                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                                                                ^ source.fhtml meta.element.fhtml
+#                                                                 ^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>        | He said "hello" and left.
+#^^^^^^^^ source.fhtml
+#        ^ source.fhtml punctuation.definition.textblock.fhtml
+#         ^ source.fhtml
+#          ^^^^^^^^^^^^^^^^^^^^^^^^^ source.fhtml string.unquoted.textblock.fhtml
+>        | Total: {count} items \{not interpolation}
+#^^^^^^^^ source.fhtml
+#        ^ source.fhtml punctuation.definition.textblock.fhtml
+#         ^ source.fhtml
+#          ^^^^^^^ source.fhtml string.unquoted.textblock.fhtml
+#                 ^ source.fhtml string.unquoted.textblock.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#                  ^^^^^ source.fhtml string.unquoted.textblock.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                       ^ source.fhtml string.unquoted.textblock.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#                        ^^^^^^^ source.fhtml string.unquoted.textblock.fhtml
+#                               ^^ source.fhtml string.unquoted.textblock.fhtml constant.character.escape.fhtml
+#                                 ^^^^^^^^^^^^^^^^^^ source.fhtml string.unquoted.textblock.fhtml
+>      p "Hi, {user.name} — escaped \"quote\" and brace \{"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#         ^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#             ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#              ^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                  ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.expression.fhtml
+#                   ^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                       ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#                        ^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                                   ^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml constant.character.escape.fhtml
+#                                     ^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                                          ^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml constant.character.escape.fhtml
+#                                            ^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                                                       ^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml constant.character.escape.fhtml
+#                                                         ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>      span "{!trustedHtml}"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#          ^ source.fhtml meta.element.fhtml
+#           ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#            ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#             ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml keyword.operator.raw.fhtml
+#              ^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                         ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#                          ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>      div flex items-center \
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#         ^ source.fhtml meta.element.fhtml
+#          ^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#              ^ source.fhtml meta.element.fhtml
+#               ^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                           ^ source.fhtml meta.element.fhtml
+#                            ^ source.fhtml meta.element.fhtml constant.character.escape.continuation.fhtml
+>        bg-white p-4 shadow
+#^^^^^^^^ source.fhtml meta.element.fhtml
+#        ^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                ^ source.fhtml meta.element.fhtml
+#                 ^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                    ^ source.fhtml meta.element.fhtml
+#                     ^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+>      <svg viewBox="0 0 24 24" fill="none">
+#^^^^^^ source.fhtml meta.embedded.block.html
+#      ^ source.fhtml meta.embedded.block.html punctuation.definition.tag.html
+#       ^^^ source.fhtml meta.embedded.block.html entity.name.tag.html
+#          ^^^^^^^^^ source.fhtml meta.embedded.block.html
+#                   ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                    ^^^^^^^^^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                             ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                              ^^^^^^ source.fhtml meta.embedded.block.html
+#                                    ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                                     ^^^^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                                         ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                                          ^^ source.fhtml meta.embedded.block.html
+>        <path d="M4 4h16v16H4z" stroke="currentColor"/>
+#^^^^^^^^ source.fhtml meta.embedded.block.html
+#        ^ source.fhtml meta.embedded.block.html punctuation.definition.tag.html
+#         ^^^^ source.fhtml meta.embedded.block.html entity.name.tag.html
+#             ^^^ source.fhtml meta.embedded.block.html
+#                ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                 ^^^^^^^^^^^^^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                              ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                               ^^^^^^^^ source.fhtml meta.embedded.block.html
+#                                       ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                                        ^^^^^^^^^^^^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                                                    ^ source.fhtml meta.embedded.block.html string.quoted.double.html
+#                                                     ^^^ source.fhtml meta.embedded.block.html
+>      </svg>
+#^^^^^^ source.fhtml meta.embedded.block.html
+#      ^^ source.fhtml meta.embedded.block.html punctuation.definition.tag.html
+#        ^^^ source.fhtml meta.embedded.block.html entity.name.tag.html
+#           ^^ source.fhtml meta.embedded.block.html
+>    if user.loggedIn && count > 3
+#^^^^ source.fhtml meta.statement.conditional.fhtml
+#    ^^ source.fhtml meta.statement.conditional.fhtml keyword.control.conditional.fhtml
+#      ^ source.fhtml meta.statement.conditional.fhtml
+#       ^^^^ source.fhtml meta.statement.conditional.fhtml variable.other.fhtml
+#           ^ source.fhtml meta.statement.conditional.fhtml punctuation.expression.fhtml
+#            ^^^^^^^^ source.fhtml meta.statement.conditional.fhtml variable.other.fhtml
+#                    ^ source.fhtml meta.statement.conditional.fhtml
+#                     ^^ source.fhtml meta.statement.conditional.fhtml keyword.operator.fhtml
+#                       ^ source.fhtml meta.statement.conditional.fhtml
+#                        ^^^^^ source.fhtml meta.statement.conditional.fhtml variable.other.fhtml
+#                             ^ source.fhtml meta.statement.conditional.fhtml
+#                              ^ source.fhtml meta.statement.conditional.fhtml keyword.operator.fhtml
+#                               ^ source.fhtml meta.statement.conditional.fhtml
+#                                ^ source.fhtml meta.statement.conditional.fhtml constant.numeric.fhtml
+>      p "Welcome back"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#         ^^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                     ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>    elif invited
+#^^^^ source.fhtml meta.statement.conditional.fhtml
+#    ^^^^ source.fhtml meta.statement.conditional.fhtml keyword.control.conditional.fhtml
+#        ^ source.fhtml meta.statement.conditional.fhtml
+#         ^^^^^^^ source.fhtml meta.statement.conditional.fhtml variable.other.fhtml
+>      p "Finish signing up"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#         ^^^^^^^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                          ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>    else
+#^^^^ source.fhtml
+#    ^^^^ source.fhtml keyword.control.fhtml
+>      a(href=/login) "Sign in"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.begin.fhtml
+#        ^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml entity.other.attribute-name.fhtml
+#            ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.separator.key-value.fhtml
+#             ^^^^^^ source.fhtml meta.element.fhtml meta.attributes.fhtml string.unquoted.attribute-value.fhtml
+#                   ^ source.fhtml meta.element.fhtml meta.attributes.fhtml punctuation.section.attributes.end.fhtml
+#                    ^ source.fhtml meta.element.fhtml
+#                     ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                      ^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                             ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>    for item, i in cart.items
+#^^^^ source.fhtml meta.statement.loop.fhtml
+#    ^^^ source.fhtml meta.statement.loop.fhtml keyword.control.loop.fhtml
+#       ^ source.fhtml meta.statement.loop.fhtml
+#        ^^^^ source.fhtml meta.statement.loop.fhtml variable.other.fhtml
+#            ^ source.fhtml meta.statement.loop.fhtml punctuation.separator.comma.fhtml
+#             ^ source.fhtml meta.statement.loop.fhtml
+#              ^ source.fhtml meta.statement.loop.fhtml variable.other.fhtml
+#               ^ source.fhtml meta.statement.loop.fhtml
+#                ^^ source.fhtml meta.statement.loop.fhtml keyword.control.loop.fhtml
+#                  ^ source.fhtml meta.statement.loop.fhtml
+#                   ^^^^ source.fhtml meta.statement.loop.fhtml variable.other.fhtml
+#                       ^ source.fhtml meta.statement.loop.fhtml punctuation.expression.fhtml
+#                        ^^^^^ source.fhtml meta.statement.loop.fhtml variable.other.fhtml
+>      li "{i}: {item.name}"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#        ^ source.fhtml meta.element.fhtml
+#         ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#          ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#           ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#            ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#             ^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#               ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#                ^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                    ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.expression.fhtml
+#                     ^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                         ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#                          ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>    empty
+#^^^^ source.fhtml
+#    ^^^^^ source.fhtml keyword.control.fhtml
+>      p text-gray-400 "Cart is empty"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^^^^^^^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                     ^ source.fhtml meta.element.fhtml
+#                      ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                       ^^^^^^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                                    ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>    def alert(kind='info' compact=false max=3 limit={ctx.pageSize - 1})
+#^^^^ source.fhtml meta.statement.def.fhtml
+#    ^^^ source.fhtml meta.statement.def.fhtml storage.type.function.fhtml
+#       ^ source.fhtml meta.statement.def.fhtml
+#        ^^^^^ source.fhtml meta.statement.def.fhtml entity.name.function.fhtml
+#             ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml punctuation.section.parameters.begin.fhtml
+#              ^^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml variable.parameter.fhtml
+#                  ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml keyword.operator.assignment.fhtml
+#                   ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml string.quoted.single.fhtml punctuation.definition.string.begin.fhtml
+#                    ^^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml string.quoted.single.fhtml
+#                        ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml string.quoted.single.fhtml punctuation.definition.string.end.fhtml
+#                         ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml
+#                          ^^^^^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml variable.parameter.fhtml
+#                                 ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml keyword.operator.assignment.fhtml
+#                                  ^^^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml constant.language.fhtml
+#                                       ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml
+#                                        ^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml variable.parameter.fhtml
+#                                           ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml keyword.operator.assignment.fhtml
+#                                            ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml constant.numeric.fhtml
+#                                             ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml
+#                                              ^^^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml variable.parameter.fhtml
+#                                                   ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml keyword.operator.assignment.fhtml
+#                                                    ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#                                                     ^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml variable.language.ctx.fhtml
+#                                                        ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml punctuation.expression.fhtml
+#                                                         ^^^^^^^^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                                                                 ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml
+#                                                                  ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml keyword.operator.fhtml
+#                                                                   ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml
+#                                                                    ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml constant.numeric.fhtml
+#                                                                     ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#                                                                      ^ source.fhtml meta.statement.def.fhtml meta.parameters.fhtml punctuation.section.parameters.end.fhtml
+>      . rounded border p-3 {kind == 'info' ? 'bg-blue-50' : 'bg-red-50'}
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.div.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#               ^ source.fhtml meta.element.fhtml
+#                ^^^^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                      ^ source.fhtml meta.element.fhtml
+#                       ^^^ source.fhtml meta.element.fhtml entity.other.attribute-name.class.fhtml
+#                          ^ source.fhtml meta.element.fhtml
+#                           ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#                            ^^^^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                                ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml
+#                                 ^^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml keyword.operator.fhtml
+#                                   ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml
+#                                    ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml punctuation.definition.string.begin.fhtml
+#                                     ^^^^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml
+#                                         ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml punctuation.definition.string.end.fhtml
+#                                          ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml
+#                                           ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml keyword.operator.fhtml
+#                                            ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml
+#                                             ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml punctuation.definition.string.begin.fhtml
+#                                              ^^^^^^^^^^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml
+#                                                        ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml punctuation.definition.string.end.fhtml
+#                                                         ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml
+#                                                          ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml keyword.operator.fhtml
+#                                                           ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml
+#                                                            ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml punctuation.definition.string.begin.fhtml
+#                                                             ^^^^^^^^^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml
+#                                                                      ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml string.quoted.single.fhtml punctuation.definition.string.end.fhtml
+#                                                                       ^ source.fhtml meta.element.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+>        children
+#^^^^^^^^ source.fhtml
+#        ^^^^^^^^ source.fhtml keyword.control.fhtml
+>    +alert(kind="warn" compact count={n + 1})
+#^^^^ source.fhtml meta.component-call.fhtml
+#    ^ source.fhtml meta.component-call.fhtml punctuation.definition.component.fhtml
+#     ^^^^^ source.fhtml meta.component-call.fhtml entity.name.function.component.fhtml
+#          ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml punctuation.section.arguments.begin.fhtml
+#           ^^^^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml variable.parameter.fhtml
+#               ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml keyword.operator.assignment.fhtml
+#                ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#                 ^^^^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml string.quoted.double.fhtml
+#                     ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+#                      ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml
+#                       ^^^^^^^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml variable.parameter.fhtml
+#                              ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml
+#                               ^^^^^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml variable.parameter.fhtml
+#                                    ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml keyword.operator.assignment.fhtml
+#                                     ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.begin.fhtml
+#                                      ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml variable.other.fhtml
+#                                       ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml
+#                                        ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml keyword.operator.fhtml
+#                                         ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml
+#                                          ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml constant.numeric.fhtml
+#                                           ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml meta.embedded.expression.fhtml punctuation.section.interpolation.end.fhtml
+#                                            ^ source.fhtml meta.component-call.fhtml meta.arguments.fhtml punctuation.section.arguments.end.fhtml
+>      p "Careful!"
+#^^^^^^ source.fhtml meta.element.fhtml
+#      ^ source.fhtml meta.element.fhtml entity.name.tag.fhtml
+#       ^ source.fhtml meta.element.fhtml
+#        ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.begin.fhtml
+#         ^^^^^^^^ source.fhtml meta.element.fhtml string.quoted.double.fhtml
+#                 ^ source.fhtml meta.element.fhtml string.quoted.double.fhtml punctuation.definition.string.end.fhtml
+>    include ./partials/footer
+#^^^^ source.fhtml
+#    ^^^^^^^ source.fhtml keyword.control.import.fhtml
+#           ^ source.fhtml
+#            ^^^^^^^^^^^^^^^^^ source.fhtml string.unquoted.path.fhtml
+>

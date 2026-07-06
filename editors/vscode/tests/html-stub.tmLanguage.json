@@ -1,0 +1,15 @@
+{
+  "comment": "Minimal stand-in for VS Code's built-in HTML grammar, so the raw-passthrough include resolves under vscode-tmgrammar-test. Real editors use the full text.html.basic.",
+  "name": "html-stub",
+  "scopeName": "text.html.basic",
+  "patterns": [
+    {
+      "match": "(</?)([A-Za-z][A-Za-z0-9-]*)",
+      "captures": {
+        "1": { "name": "punctuation.definition.tag.html" },
+        "2": { "name": "entity.name.tag.html" }
+      }
+    },
+    { "name": "string.quoted.double.html", "begin": "\"", "end": "\"" }
+  ]
+}

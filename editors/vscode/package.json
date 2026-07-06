@@ -1,0 +1,28 @@
+{
+  "name": "fhtml",
+  "displayName": "fhtml",
+  "description": "Syntax highlighting for fhtml (Fluid HTML) — a whitespace-based markup language that compiles 1:1 to HTML.",
+  "version": "0.1.0",
+  "publisher": "fhtml",
+  "license": "MIT",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "fhtml",
+        "aliases": ["fhtml", "Fluid HTML"],
+        "extensions": [".fhtml"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "fhtml",
+        "scopeName": "source.fhtml",
+        "path": "./syntaxes/fhtml.tmLanguage.json",
+        "embeddedLanguages": { "meta.embedded.block.html": "html" }
+      }
+    ]
+  }
+}

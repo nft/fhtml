@@ -115,6 +115,13 @@ variants included.
 One rule: never build class names from expressions (`bg-{color}-100` is invisible to
 Tailwind's static scanner). Interpolate whole class names instead.
 
+## Editor support
+
+A TextMate grammar and VS Code extension live in [editors/vscode/](editors/vscode/)
+(no marketplace listing yet — symlink into `~/.vscode/extensions`, see its README).
+The grammar covers the full language including the template layer, and raw `<` lines
+are highlighted as embedded HTML.
+
 ## License
 
 MIT

@@ -1,0 +1,41 @@
+// fhtml kitchen sink — full-construct snapshot for the TextMate grammar
+doctype
+html(lang=en)
+  head
+    meta(charset=utf-8)
+    title "fhtml kitchen sink"
+  body min-h-screen bg-gray-50 dark:bg-gray-900
+    //! layout root
+    . #app container mx-auto p-6
+      nav flex items-center gap-4
+        li > a(href=/docs target=_blank) font-medium hover:underline "Docs"
+      img(src=/img/ava.jpg alt="Erin's avatar" disabled) size-12 rounded-full
+      button(onclick="alert('(hi)')") rounded-full px-4 "Click"
+      input(type=text name=q placeholder="Search…") w-full
+      hr my-4
+      p text-sm text-gray-600 w-1/2 data-[state=open]:bg-red-500 bg-[#0f172a]
+        | He said "hello" and left.
+        | Total: {count} items \{not interpolation}
+      p "Hi, {user.name} — escaped \"quote\" and brace \{"
+      span "{!trustedHtml}"
+      div flex items-center \
+        bg-white p-4 shadow
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M4 4h16v16H4z" stroke="currentColor"/>
+      </svg>
+    if user.loggedIn && count > 3
+      p "Welcome back"
+    elif invited
+      p "Finish signing up"
+    else
+      a(href=/login) "Sign in"
+    for item, i in cart.items
+      li "{i}: {item.name}"
+    empty
+      p text-gray-400 "Cart is empty"
+    def alert(kind='info' compact=false max=3 limit={ctx.pageSize - 1})
+      . rounded border p-3 {kind == 'info' ? 'bg-blue-50' : 'bg-red-50'}
+        children
+    +alert(kind="warn" compact count={n + 1})
+      p "Careful!"
+    include ./partials/footer

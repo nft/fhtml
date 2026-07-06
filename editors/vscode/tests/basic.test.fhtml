@@ -1,0 +1,131 @@
+// SYNTAX TEST "source.fhtml" "fhtml grammar"
+
+doctype
+// <- keyword.other.doctype.fhtml
+
+p text-lg font-semibold "Hello, world"
+// <- entity.name.tag.fhtml
+//^^^^^^^ entity.other.attribute-name.class.fhtml
+//        ^^^^^^^^^^^^^ entity.other.attribute-name.class.fhtml
+//                      ^ punctuation.definition.string.begin.fhtml
+//                       ^^^^^^^^^^^^ string.quoted.double.fhtml
+
+. #app container mx-auto
+// <- entity.name.tag.div.fhtml
+//^^^^ entity.other.attribute-name.id.fhtml
+//     ^^^^^^^^^ entity.other.attribute-name.class.fhtml
+
+img(src=/img/a.png alt="Erin's avatar" disabled) size-12 rounded-full
+// <- entity.name.tag.fhtml
+// ^ punctuation.section.attributes.begin.fhtml
+//  ^^^ entity.other.attribute-name.fhtml
+//     ^ punctuation.separator.key-value.fhtml
+//      ^^^^^^^^^^ string.unquoted.attribute-value.fhtml
+//                     ^^^^^^^^^^^^^^ string.quoted.double.fhtml
+//                                     ^^^^^^^^ entity.other.attribute-name.fhtml
+//                                             ^ punctuation.section.attributes.end.fhtml
+//                                               ^^^^^^^ entity.other.attribute-name.class.fhtml
+
+button(onclick="alert('(hi)')") ml-2 "Click"
+//            ^ punctuation.separator.key-value.fhtml
+//             ^^^^^^^^^^^^^^^ string.quoted.double.fhtml
+//                            ^ punctuation.section.attributes.end.fhtml
+//                              ^^^^ entity.other.attribute-name.class.fhtml
+
+li > a(href=/docs target=_blank) font-medium "Docs"
+// ^ keyword.operator.chain.fhtml
+//   ^ entity.name.tag.fhtml
+//    ^ punctuation.section.attributes.begin.fhtml
+//                               ^^^^^^^^^^^ entity.other.attribute-name.class.fhtml
+
+a w-1/2 hover:bg-zinc-200 data-[state=open]:bg-red-500 bg-[url('/a_b.png')] [&>li]:mt-0
+//^^^^^ entity.other.attribute-name.class.fhtml
+//      ^^^^^^^^^^^^^^^^^ entity.other.attribute-name.class.fhtml
+//                        ^ entity.other.attribute-name.class.fhtml
+//                                                      ^ entity.other.attribute-name.class.fhtml
+//                                                              ^ entity.other.attribute-name.class.fhtml
+//                                                                           ^ entity.other.attribute-name.class.fhtml
+//                                                                             ^ entity.other.attribute-name.class.fhtml
+
+| He said "hello" and {n} left. \{escaped}
+// <- punctuation.definition.textblock.fhtml
+//^^^^^^^ string.unquoted.textblock.fhtml
+//                    ^ punctuation.section.interpolation.begin.fhtml
+//                     ^ variable.other.fhtml
+//                              ^^ constant.character.escape.fhtml
+
+p "Hi, {user.name} and \"bye\""
+//     ^ punctuation.section.interpolation.begin.fhtml
+//      ^^^^ variable.other.fhtml
+//                     ^^ constant.character.escape.fhtml
+
+span "{!html}"
+//     ^ keyword.operator.raw.fhtml
+//      ^^^^ variable.other.fhtml
+
+. {active ? 'bg-blue-600' : 'bg-gray-100'} p-2
+//^ punctuation.section.interpolation.begin.fhtml
+// ^^^^^^ variable.other.fhtml
+//        ^ keyword.operator.fhtml
+//          ^^^^^^^^^^^^^ string.quoted.single.fhtml
+//                                         ^^^ entity.other.attribute-name.class.fhtml
+
+div flex items-center \
+  bg-white p-4
+//^^^^^^^^ entity.other.attribute-name.class.fhtml
+
+// a silent comment
+  still the same comment
+//^^^^^ comment.line.double-slash.fhtml
+
+//! rendered into the output
+// <- comment.block.documentation.fhtml
+
+<svg viewBox="0 0 24 24"><path d="M4 4h16"/></svg>
+// <- meta.embedded.block.html
+
+if user.loggedIn && count > 3
+// <- keyword.control.conditional.fhtml
+// ^^^^ variable.other.fhtml
+//               ^^ keyword.operator.fhtml
+//                  ^^^^^ variable.other.fhtml
+//                          ^ constant.numeric.fhtml
+
+elif invited
+// <- keyword.control.conditional.fhtml
+
+else
+// <- keyword.control.fhtml
+
+for item, i in items
+// <- keyword.control.loop.fhtml
+//  ^^^^ variable.other.fhtml
+//          ^^ keyword.control.loop.fhtml
+//             ^^^^^ variable.other.fhtml
+
+empty
+// <- keyword.control.fhtml
+
+children
+// <- keyword.control.fhtml
+
+def alert(kind='info' compact=false max=3)
+// <- storage.type.function.fhtml
+//  ^^^^^ entity.name.function.fhtml
+//        ^^^^ variable.parameter.fhtml
+//             ^^^^^^ string.quoted.single.fhtml
+//                            ^^^^^ constant.language.fhtml
+//                                      ^ constant.numeric.fhtml
+
++card(title="Stats" compact count={n + 1})
+// <- punctuation.definition.component.fhtml
+//   ^ punctuation.section.arguments.begin.fhtml
+//    ^^^^^ variable.parameter.fhtml
+//                  ^^^^^^^ variable.parameter.fhtml
+//                                 ^ variable.other.fhtml
+//                                   ^ keyword.operator.fhtml
+//                                     ^ constant.numeric.fhtml
+
+include ./partials/head
+// <- keyword.control.import.fhtml
+//      ^^^^^^^^^^^^^^^^ string.unquoted.path.fhtml

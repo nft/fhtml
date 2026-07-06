@@ -244,6 +244,12 @@ name     = [A-Za-z_][A-Za-z0-9_]*
 This grammar is **closed**: no function calls, no lambdas, no assignments, no host-language
 escape. It is identical across all compiler backends.
 
+Lexical details: expression strings support the escapes `\'` `\"` `\\` and nothing else.
+Numbers are `digits`, optional `.digits`, optional exponent (`1e3`, `1.5e-2`). `{!` directly
+after `{` always means the raw form (§9.1) — to apply `!` (not) to the first term, use
+parentheses or a space: `{ !flag}`. Inside `{…}`, a `}` within an expression string does not
+close the interpolation.
+
 ### 9.4 Evaluation semantics
 
 - Data model: null, boolean, number, string, list, map (whatever the host passes in).
@@ -253,12 +259,20 @@ escape. It is identical across all compiler backends.
   would otherwise be prop-drilled through every component). `ctx` cannot be shadowed by
   parameters or loop variables.
 - **Falsy**: `null`, `false`, `0`, `""`, empty list, empty map. Everything else truthy.
-- `==` is deep structural equality. `+` adds two numbers; if either operand is a string, the
-  other is stringified (rules below) and concatenated; lists/maps in `+` are an error.
-  Interpolation (`"{n} items"`) remains the idiomatic form — `+`-coercion exists so the
-  occasional `{'#' + id}` doesn't error. Other arithmetic/comparison requires numbers.
+- `==` is deep structural equality; maps compare by key set and values, independent of
+  insertion order; values of different types are never equal (no coercion: `'1' != 1`).
+- `+` adds two numbers; if either operand is a string, the other is stringified (rules
+  below) and concatenated; lists/maps in `+` are an error. Interpolation (`"{n} items"`)
+  remains the idiomatic form — `+`-coercion exists so the occasional `{'#' + id}` doesn't
+  error. Other arithmetic/comparison requires numbers. Division/modulo by zero, and any
+  arithmetic result that is not a finite number, are render errors (backends would
+  otherwise disagree on `Infinity`/`NaN`).
+- `&&`/`||` short-circuit and yield the deciding operand's *value* (enabling
+  `{name || 'anonymous'}`); the ternary evaluates only the taken branch.
 - Stringification: `null` → empty string; booleans → `true`/`false`; numbers in shortest
-  round-trip form; lists/maps in interpolation are an error (catches mistakes early).
+  round-trip decimal form — never exponent notation, integral values without `.0`, `-0`
+  prints `0` (so `1e21` prints `1000000000000000000000`); lists/maps in interpolation are
+  an error (catches mistakes early). Identical across backends, byte for byte.
 
 ## 10. Template layer: statements
 
@@ -282,10 +296,12 @@ for name in expr
 for name, index in expr
 ```
 
-Iterates lists (index = position) and maps (name = value, index = key). The optional
-`empty` block (same indent, directly after) renders when the iterable is empty or `null`.
-Iterating anything else — a number, boolean, or string — is a render error (strings are not
-character sequences in fhtml). Loop variables shadow outer names within the block.
+Iterates lists (index = position) and maps (name = value, index = key, insertion order).
+The optional `empty` block (same indent, directly after) renders when the iterable is empty
+or `null`. Iterating anything else — a number, boolean, or string — is a render error
+(strings are not character sequences in fhtml). Loop variables shadow outer names within
+the block; a loop variable cannot be named `ctx` (§9.4) or an expression literal
+(`true`/`false`/`null`).
 
 ### 10.3 `def` and `children`
 
@@ -350,7 +366,10 @@ include ./partials/head
   will differ (in HTML, whitespace between inline elements is rendering-significant —
   markup that depends on it must use raw passthrough, §5/§8).
 - **Targets**: static HTML (static path, chosen automatically when a file uses no template
-  constructs); `--target=js` emits an ES module exporting `(data) => string`.
+  constructs); `--target=js` emits a self-contained ES module exporting
+  `(data, ctx = {}) => string` with output byte-identical to the native renderer,
+  including render-error positions. Rendering without data (`--data` absent) uses an
+  empty scope: every name is `null`.
 - **Errors** carry file, line, column, and the offending token; parsing is strict — there
   is no recovery mode that silently guesses (an agent retry loop needs precise, honest
   errors more than it needs leniency). Non-fatal hazards (uneven indent steps, §2 rule 6)

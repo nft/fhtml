@@ -71,6 +71,35 @@ fhtml fmt src/                   # reformat to canonical style, in place
 Errors carry line and column; non-fatal hazards (e.g. uneven indent steps) are warnings on
 stderr.
 
+### Templates
+
+`{expr}` interpolation and `if`/`elif`/`else`, `for`/`empty` statements render with JSON
+data (SPEC §9–§10):
+
+```fhtml
+ul divide-y
+  for item, i in items
+    li py-2 {i % 2 == 0 ? 'bg-gray-50' : ''} "{i + 1}. {item.title}"
+  empty
+    li text-gray-400 "Nothing here yet."
+```
+
+```sh
+fhtml page.fhtml --data data.json            # render with data
+fhtml page.fhtml --data d.json --ctx c.json  # + the read-only `ctx` root
+fhtml build src/ -o dist/ --target=js        # emit ES modules instead of HTML
+fhtml page.fhtml --no-templates              # enforce pure static markup
+```
+
+Without `--data`, template files render with every name `null`. `--target=js` emits a
+self-contained ES module per file exporting `(data, ctx = {}) => string` — no imports, no
+runtime dependency, byte-identical output to the native renderer:
+
+```js
+import render from "./dist/page.js";
+document.body.innerHTML = render({ items: [{ title: "Ship it" }] });
+```
+
 `fhtml fmt` normalizes to 2-space indentation, `.` for `div`, and minimal quoting.
 Formatting never changes the compiled output. The intended agent workflow is
 *write → fmt → build*.
@@ -93,12 +122,17 @@ warning on stderr; `--convert-svg` converts SVG subtrees instead.
 ### As a library
 
 ```rust
-use fhtml::{compile, Mode};
+use fhtml::{compile, render, json, Mode};
 
 let html = compile("p text-lg \"Hello\"", Mode::Pretty)?;
+
+let data = json::parse(r#"{"name": "Erin"}"#)?;
+let html = render("p \"Hi, {name}\"", &data, Mode::Min)?;
 ```
 
-`compile_full` additionally returns warnings; `format` reformats source to canonical form.
+`compile` is the static path (template constructs are an error there); `render`/`render_full`
+evaluate the template layer; `compile_to_js` emits the ES-module target; `format` reformats
+source to canonical form; the `_full` variants also return warnings.
 
 ## Tailwind integration
 

@@ -12,6 +12,7 @@ mod emit;
 mod error;
 pub mod expr;
 mod fmt;
+mod jsgen;
 pub mod json;
 mod parser;
 
@@ -99,6 +100,19 @@ pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<O
     let (nodes, warnings) = parser::parse(src, true)?;
     Ok(Output {
         html: emit::render_nodes(&nodes, mode, data, ctx)?,
+        warnings,
+    })
+}
+
+/// Compiles fhtml source to a self-contained ES module exporting
+/// `(data, ctx = {}) => string` with semantics identical to [`render`]
+/// (SPEC §11 `--target=js`). Static files compile to a constant function,
+/// for uniformity. The returned [`Output`]'s `html` field holds the module
+/// source text.
+pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
+    let (nodes, warnings) = parser::parse(src, true)?;
+    Ok(Output {
+        html: jsgen::generate(&nodes, mode),
         warnings,
     })
 }

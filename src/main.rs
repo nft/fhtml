@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{env, fs, io};
 
-use fhtml::{compile_opts, format, render_full, Mode, Options, Value};
+use fhtml::{compile_opts, compile_to_js, format, render_full, Mode, Options, Value};
 
 const USAGE: &str = "\
 fhtml — compiler for Fluid HTML (see SPEC.md)
@@ -23,6 +23,10 @@ OPTIONS:
                  template-free files. Without it, template files render with
                  every name null
   --ctx <FILE>   JSON bound to the read-only `ctx` root (SPEC §9.4)
+  --target=js    emit a self-contained ES module exporting
+                 `(data, ctx = {}) => string` instead of HTML; `build` writes
+                 `.js` files in the same tree layout. Static files become a
+                 constant function, for uniformity
   --no-templates enforce static markup (SPEC §9.2): any template construct —
                  statements, `{…}` interpolation, unescaped `{` — is an error
   -h, --help     show this help
@@ -45,6 +49,7 @@ fn run() -> Result<(), String> {
     let mut build = false;
     let mut fmt = false;
     let mut templates = true;
+    let mut js_target = false;
     let mut data_path: Option<PathBuf> = None;
     let mut ctx_path: Option<PathBuf> = None;
     let mut input: Option<String> = None;
@@ -56,6 +61,21 @@ fn run() -> Result<(), String> {
             "--pretty" => pretty = Some(true),
             "--min" => pretty = Some(false),
             "--no-templates" => templates = false,
+            "--target=js" => js_target = true,
+            "--target=html" => js_target = false,
+            "--target" => {
+                i += 1;
+                match args.get(i).map(String::as_str) {
+                    Some("js") => js_target = true,
+                    Some("html") => js_target = false,
+                    other => {
+                        return Err(format!(
+                            "`--target` takes `js` or `html`, got {}",
+                            other.map_or("nothing".to_string(), |t| format!("`{t}`"))
+                        ))
+                    }
+                }
+            }
             "-o" => {
                 i += 1;
                 let val = args.get(i).ok_or("`-o` requires a path")?;
@@ -97,10 +117,18 @@ fn run() -> Result<(), String> {
     if !templates && (data_path.is_some() || ctx_path.is_some()) {
         return Err("`--data`/`--ctx` cannot be combined with `--no-templates`".to_string());
     }
+    if js_target && (data_path.is_some() || ctx_path.is_some()) {
+        return Err(
+            "`--data`/`--ctx` cannot be combined with `--target=js` — the emitted module takes \
+             data at call time: `render(data, ctx)`"
+                .to_string(),
+        );
+    }
     let data = load_json(data_path.as_deref())?;
     let ctx = load_json(ctx_path.as_deref())?;
     let job = Job {
         templates,
+        js_target,
         data,
         ctx,
     };
@@ -108,6 +136,7 @@ fn run() -> Result<(), String> {
     if build {
         let src = input.ok_or("`fhtml build` requires a source path")?;
         let src = PathBuf::from(src);
+        let ext = if js_target { "js" } else { "html" };
         if src.is_dir() {
             build_dir(
                 &src,
@@ -116,7 +145,7 @@ fn run() -> Result<(), String> {
                 &job,
             )
         } else {
-            let out = out_path.unwrap_or_else(|| src.with_extension("html"));
+            let out = out_path.unwrap_or_else(|| src.with_extension(ext));
             build_file(&src, &out, pretty, &job)
         }
     } else if fmt {
@@ -145,17 +174,20 @@ fn run() -> Result<(), String> {
     }
 }
 
-/// What to do with each source file: render with data (the default), or
-/// static-enforce with `--no-templates`.
+/// What to do with each source file: render with data (the default), emit a
+/// JS module with `--target=js`, or static-enforce with `--no-templates`.
 struct Job {
     templates: bool,
+    js_target: bool,
     data: Value,
     ctx: Value,
 }
 
 impl Job {
     fn run(&self, source: &str, mode: Mode) -> Result<fhtml::Output, fhtml::Error> {
-        if self.templates {
+        if self.js_target {
+            compile_to_js(source, mode)
+        } else if self.templates {
             render_full(source, &self.data, &self.ctx, mode)
         } else {
             compile_opts(
@@ -267,7 +299,8 @@ fn build_dir(src: &Path, out_dir: &Path, pretty: Option<bool>, job: &Job) -> Res
     let mut failures = 0usize;
     for file in &files {
         let rel = file.strip_prefix(src).unwrap();
-        let out = out_dir.join(rel).with_extension("html");
+        let ext = if job.js_target { "js" } else { "html" };
+        let out = out_dir.join(rel).with_extension(ext);
         if let Err(msg) = build_file(file, &out, pretty, job) {
             eprintln!("{msg}");
             failures += 1;

@@ -13,7 +13,9 @@ everything after the tag is optional.
 - **`.` alone means `div`**: `. flex gap-4` → `<div class="flex gap-4">`.
 - **`#id` as a bare token sets the id**: `nav #main-nav flex`.
 - **Text is double-quoted at the end of the line**: `span "Sign in"`. It is
-  HTML-escaped automatically.
+  HTML-escaped automatically — write characters literally, never HTML entities:
+  `span "Fenwick & Co."`, not `span "Fenwick &amp; Co."` (the `&` would be
+  escaped again, emitting `&amp;amp;`). Same in `|` text blocks.
 - **`|` lines are text blocks** for multi-line text or text containing quotes:
   ```
   p text-sm

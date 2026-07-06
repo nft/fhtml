@@ -17,6 +17,7 @@ mod parser;
 
 pub use emit::Mode;
 pub use error::Error;
+pub use expr::Value;
 
 /// Compile options beyond the output [`Mode`].
 #[derive(Debug)]
@@ -76,8 +77,28 @@ pub fn compile_opts(src: &str, opts: &Options) -> Result<Output, Error> {
             format!("{what} is a template construct — static compilation cannot render it; pass data (`--data`, or the `render` API)"),
         );
     }
+    // A literal-only tree evaluates nothing, so this cannot error.
     Ok(Output {
-        html: emit::emit(&nodes, opts.mode),
+        html: emit::render_nodes(&nodes, opts.mode, &Value::Null, &Value::Null)?,
+        warnings,
+    })
+}
+
+/// Renders fhtml source against `data` (SPEC §9–§10), with a null `ctx` and
+/// no warnings. Template-free files render identically to [`compile`]; a
+/// null/absent value for any name simply resolves to `null`.
+pub fn render(src: &str, data: &Value, mode: Mode) -> Result<String, Error> {
+    Ok(render_full(src, data, &Value::Null, mode)?.html)
+}
+
+/// Renders with an explicit `ctx` — the read-only, host-provided context map
+/// bound to the reserved root name `ctx` in every scope (SPEC §9.4) — and
+/// returns warnings alongside. Render errors carry the file line/column of
+/// the offending interpolation or statement, like parse errors.
+pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<Output, Error> {
+    let (nodes, warnings) = parser::parse(src, true)?;
+    Ok(Output {
+        html: emit::render_nodes(&nodes, mode, data, ctx)?,
         warnings,
     })
 }

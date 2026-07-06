@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{env, fs, io};
 
-use fhtml::{compile_opts, format, Mode, Options};
+use fhtml::{compile_opts, format, render_full, Mode, Options, Value};
 
 const USAGE: &str = "\
 fhtml — compiler for Fluid HTML (see SPEC.md)
 
 USAGE:
-  fhtml [OPTIONS] [FILE]           compile FILE (or stdin) to stdout
+  fhtml [OPTIONS] [FILE]           compile/render FILE (or stdin) to stdout
   fhtml build <SRC> [-o <PATH>]    compile a .fhtml file or directory tree
   fhtml fmt [FILE|DIR]             reformat to canonical style (in place;
                                    stdin prints to stdout)
@@ -19,6 +19,10 @@ OPTIONS:
                  (default: dist)
   --pretty       indented output (default when writing files)
   --min          minified output (default when writing to stdout)
+  --data <FILE>  JSON data for the template layer (SPEC §9–§10); harmless on
+                 template-free files. Without it, template files render with
+                 every name null
+  --ctx <FILE>   JSON bound to the read-only `ctx` root (SPEC §9.4)
   --no-templates enforce static markup (SPEC §9.2): any template construct —
                  statements, `{…}` interpolation, unescaped `{` — is an error
   -h, --help     show this help
@@ -41,6 +45,8 @@ fn run() -> Result<(), String> {
     let mut build = false;
     let mut fmt = false;
     let mut templates = true;
+    let mut data_path: Option<PathBuf> = None;
+    let mut ctx_path: Option<PathBuf> = None;
     let mut input: Option<String> = None;
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -54,6 +60,16 @@ fn run() -> Result<(), String> {
                 i += 1;
                 let val = args.get(i).ok_or("`-o` requires a path")?;
                 out_path = Some(PathBuf::from(val));
+            }
+            "--data" => {
+                i += 1;
+                let val = args.get(i).ok_or("`--data` requires a JSON file path")?;
+                data_path = Some(PathBuf::from(val));
+            }
+            "--ctx" => {
+                i += 1;
+                let val = args.get(i).ok_or("`--ctx` requires a JSON file path")?;
+                ctx_path = Some(PathBuf::from(val));
             }
             "-h" | "--help" => {
                 print!("{USAGE}");
@@ -78,6 +94,17 @@ fn run() -> Result<(), String> {
         i += 1;
     }
 
+    if !templates && (data_path.is_some() || ctx_path.is_some()) {
+        return Err("`--data`/`--ctx` cannot be combined with `--no-templates`".to_string());
+    }
+    let data = load_json(data_path.as_deref())?;
+    let ctx = load_json(ctx_path.as_deref())?;
+    let job = Job {
+        templates,
+        data,
+        ctx,
+    };
+
     if build {
         let src = input.ok_or("`fhtml build` requires a source path")?;
         let src = PathBuf::from(src);
@@ -86,11 +113,11 @@ fn run() -> Result<(), String> {
                 &src,
                 &out_path.unwrap_or_else(|| PathBuf::from("dist")),
                 pretty,
-                templates,
+                &job,
             )
         } else {
             let out = out_path.unwrap_or_else(|| src.with_extension("html"));
-            build_file(&src, &out, pretty, templates)
+            build_file(&src, &out, pretty, &job)
         }
     } else if fmt {
         run_fmt(input.as_deref(), out_path)
@@ -104,8 +131,7 @@ fn run() -> Result<(), String> {
         };
         // SPEC §11: pretty when writing files, min for pipelines/stdout.
         let mode = mode_for(pretty, out_path.is_some());
-        let opts = Options { mode, templates };
-        let output = compile_opts(&source, &opts).map_err(|e| format!("{name}:{e}"))?;
+        let output = job.run(&source, mode).map_err(|e| format!("{name}:{e}"))?;
         print_warnings(&name, &output.warnings);
         match out_path {
             Some(path) => {
@@ -115,6 +141,40 @@ fn run() -> Result<(), String> {
                 print!("{}", output.html);
                 Ok(())
             }
+        }
+    }
+}
+
+/// What to do with each source file: render with data (the default), or
+/// static-enforce with `--no-templates`.
+struct Job {
+    templates: bool,
+    data: Value,
+    ctx: Value,
+}
+
+impl Job {
+    fn run(&self, source: &str, mode: Mode) -> Result<fhtml::Output, fhtml::Error> {
+        if self.templates {
+            render_full(source, &self.data, &self.ctx, mode)
+        } else {
+            compile_opts(
+                source,
+                &Options {
+                    mode,
+                    templates: false,
+                },
+            )
+        }
+    }
+}
+
+fn load_json(path: Option<&Path>) -> Result<Value, String> {
+    match path {
+        None => Ok(Value::Null),
+        Some(p) => {
+            let text = fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
+            fhtml::json::parse(&text).map_err(|e| format!("{}:{e}", p.display()))
         }
     }
 }
@@ -184,13 +244,11 @@ fn mode_for(pretty: Option<bool>, writing_file: bool) -> Mode {
     }
 }
 
-fn build_file(src: &Path, out: &Path, pretty: Option<bool>, templates: bool) -> Result<(), String> {
+fn build_file(src: &Path, out: &Path, pretty: Option<bool>, job: &Job) -> Result<(), String> {
     let source = fs::read_to_string(src).map_err(|e| format!("{}: {e}", src.display()))?;
-    let opts = Options {
-        mode: mode_for(pretty, true),
-        templates,
-    };
-    let output = compile_opts(&source, &opts).map_err(|e| format!("{}:{e}", src.display()))?;
+    let output = job
+        .run(&source, mode_for(pretty, true))
+        .map_err(|e| format!("{}:{e}", src.display()))?;
     print_warnings(&src.display().to_string(), &output.warnings);
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -198,12 +256,7 @@ fn build_file(src: &Path, out: &Path, pretty: Option<bool>, templates: bool) -> 
     fs::write(out, output.html).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-fn build_dir(
-    src: &Path,
-    out_dir: &Path,
-    pretty: Option<bool>,
-    templates: bool,
-) -> Result<(), String> {
+fn build_dir(src: &Path, out_dir: &Path, pretty: Option<bool>, job: &Job) -> Result<(), String> {
     let mut files = Vec::new();
     collect_fhtml(src, &mut files).map_err(|e| format!("{}: {e}", src.display()))?;
     if files.is_empty() {
@@ -215,7 +268,7 @@ fn build_dir(
     for file in &files {
         let rel = file.strip_prefix(src).unwrap();
         let out = out_dir.join(rel).with_extension("html");
-        if let Err(msg) = build_file(file, &out, pretty, templates) {
+        if let Err(msg) = build_file(file, &out, pretty, job) {
             eprintln!("{msg}");
             failures += 1;
         }

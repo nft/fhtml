@@ -414,3 +414,43 @@ fn corpus_roundtrips() {
     }
     assert!(count >= 2, "corpus should contain samples, found {count}");
 }
+
+// ── Rendered output: pretty/min element-tree invariant (SPEC §11) ───────────
+
+/// The §11 same-element-tree contract extends to template rendering: the
+/// pretty and min renders of a template file must be normalized-DOM equal.
+#[test]
+fn rendered_pretty_min_same_element_tree() {
+    let src = r#"doctype html
+html(lang=en)
+  body bg-white
+    if user
+      . #greet flex {user.admin ? 'ring-2' : ''}
+        p text-lg "Hi, {user.name} & co. <3"
+        a(href={user.url} title="Profile of {user.name}") "profile"
+    else
+      p "guest"
+    ul
+      for item, i in items
+        li py-1 "{i + 1}. {item}"
+      empty
+        li "none"
+    p
+      | total: {n}
+      | raw: {!snippet}
+"#;
+    let data = fhtml::json::parse(
+        r#"{
+        "user": {"name": "E & \"quotes\"", "url": "/u/1?a=b&c=d", "admin": true},
+        "items": ["x < y", "z"],
+        "n": 3,
+        "snippet": "<em>ok</em>"
+    }"#,
+    )
+    .unwrap();
+    let pretty = fhtml::render(src, &data, Mode::Pretty).unwrap();
+    let min = fhtml::render(src, &data, Mode::Min).unwrap();
+    if let Err(e) = compare_html(&pretty, &min, &Options::default()) {
+        panic!("pretty/min DOM mismatch:\n{e}\npretty:\n{pretty}\nmin:\n{min}");
+    }
+}

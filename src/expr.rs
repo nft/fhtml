@@ -37,7 +37,7 @@ impl Value {
     }
 
     /// Type name with article, for error messages ("a list", "null").
-    fn describe(&self) -> &'static str {
+    pub(crate) fn describe(&self) -> &'static str {
         match self {
             Value::Null => "null",
             Value::Bool(_) => "a boolean",

@@ -995,3 +995,260 @@ mod template_parse {
         assert_eq!(formatted, src);
     }
 }
+
+// ------------------------------------------- rendering §9–§11 (render API)
+
+mod render {
+    use fhtml::{render, render_full, Mode, Value};
+
+    fn data(json: &str) -> Value {
+        fhtml::json::parse(json).unwrap()
+    }
+
+    fn min_with(src: &str, json: &str) -> String {
+        render(src, &data(json), Mode::Min).unwrap()
+    }
+
+    fn render_err(src: &str, json: &str) -> fhtml::Error {
+        render(src, &data(json), Mode::Min).unwrap_err()
+    }
+
+    // ------------------------------------------------- §9.1 interpolation
+
+    #[test]
+    fn golden_if_chain_from_spec_10_1() {
+        let src = r#"if user
+  p "Welcome back, {user.name}"
+elif invited
+  p "Finish signing up"
+else
+  a(href=/login) "Sign in"
+"#;
+        assert_eq!(
+            min_with(src, r#"{"user": {"name": "Erin"}}"#),
+            "<p>Welcome back, Erin</p>"
+        );
+        assert_eq!(
+            min_with(src, r#"{"invited": true}"#),
+            "<p>Finish signing up</p>"
+        );
+        assert_eq!(min_with(src, "{}"), r#"<a href="/login">Sign in</a>"#);
+    }
+
+    #[test]
+    fn text_interpolation_is_escaped_raw_is_not() {
+        let d = r#"{"html": "<b>&amp;</b>"}"#;
+        assert_eq!(
+            min_with(r#"p "{html}""#, d),
+            "<p>&lt;b&gt;&amp;amp;&lt;/b&gt;</p>"
+        );
+        assert_eq!(min_with("p\n  | {!html}", d), "<p><b>&amp;</b></p>");
+        assert_eq!(min_with(r#"p "{!html}""#, d), "<p><b>&amp;</b></p>");
+    }
+
+    #[test]
+    fn attr_interpolation_escapes_quotes() {
+        assert_eq!(
+            min_with(
+                r#"a(title="Profile of {name}")"#,
+                r#"{"name": "\"E\" <&>"}"#
+            ),
+            r#"<a title="Profile of &quot;E&quot; &lt;&amp;&gt;"></a>"#
+        );
+    }
+
+    #[test]
+    fn unquoted_attr_expr_is_whole_value() {
+        assert_eq!(
+            min_with(
+                "a(href={user.url} tabindex={n})",
+                r#"{"user": {"url": "/u/7"}, "n": 3}"#
+            ),
+            r#"<a href="/u/7" tabindex="3"></a>"#
+        );
+    }
+
+    #[test]
+    fn missing_names_render_empty() {
+        assert_eq!(min_with(r#"p "x{missing.path}y""#, "{}"), "<p>xy</p>");
+    }
+
+    #[test]
+    fn interpolating_a_list_is_an_error_with_position() {
+        let e = render_err(r#"p "n: {items}""#, r#"{"items": [1]}"#);
+        assert_eq!((e.line, e.col), (1, 7)); // the `{`
+        assert!(
+            e.msg.contains("cannot interpolate a list"),
+            "got: {}",
+            e.msg
+        );
+    }
+
+    // ---------------------------------------------- §9.2 class position
+
+    #[test]
+    fn class_interpolation_splits_on_whitespace() {
+        let src = "button px-4 {active ? 'bg-blue-600 text-white' : 'bg-gray-100'} \"Go\"";
+        assert_eq!(
+            min_with(src, r#"{"active": true}"#),
+            r#"<button class="px-4 bg-blue-600 text-white">Go</button>"#
+        );
+        assert_eq!(
+            min_with(src, r#"{"active": false}"#),
+            r#"<button class="px-4 bg-gray-100">Go</button>"#
+        );
+    }
+
+    #[test]
+    fn empty_class_interpolation_drops_cleanly() {
+        assert_eq!(min_with("div {cls}", "{}"), "<div></div>");
+        assert_eq!(
+            min_with("div {cls}", r#"{"cls": "  a   b "}"#),
+            r#"<div class="a b"></div>"#
+        );
+    }
+
+    #[test]
+    fn class_attr_segments_merge_in_order() {
+        assert_eq!(
+            min_with(r#"div(class="a {x} b") c"#, r#"{"x": "mid"}"#),
+            r#"<div class="a mid b c"></div>"#
+        );
+    }
+
+    #[test]
+    fn class_interpolation_result_is_attribute_escaped() {
+        assert_eq!(
+            min_with("div {cls}", r#"{"cls": "a<b\"c"}"#),
+            r#"<div class="a&lt;b&quot;c"></div>"#
+        );
+    }
+
+    // ------------------------------------------------- §10.2 for / empty
+
+    #[test]
+    fn golden_for_loop_from_project_md() {
+        let src = r#"ul divide-y divide-gray-100
+  for item, i in items
+    li py-2 flex justify-between
+      span "{i + 1}. {item.title}"
+      span text-gray-400 "{item.date}"
+  empty
+    li py-2 text-gray-400 "Nothing here yet."
+"#;
+        let d = r#"{"items": [
+            {"title": "Ship it", "date": "Jul 6"},
+            {"title": "Run bench", "date": "Jul 7"}
+        ]}"#;
+        let expected = "<ul class=\"divide-y divide-gray-100\">\
+<li class=\"py-2 flex justify-between\"><span>1. Ship it</span><span class=\"text-gray-400\">Jul 6</span></li>\
+<li class=\"py-2 flex justify-between\"><span>2. Run bench</span><span class=\"text-gray-400\">Jul 7</span></li>\
+</ul>";
+        assert_eq!(min_with(src, d), expected);
+        assert_eq!(
+            min_with(src, r#"{"items": []}"#),
+            "<ul class=\"divide-y divide-gray-100\"><li class=\"py-2 text-gray-400\">Nothing here yet.</li></ul>"
+        );
+        // null iterable takes the empty block too
+        assert_eq!(
+            min_with(src, "{}"),
+            "<ul class=\"divide-y divide-gray-100\"><li class=\"py-2 text-gray-400\">Nothing here yet.</li></ul>"
+        );
+    }
+
+    #[test]
+    fn for_over_map_yields_values_and_keys_in_insertion_order() {
+        let src = "for v, k in scores\n  p \"{k}={v}\"";
+        assert_eq!(
+            min_with(src, r#"{"scores": {"b": 2, "a": 1}}"#),
+            "<p>b=2</p><p>a=1</p>"
+        );
+    }
+
+    #[test]
+    fn loop_variables_shadow_and_unshadow() {
+        let src = "p \"{x}\"\nfor x in xs\n  p \"{x}\"\np \"{x}\"";
+        assert_eq!(
+            min_with(src, r#"{"x": "outer", "xs": ["a", "b"]}"#),
+            "<p>outer</p><p>a</p><p>b</p><p>outer</p>"
+        );
+    }
+
+    #[test]
+    fn nested_loops() {
+        let src = "for row in grid\n  for cell in row\n    span \"{cell}\"";
+        assert_eq!(
+            min_with(src, r#"{"grid": [[1, 2], [3]]}"#),
+            "<span>1</span><span>2</span><span>3</span>"
+        );
+    }
+
+    #[test]
+    fn for_over_scalars_is_a_render_error() {
+        let e = render_err("for c in word\n  p \"{c}\"", r#"{"word": "abc"}"#);
+        assert!(
+            e.msg.contains("strings are not character sequences"),
+            "got: {}",
+            e.msg
+        );
+        let e = render_err("for c in n\n  p \"{c}\"", r#"{"n": 5}"#);
+        assert!(e.msg.contains("cannot iterate a number"), "got: {}", e.msg);
+    }
+
+    // ---------------------------------------------------- §9.4 ctx root
+
+    #[test]
+    fn ctx_reaches_every_scope_via_render_full() {
+        let src = "for item in items\n  p \"{item} on {ctx.theme}\"";
+        let out = render_full(
+            src,
+            &data(r#"{"items": ["a"], "ctx": "decoy"}"#),
+            &data(r#"{"theme": "dark"}"#),
+            Mode::Min,
+        )
+        .unwrap();
+        assert_eq!(out.html, "<p>a on dark</p>");
+    }
+
+    // ------------------------------------------------ §11 invariants
+
+    #[test]
+    fn template_free_render_matches_compile() {
+        let src = "div flex\n  p text-sm \"hi\"\n";
+        assert_eq!(
+            render(src, &Value::Null, Mode::Pretty).unwrap(),
+            fhtml::compile(src, Mode::Pretty).unwrap()
+        );
+    }
+
+    #[test]
+    fn formatting_never_changes_rendered_output() {
+        let src = "if  user\n    p   text-sm \"Hi, { user.name }!\"\nelse\n    p \"guest\"\nfor x,i in xs\n    li \"{ i }:{ x }\"\n";
+        let formatted = fhtml::format(src).unwrap();
+        let d = data(r#"{"user": {"name": "E"}, "xs": ["a", "b"]}"#);
+        assert_eq!(
+            render(&formatted, &d, Mode::Min).unwrap(),
+            render(src, &d, Mode::Min).unwrap()
+        );
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    }
+
+    #[test]
+    fn render_errors_position_like_parse_errors() {
+        // columns count within the logical line's content (indent excluded),
+        // matching the static parse-error convention
+        let e = render_err("div\n  p \"{1 + true}\"", "{}");
+        assert_eq!((e.line, e.col), (2, 4)); // the `{`
+
+        assert!(e.msg.contains("`+`"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn statement_bodies_render_at_statement_depth_in_pretty() {
+        let src = "div\n  if x\n    p \"a\"\n";
+        assert_eq!(
+            render(src, &data(r#"{"x": true}"#), Mode::Pretty).unwrap(),
+            "<div>\n  <p>a</p>\n</div>\n"
+        );
+    }
+}

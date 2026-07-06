@@ -33,9 +33,6 @@ pub fn is_void(tag: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct TplExpr {
     pub src: String,
-    // TODO: read by the evaluating renderer; only parsed for
-    // validation until then.
-    #[allow(dead_code)]
     pub expr: Expr,
     pub line: usize,
     pub col: usize,

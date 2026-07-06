@@ -1,11 +1,16 @@
-//! HTML emitter (SPEC §11). Two modes producing the same element tree:
+//! Renderer (SPEC §9–§11). Two modes producing the same element tree:
 //! `Pretty` (2-space indented) and `Min` (no inter-tag whitespace).
 //!
-//! This is the static path: template constructs are rejected by
-//! `compile`/`compile_full` before emit runs, so every segment here is
-//! literal (the evaluating renderer is not implemented yet).
+//! One code path serves both the static and template layers: `compile`
+//! rejects template constructs and then renders with null data (a
+//! literal-only tree evaluates nothing, so its output is byte-identical to
+//! the static emitter and cannot error); `render` evaluates statements and
+//! interpolation against caller data. Render errors carry the file position
+//! of the interpolation or statement, in the same format as parse errors.
 
-use crate::parser::{is_void, AttrValue, ClassItem, Element, Node, TextPart};
+use crate::error::{err, Error, Result};
+use crate::expr::{self, Scope, Value};
+use crate::parser::{is_void, AttrValue, ClassItem, Element, ForLoop, Node, TextPart, TplExpr};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -13,25 +18,22 @@ pub enum Mode {
     Min,
 }
 
-pub fn emit(nodes: &[Node], mode: Mode) -> String {
-    let mut out = String::new();
-    for node in nodes {
-        emit_node(&mut out, node, 0, mode);
-    }
-    out
+/// Renders nodes against `data` (the name-resolution root) and `ctx` (the
+/// reserved context root, SPEC §9.4). Pass `Value::Null` for an empty scope.
+pub fn render_nodes(nodes: &[Node], mode: Mode, data: &Value, ctx: &Value) -> Result<String> {
+    let mut r = R {
+        mode,
+        scope: Scope::new(data),
+        ctx,
+        out: String::new(),
+    };
+    r.block(nodes, 0)?;
+    Ok(r.out)
 }
 
 /// Entity-escaping per SPEC §11: attribute values escape `& < > "`; text
 /// escapes only `& < >` (a literal `"` in a text node is valid HTML and
-/// cheaper). Class names and raw passthrough are never escaped.
-fn esc_attr(s: &str) -> String {
-    esc(s, true)
-}
-
-fn esc_text(s: &str) -> String {
-    esc(s, false)
-}
-
+/// cheaper). Literal class names and raw passthrough are never escaped.
 fn esc(s: &str, quotes: bool) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
@@ -46,147 +48,259 @@ fn esc(s: &str, quotes: bool) -> String {
     out
 }
 
-/// Concatenates literal-only segments (the static path invariant).
-fn lit_text(parts: &[TextPart]) -> String {
-    parts
-        .iter()
-        .map(|p| match p {
-            TextPart::Lit(s) => s.as_str(),
-            TextPart::Interp { .. } => {
-                unreachable!("template constructs are rejected before static emit")
-            }
+struct R<'a> {
+    mode: Mode,
+    scope: Scope<'a>,
+    ctx: &'a Value,
+    out: String,
+}
+
+impl R<'_> {
+    fn eval(&self, t: &TplExpr) -> Result<Value> {
+        expr::eval(&t.expr, &self.scope, self.ctx).map_err(|e| Error {
+            line: t.line,
+            col: t.col,
+            msg: e.msg,
         })
-        .collect()
-}
-
-/// Attribute order per SPEC §11: id, paren attrs in source order, merged class.
-fn open_tag(el: &Element) -> String {
-    let mut s = format!("<{}", el.tag);
-    if let Some(id) = &el.id {
-        s.push_str(&format!(" id=\"{}\"", esc_attr(id)));
     }
-    for (name, value) in &el.attrs {
-        match value {
-            AttrValue::Bool => s.push_str(&format!(" {name}")),
-            AttrValue::Str(v) => s.push_str(&format!(" {name}=\"{}\"", esc_attr(&lit_text(v)))),
-            AttrValue::Expr(_) => {
-                unreachable!("template constructs are rejected before static emit")
+
+    /// Evaluate + stringify (SPEC §9.4; lists/maps error at the site).
+    fn eval_string(&self, t: &TplExpr) -> Result<String> {
+        let v = self.eval(t)?;
+        expr::stringify(&v).map_err(|e| Error {
+            line: t.line,
+            col: t.col,
+            msg: e.msg,
+        })
+    }
+
+    /// Text segments → output text. `quotes` selects attribute escaping
+    /// (`& < > "`) over text escaping (`& < >`); raw parts bypass both.
+    fn text(&self, parts: &[TextPart], quotes: bool) -> Result<String> {
+        let mut s = String::new();
+        for part in parts {
+            match part {
+                TextPart::Lit(l) => s.push_str(&esc(l, quotes)),
+                TextPart::Interp { expr, raw } => {
+                    let v = self.eval_string(expr)?;
+                    if *raw {
+                        s.push_str(&v);
+                    } else {
+                        s.push_str(&esc(&v, quotes));
+                    }
+                }
             }
         }
+        Ok(s)
     }
-    if !el.classes.is_empty() {
-        // Classes are byte-for-byte except `"`, which would end the attribute;
-        // &quot; is DOM-transparent (SPEC §11).
-        let joined = el
-            .classes
-            .iter()
-            .map(|c| match c {
-                ClassItem::Lit(s) => s.as_str(),
-                ClassItem::Interp(_) => {
-                    unreachable!("template constructs are rejected before static emit")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-            .replace('"', "&quot;");
-        s.push_str(&format!(" class=\"{joined}\""));
-    }
-    s.push('>');
-    s
-}
 
-fn emit_node(out: &mut String, node: &Node, depth: usize, mode: Mode) {
-    let ind = if mode == Mode::Pretty {
-        "  ".repeat(depth)
-    } else {
-        String::new()
-    };
-    let nl = if mode == Mode::Pretty { "\n" } else { "" };
-
-    match node {
-        Node::Doctype => out.push_str(&format!("{ind}<!DOCTYPE html>{nl}")),
-        Node::Comment { emit: false, .. } => {}
-        Node::Comment { lines, emit: true } => {
-            if lines.len() == 1 {
-                out.push_str(&format!("{ind}<!-- {} -->{nl}", lines[0]));
-            } else {
-                out.push_str(&format!("{ind}<!-- {}{nl}", lines[0]));
-                for l in &lines[1..] {
-                    out.push_str(&format!("{ind}{l}{nl}"));
+    /// The final class-name list: literal tokens byte-for-byte (`"` as
+    /// `&quot;`, SPEC §11); interpolation results split on whitespace and
+    /// attribute-escaped (SPEC §9.1).
+    fn class_names(&self, el: &Element) -> Result<Vec<String>> {
+        let mut names = Vec::new();
+        for item in &el.classes {
+            match item {
+                ClassItem::Lit(c) => names.push(c.replace('"', "&quot;")),
+                ClassItem::Interp(t) => {
+                    let s = self.eval_string(t)?;
+                    names.extend(s.split_whitespace().map(|c| esc(c, true)));
                 }
-                if mode == Mode::Min {
-                    out.push('\n'); // keep comment lines apart even minified
-                }
-                out.push_str(&format!("{ind}-->{nl}"));
             }
         }
-        Node::Raw(lines) => {
-            // Verbatim, never minified (raw may be whitespace-sensitive, SPEC §8).
-            for (i, l) in lines.iter().enumerate() {
-                if mode == Mode::Min && i > 0 {
-                    out.push('\n');
+        Ok(names)
+    }
+
+    /// Attribute order per SPEC §11: id, paren attrs in source order, merged class.
+    fn open_tag(&self, el: &Element) -> Result<String> {
+        let mut s = format!("<{}", el.tag);
+        if let Some(id) = &el.id {
+            s.push_str(&format!(" id=\"{}\"", esc(id, true)));
+        }
+        for (name, value) in &el.attrs {
+            match value {
+                AttrValue::Bool => s.push_str(&format!(" {name}")),
+                AttrValue::Str(v) => s.push_str(&format!(" {name}=\"{}\"", self.text(v, true)?)),
+                AttrValue::Expr(t) => {
+                    s.push_str(&format!(" {name}=\"{}\"", esc(&self.eval_string(t)?, true)))
                 }
-                if l.is_empty() {
-                    out.push_str(nl);
+            }
+        }
+        let classes = self.class_names(el)?;
+        if !classes.is_empty() {
+            s.push_str(&format!(" class=\"{}\"", classes.join(" ")));
+        }
+        s.push('>');
+        Ok(s)
+    }
+
+    fn block(&mut self, nodes: &[Node], depth: usize) -> Result<()> {
+        for node in nodes {
+            self.node(node, depth)?;
+        }
+        Ok(())
+    }
+
+    fn node(&mut self, node: &Node, depth: usize) -> Result<()> {
+        let ind = if self.mode == Mode::Pretty {
+            "  ".repeat(depth)
+        } else {
+            String::new()
+        };
+        let nl = if self.mode == Mode::Pretty { "\n" } else { "" };
+
+        match node {
+            Node::Doctype => self.out.push_str(&format!("{ind}<!DOCTYPE html>{nl}")),
+            Node::Comment { emit: false, .. } => {}
+            Node::Comment { lines, emit: true } => {
+                if lines.len() == 1 {
+                    self.out
+                        .push_str(&format!("{ind}<!-- {} -->{nl}", lines[0]));
                 } else {
-                    out.push_str(&format!("{ind}{l}{nl}"));
+                    self.out.push_str(&format!("{ind}<!-- {}{nl}", lines[0]));
+                    for l in &lines[1..] {
+                        self.out.push_str(&format!("{ind}{l}{nl}"));
+                    }
+                    if self.mode == Mode::Min {
+                        self.out.push('\n'); // keep comment lines apart even minified
+                    }
+                    self.out.push_str(&format!("{ind}-->{nl}"));
                 }
             }
-        }
-        Node::TextBlock(lines) => {
-            // Lines stay separate: the newline is content, collapsed to one
-            // space by the browser (SPEC §6.2) — required in Min mode too,
-            // otherwise adjacent lines would glue into one word.
-            for (i, l) in lines.iter().enumerate() {
-                if mode == Mode::Min && i > 0 {
-                    out.push('\n');
+            Node::Raw(lines) => {
+                // Verbatim, never minified (raw may be whitespace-sensitive, SPEC §8).
+                for (i, l) in lines.iter().enumerate() {
+                    if self.mode == Mode::Min && i > 0 {
+                        self.out.push('\n');
+                    }
+                    if l.is_empty() {
+                        self.out.push_str(nl);
+                    } else {
+                        self.out.push_str(&format!("{ind}{l}{nl}"));
+                    }
                 }
-                out.push_str(&format!("{ind}{}{nl}", esc_text(&lit_text(l))));
+            }
+            Node::TextBlock(lines) => {
+                // Lines stay separate: the newline is content, collapsed to one
+                // space by the browser (SPEC §6.2) — required in Min mode too,
+                // otherwise adjacent lines would glue into one word.
+                for (i, parts) in lines.iter().enumerate() {
+                    if self.mode == Mode::Min && i > 0 {
+                        self.out.push('\n');
+                    }
+                    let text = self.text(parts, false)?;
+                    self.out.push_str(&format!("{ind}{text}{nl}"));
+                }
+            }
+            Node::Element(el) => self.element(el, depth)?,
+            // Statements are invisible in the output tree: bodies render at
+            // the statement's own depth.
+            Node::If(chain) => {
+                for arm in &chain.arms {
+                    if self.eval(&arm.cond)?.truthy() {
+                        return self.block(&arm.body, depth);
+                    }
+                }
+                if let Some(body) = &chain.else_body {
+                    self.block(body, depth)?;
+                }
+            }
+            Node::For(f) => self.for_loop(f, depth)?,
+        }
+        Ok(())
+    }
+
+    /// SPEC §10.2: lists (index = position) and maps (name = value, index =
+    /// key, insertion order); `empty` on empty-or-null; anything else errors.
+    fn for_loop(&mut self, f: &ForLoop, depth: usize) -> Result<()> {
+        match self.eval(&f.iter)? {
+            Value::List(items) if !items.is_empty() => {
+                for (i, item) in items.into_iter().enumerate() {
+                    self.iteration(f, depth, item, Value::Number(i as f64))?;
+                }
+                Ok(())
+            }
+            Value::Map(entries) if !entries.is_empty() => {
+                for (key, value) in entries {
+                    self.iteration(f, depth, value, Value::Str(key))?;
+                }
+                Ok(())
+            }
+            Value::Null | Value::List(_) | Value::Map(_) => {
+                if let Some(empty) = &f.empty {
+                    self.block(empty, depth)?;
+                }
+                Ok(())
+            }
+            Value::Str(_) => err(
+                f.iter.line,
+                f.iter.col,
+                "`for` cannot iterate a string — strings are not character sequences in fhtml",
+            ),
+            other => err(
+                f.iter.line,
+                f.iter.col,
+                format!(
+                    "`for` cannot iterate {} — it takes a list or map",
+                    other.describe()
+                ),
+            ),
+        }
+    }
+
+    /// One loop pass: bind var (and index), render, unbind. Loop variables
+    /// shadow outer names, never `ctx` (the parser rejects that binding).
+    fn iteration(&mut self, f: &ForLoop, depth: usize, item: Value, index: Value) -> Result<()> {
+        self.scope.push(f.var.as_str(), item);
+        if let Some(idx) = &f.index {
+            self.scope.push(idx.as_str(), index);
+        }
+        let result = self.block(&f.body, depth);
+        if f.index.is_some() {
+            self.scope.pop();
+        }
+        self.scope.pop();
+        result
+    }
+
+    fn element(&mut self, el: &Element, depth: usize) -> Result<()> {
+        // A `>` chain renders glued on one line: opens (each followed by its own
+        // inline text), then either the innermost's children as a block, or the
+        // closings immediately (SPEC §4.6, §5).
+        let mut opens = String::new();
+        let mut closings = String::new();
+        let mut cur = el;
+        loop {
+            opens.push_str(&self.open_tag(cur)?);
+            if let Some(text) = &cur.text {
+                opens.push_str(&self.text(text, false)?);
+            }
+            if !is_void(&cur.tag) {
+                closings = format!("</{}>{}", cur.tag, closings);
+            }
+            match &cur.chain {
+                Some(next) => cur = next,
+                None => break,
             }
         }
-        Node::Element(el) => emit_element(out, el, depth, mode),
-        Node::If(_) | Node::For(_) => {
-            unreachable!("template constructs are rejected before static emit")
-        }
-    }
-}
+        let inner = cur;
 
-fn emit_element(out: &mut String, el: &Element, depth: usize, mode: Mode) {
-    // A `>` chain renders glued on one line: opens (each followed by its own
-    // inline text), then either the innermost's children as a block, or the
-    // closings immediately (SPEC §4.6, §5).
-    let mut opens = String::new();
-    let mut closings = String::new();
-    let mut cur = el;
-    loop {
-        opens.push_str(&open_tag(cur));
-        if let Some(text) = &cur.text {
-            opens.push_str(&esc_text(&lit_text(text)));
-        }
-        if !is_void(&cur.tag) {
-            closings = format!("</{}>{}", cur.tag, closings);
-        }
-        match &cur.chain {
-            Some(next) => cur = next,
-            None => break,
-        }
-    }
-    let inner = cur;
+        let ind = if self.mode == Mode::Pretty {
+            "  ".repeat(depth)
+        } else {
+            String::new()
+        };
+        let nl = if self.mode == Mode::Pretty { "\n" } else { "" };
 
-    let ind = if mode == Mode::Pretty {
-        "  ".repeat(depth)
-    } else {
-        String::new()
-    };
-    let nl = if mode == Mode::Pretty { "\n" } else { "" };
-
-    if inner.children.is_empty() {
-        out.push_str(&format!("{ind}{opens}{closings}{nl}"));
-    } else {
-        out.push_str(&format!("{ind}{opens}{nl}"));
-        for child in &inner.children {
-            emit_node(out, child, depth + 1, mode);
+        if inner.children.is_empty() {
+            self.out.push_str(&format!("{ind}{opens}{closings}{nl}"));
+        } else {
+            self.out.push_str(&format!("{ind}{opens}{nl}"));
+            for child in &inner.children {
+                self.node(child, depth + 1)?;
+            }
+            self.out.push_str(&format!("{ind}{closings}{nl}"));
         }
-        out.push_str(&format!("{ind}{closings}{nl}"));
+        Ok(())
     }
 }

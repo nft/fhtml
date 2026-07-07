@@ -1,3 +1,13 @@
+<p align="center">
+  <img src="fhtml.png" alt="fhtml — Fluid Hypertext Markup Language" width="480">
+</p>
+
+<p align="center">
+  <a href="https://nft.github.io/fhtml/"><b>Website</b></a> ·
+  <a href="SPEC.md">Spec</a> ·
+  <a href="bench/RESULTS.md">Benchmark</a>
+</p>
+
 # fhtml — Fluid HTML
 
 A whitespace-based markup language (`.fhtml`) that compiles 1:1 to HTML. Like Pug, but built

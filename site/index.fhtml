@@ -1,0 +1,290 @@
+// fhtml.dev landing page — written in fhtml, built by `fhtml build` (dogfood).
+// Build with: ./site/build.sh   (fhtml --min --data + tailwindcss + static copy)
+// Shared content (the avatar-card example, the "rules in 30 seconds" list) is copied
+// verbatim from README.md / SPEC.md; keep them identical when either changes.
+doctype
+html(lang=en)
+  head
+    meta(charset=utf-8)
+    meta(name=viewport content="width=device-width, initial-scale=1")
+    title "fhtml — token-cheap, Tailwind-native HTML for agents"
+    meta(name=description content="A whitespace markup language that compiles 1:1 to HTML. No closing tags, no angle brackets — 14% fewer tokens than pretty HTML, with Tailwind classes copied byte-for-byte.")
+    link(rel=canonical href="{site_url}/")
+    link(rel=icon type=image/svg+xml href=static/favicon.svg)
+    link(rel=stylesheet href=site.css)
+    // Open Graph / Twitter — absolute URLs are required by the spec. site_url and
+    // repo_url (used for every github.com link below) are injected at build time via
+    // --data (site/data.json). Fix the GitHub username or custom domain in that one
+    // file — no source change here.
+    meta(property="og:type" content=website)
+    meta(property="og:title" content="fhtml — Fluid Hypertext Markup Language")
+    meta(property="og:description" content="Whitespace HTML that compiles 1:1 to the same DOM — 14% fewer tokens, Tailwind-native, zero dependencies.")
+    meta(property="og:url" content="{site_url}/")
+    meta(property="og:image" content="{site_url}/static/fhtml.png")
+    meta(name="twitter:card" content=summary_large_image)
+    meta(name="twitter:title" content="fhtml — Fluid Hypertext Markup Language")
+    meta(name="twitter:description" content="Whitespace HTML that compiles 1:1 to the same DOM — 14% fewer tokens, Tailwind-native, zero dependencies.")
+    meta(name="twitter:image" content="{site_url}/static/fhtml.png")
+  body min-h-screen bg-white text-slate-900 antialiased selection:bg-indigo-200
+
+    // ─── Hero ───────────────────────────────────────────────────────────
+    header relative overflow-hidden border-b border-slate-200 bg-white
+      .(aria-hidden=true) pointer-events-none absolute inset-x-0 -top-40 -z-10 flex justify-center opacity-60 blur-3xl > . h-80 w-[42rem] bg-gradient-to-tr from-sky-300 via-indigo-300 to-fuchsia-300
+      . mx-auto max-w-5xl px-6 pt-16 pb-20 text-center sm:pt-24 sm:pb-28
+        img(src=static/fhtml.png alt="fhtml — Fluid Hypertext Markup Language" width=1030 height=428 fetchpriority=high) mx-auto w-full max-w-sm mix-blend-multiply sm:max-w-md
+        p mx-auto mt-8 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl
+          | Whitespace markup that compiles 1:1 to HTML. Like Pug, but built for
+          |
+          span font-semibold text-slate-900 "token-cheap agent output"
+          | and
+          |
+          span font-semibold text-slate-900 "Tailwind"
+          | — no closing tags, no angle brackets, no
+          |
+          code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-700 "class=\"…\""
+          | wrappers.
+        . mx-auto mt-10 flex max-w-md flex-col items-stretch gap-3 sm:flex-row sm:justify-center
+          . group relative flex flex-1 items-center gap-3 rounded-lg border border-slate-300 bg-slate-900 px-4 py-3 text-left font-mono text-sm text-slate-100 shadow-sm sm:flex-none
+            span text-slate-500 select-none "$"
+            code flex-1 "cargo install --path ."
+            button(type=button data-copy="cargo install --path ." aria-label="Copy install command") shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-white/10 hover:text-white
+              svg(viewBox="0 0 24 24" fill=none aria-hidden=true) h-4 w-4 > path(d="M9 9V6a2 2 0 012-2h7a2 2 0 012 2v7a2 2 0 01-2 2h-3M5 9h7a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round)
+        . mt-6 flex items-center justify-center gap-x-4 text-sm
+          a(href="{repo_url}") inline-flex items-center gap-x-2 font-semibold text-slate-900 hover:text-indigo-600
+            svg(viewBox="0 0 16 16" fill=currentColor aria-hidden=true) h-4 w-4 > path(d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z")
+            | GitHub
+          span text-slate-300 "·"
+          a(href=#install) font-semibold text-indigo-600 hover:text-indigo-500 "Install →"
+
+    main
+      // ─── Side by side ──────────────────────────────────────────────────
+      section mx-auto max-w-6xl px-6 py-20 sm:py-24
+        . mx-auto max-w-2xl text-center
+          h2 text-3xl font-semibold tracking-tight sm:text-4xl "Same DOM. Fewer tokens."
+          p mt-4 text-lg leading-8 text-slate-600 "Bare tokens after the tag are the class list, copied to output byte-for-byte. Indentation nests; no closing tags."
+        . mt-14 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]
+          // fhtml source
+          . flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-lg
+            . flex items-center justify-between border-b border-white/10 px-4 py-2.5
+              span font-mono text-xs font-semibold uppercase tracking-wider text-indigo-300 "card.fhtml"
+              span rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-200 "fhtml"
+            pre flex-1 w-full min-w-0 overflow-x-auto px-4 py-4 font-mono text-[12px] leading-relaxed text-slate-100 > code
+              | div flex items-center gap-4 rounded-xl bg-white p-6 shadow-md
+              |   img(src=/img/ava.jpg alt="Erin's avatar") size-12 rounded-full
+              |   .
+              |     p text-lg font-semibold text-gray-900 "Erin Lindford"
+              |     p text-gray-500 "Product Engineer"
+              |   button ml-auto rounded-full px-4 py-1 text-sm hover:bg-purple-600 hover:text-white "Message"
+          // arrow
+          . flex items-center justify-center py-2 lg:py-0
+            . flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-600
+              svg(viewBox="0 0 24 24" fill=none aria-hidden=true) h-5 w-5 rotate-90 lg:rotate-0 > path(d="M5 12h14M13 6l6 6-6 6" stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round)
+          // compiled HTML
+          . flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg
+            . flex items-center justify-between border-b border-slate-200 px-4 py-2.5
+              span font-mono text-xs font-semibold uppercase tracking-wider text-slate-500 "index.html"
+              span rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-600 "html"
+            pre flex-1 w-full min-w-0 overflow-x-auto px-4 py-4 font-mono text-[12px] leading-relaxed text-slate-700 > code
+              | <div class="flex items-center gap-4 rounded-xl bg-white p-6 shadow-md">
+              |   <img src="/img/ava.jpg" alt="Erin's avatar" class="size-12 rounded-full">
+              |   <div>
+              |     <p class="text-lg font-semibold text-gray-900">Erin Lindford</p>
+              |     <p class="text-gray-500">Product Engineer</p>
+              |   </div>
+              |   <button class="ml-auto rounded-full px-4 py-1 text-sm hover:bg-purple-600 hover:text-white">Message</button>
+              | </div>
+        p mt-6 text-center text-sm text-slate-500
+          | Measured on a 48-component Tailwind corpus.
+          |
+          a(href="{repo_url}/blob/main/bench/RESULTS.md") font-medium text-indigo-600 hover:text-indigo-500 "See the full benchmark →"
+
+      // ─── Numbers ───────────────────────────────────────────────────────
+      section bg-slate-50 py-20 sm:py-24
+        . mx-auto max-w-5xl px-6
+          dl grid grid-cols-1 gap-6 sm:grid-cols-3
+            a(href="{repo_url}/blob/main/bench/RESULTS.md") group flex flex-col rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm transition hover:border-indigo-300 hover:shadow-md
+              dt order-2 mt-2 text-sm font-medium text-slate-600 "fewer tokens than pretty HTML"
+              dd order-1 bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-5xl font-bold tracking-tight text-transparent "−14%"
+              dd order-3 mt-3 text-xs text-slate-400 "up to −20% on SVG-light markup · o200k_base"
+            a(href="{repo_url}/blob/main/bench/RESULTS.md") group flex flex-col rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm transition hover:border-indigo-300 hover:shadow-md
+              dt order-2 mt-2 text-sm font-medium text-slate-600 "round-trip DOM fidelity"
+              dd order-1 bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-5xl font-bold tracking-tight text-transparent "48/48"
+              dd order-3 mt-3 text-xs text-slate-400 "html → fhtml → identical DOM"
+            . flex flex-col rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm
+              dt order-2 mt-2 text-sm font-medium text-slate-600 "dependencies in the compiler"
+              dd order-1 bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-5xl font-bold tracking-tight text-transparent "0"
+              dd order-3 mt-3 text-xs text-slate-400 "one Rust binary · cargo install"
+
+      // ─── Rules in 30 seconds ───────────────────────────────────────────
+      section mx-auto max-w-5xl px-6 py-20 sm:py-24
+        . mx-auto max-w-2xl text-center
+          h2 text-3xl font-semibold tracking-tight sm:text-4xl "The whole language, in 30 seconds"
+          p mt-4 text-lg leading-8 text-slate-600
+            | Line shape:
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-700 "tag(attrs) #id classes… \"text\""
+            | — everything after the tag is optional.
+        ul mt-12 grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700 > span "Indentation nests (Python's rules exactly); no closing tags."
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700 "Bare tokens are classes, verbatim. The compiler never parses inside a class token."
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700
+              | Attributes live in parens, butted against the tag:
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "a(href=/about target=_blank)"
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700
+              | A lone
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "."
+              | means div;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "#id"
+              | as a token sets the id.
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700
+              | Text is quoted
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "span \"Sign in\""
+              | , HTML-escaped;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "|"
+              | lines for text blocks.
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700
+              | Chain a single inline child with
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "li > a(href=/docs) \"Docs\""
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700
+              | A line starting with
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "<"
+              | is raw HTML passthrough — the escape hatch.
+          li flex gap-3
+            span mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+            p text-slate-700
+              | Trailing
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "\\"
+              | continues a line;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "//"
+              | comments;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "doctype"
+              | →
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-700 "<!DOCTYPE html>"
+              | .
+
+      // ─── Template layer teaser ─────────────────────────────────────────
+      section bg-slate-900 py-20 text-slate-100 sm:py-24
+        . mx-auto max-w-5xl px-6
+          . grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center
+            . min-w-0
+              h2 text-3xl font-semibold tracking-tight text-white sm:text-4xl "There's a template layer, too"
+              p mt-4 text-lg leading-8 text-slate-300
+                | Interpolation, conditionals, and loops with a small closed expression language —
+                | not arbitrary JavaScript. Render statically, or compile to a
+                |
+                code rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.9em] text-indigo-200 "(data, ctx) => string"
+                | ES module with
+                |
+                code rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.9em] text-indigo-200 "--target=js"
+                | — byte-identical to the Rust renderer.
+              p mt-6
+                a(href="{repo_url}/blob/main/SPEC.md") inline-flex items-center gap-x-2 text-sm font-semibold text-indigo-300 hover:text-indigo-200
+                  | Read the spec
+                  svg(viewBox="0 0 16 16" fill=none aria-hidden=true) h-4 w-4 > path(d="M3 8h10M9 4l4 4-4 4" stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round)
+            pre w-full min-w-0 overflow-x-auto rounded-xl border border-white/10 bg-black/40 p-5 font-mono text-[13px] leading-relaxed text-slate-100 > code
+              | ul divide-y
+              |   for user in users
+              |     li flex justify-between py-2
+              |       span "\{user.name}"
+              |       if user.admin
+              |         span text-xs text-indigo-400 "admin"
+              |   empty
+              |     li text-slate-500 "No users yet."
+
+      // ─── Install & tooling ─────────────────────────────────────────────
+      section(id=install) mx-auto max-w-5xl px-6 py-20 sm:py-24 scroll-mt-8
+        . mx-auto max-w-2xl text-center
+          h2 text-3xl font-semibold tracking-tight sm:text-4xl "Install"
+          p mt-4 text-lg leading-8 text-slate-600
+            | A Rust toolchain is the only requirement. The core compiler pulls in
+            |
+            span font-semibold text-slate-900 "zero dependencies"
+            | .
+        . mx-auto mt-12 max-w-2xl space-y-4
+          // primary install
+          . group flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 font-mono text-sm text-slate-100 shadow-sm
+            span shrink-0 text-slate-500 select-none "$"
+            code min-w-0 flex-1 overflow-x-auto whitespace-nowrap "cargo install --path ."
+            span shrink-0 text-xs text-slate-500 "the compiler"
+            button(type=button data-copy="cargo install --path ." aria-label="Copy command") shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-white/10 hover:text-white
+              svg(viewBox="0 0 24 24" fill=none aria-hidden=true) h-4 w-4 > path(d="M9 9V6a2 2 0 012-2h7a2 2 0 012 2v7a2 2 0 01-2 2h-3M5 9h7a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round)
+          // converter install
+          . group flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 font-mono text-sm text-slate-100 shadow-sm
+            span shrink-0 text-slate-500 select-none "$"
+            code min-w-0 flex-1 overflow-x-auto whitespace-nowrap "cargo install --path . --features convert"
+            span shrink-0 text-xs text-slate-500 "+ html2fhtml"
+            button(type=button data-copy="cargo install --path . --features convert" aria-label="Copy command") shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-white/10 hover:text-white
+              svg(viewBox="0 0 24 24" fill=none aria-hidden=true) h-4 w-4 > path(d="M9 9V6a2 2 0 012-2h7a2 2 0 012 2v7a2 2 0 01-2 2h-3M5 9h7a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round)
+        . mx-auto mt-8 grid max-w-2xl gap-4 sm:grid-cols-2
+          . rounded-xl border border-slate-200 bg-white p-5
+            h3 font-semibold text-slate-900 "Migrate existing HTML"
+            p mt-1.5 text-sm leading-6 text-slate-600
+              | Point
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "html2fhtml"
+              | at any HTML file for idiomatic fhtml;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "--check"
+              | verifies the round-trip.
+          . rounded-xl border border-slate-200 bg-white p-5
+            h3 font-semibold text-slate-900 "Editor support"
+            p mt-1.5 text-sm leading-6 text-slate-600
+              | A TextMate grammar and VS Code extension ship in
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "editors/vscode/"
+              | — full syntax highlighting, template layer included.
+
+    // ─── Footer ───────────────────────────────────────────────────────────
+    footer border-t border-slate-200 bg-white
+      . mx-auto flex max-w-5xl flex-col items-center gap-4 px-6 py-12 sm:flex-row sm:justify-between
+        p text-sm text-slate-500
+          | fhtml — Fluid Hypertext Markup Language.
+          |
+          span text-slate-400 "MIT licensed."
+        nav flex items-center gap-x-6 text-sm font-medium text-slate-600
+          a(href="{repo_url}") hover:text-indigo-600 "GitHub"
+          a(href="{repo_url}/blob/main/SPEC.md") hover:text-indigo-600 "Spec"
+          a(href="{repo_url}/blob/main/bench/RESULTS.md") hover:text-indigo-600 "Benchmark"
+
+    // Progressive enhancement: copy-to-clipboard for [data-copy] buttons. ~20 lines,
+    // no framework. The page is fully functional without it.
+    // A `<` line is raw passthrough: it AND every deeper-indented line below it are
+    // emitted verbatim (dedented). So the JS body is just indented under `<script>`;
+    // `</script>` dedents back to close the block.
+    <script>
+      document.querySelectorAll('[data-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+            var original = btn.innerHTML;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            btn.classList.add('text-green-400');
+            setTimeout(function () { btn.innerHTML = original; btn.classList.remove('text-green-400'); }, 1500);
+          });
+        });
+      });
+    </script>

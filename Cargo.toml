@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Compiler for fhtml (Fluid HTML) — a token-cheap, Tailwind-native markup language"
 license = "MIT"
+default-run = "fhtml"
 
 [lib]
 name = "fhtml"

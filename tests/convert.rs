@@ -415,6 +415,73 @@ fn corpus_roundtrips() {
     assert!(count >= 2, "corpus should contain samples, found {count}");
 }
 
+// ── Class shorthand ────────────────────────────────
+
+/// Contraction round-trips: convert with `--shorthand`, recompile, compare
+/// DOMs — for every corpus sample. This is the correctness bar.
+#[test]
+fn shorthand_corpus_roundtrips() {
+    let opts = Options {
+        shorthand: true,
+        ..Options::default()
+    };
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/corpus");
+    let mut count = 0;
+    for entry in std::fs::read_dir(dir).expect("tests/corpus must exist") {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "html") {
+            let html = std::fs::read_to_string(&path).unwrap();
+            if let Err(e) = check(&html, &opts) {
+                panic!("shorthand round-trip failed for {}:\n{e}", path.display());
+            }
+            count += 1;
+        }
+    }
+    assert!(count >= 2, "corpus should contain samples, found {count}");
+}
+
+/// The directive must precede content and actually shrink a color-heavy input.
+#[test]
+fn shorthand_contracts_and_expands() {
+    let opts = Options {
+        shorthand: true,
+        ..Options::default()
+    };
+    let html = r#"<div class="flex items-center bg-indigo-400"><p class="text-indigo-400 font-semibold">Hi</p></div>"#;
+    let fhtml = convert(html, &opts).fhtml;
+    assert!(
+        fhtml.starts_with("#!shorthand\n"),
+        "missing directive:\n{fhtml}"
+    );
+    assert!(fhtml.contains("bi4") && fhtml.contains("ti4") && fhtml.contains("fsb"));
+    // Expansion reproduces the original DOM.
+    let out = compile(&fhtml, Mode::Min).unwrap();
+    compare_html(html, &out, &Options::default()).unwrap();
+}
+
+/// A verbatim class that would itself decode as a code is `=`-escaped by
+/// contraction, so the round-trip keeps it literal instead of expanding it.
+#[test]
+fn shorthand_escapes_colliding_literal() {
+    let opts = Options {
+        shorthand: true,
+        ..Options::default()
+    };
+    // `ic` is the code for `items-center`; as a literal class it must survive.
+    let html = r#"<span class="ic"></span>"#;
+    let fhtml = convert(html, &opts).fhtml;
+    assert!(fhtml.contains("=ic"), "collision not escaped:\n{fhtml}");
+    let out = compile(&fhtml, Mode::Min).unwrap();
+    compare_html(html, &out, &Options::default()).unwrap();
+}
+
+/// Without the directive, a token that looks like a code stays literal.
+#[test]
+fn shorthand_off_by_default() {
+    let out = compile("span ti4 fx\n", Mode::Min).unwrap();
+    assert_eq!(out, r#"<span class="ti4 fx"></span>"#);
+}
+
 // ── Rendered output: pretty/min element-tree invariant (SPEC §11) ───────────
 
 /// The §11 same-element-tree contract extends to template rendering: the

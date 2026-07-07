@@ -258,6 +258,9 @@ struct Parser {
     step: Option<usize>,
     warnings: Vec<String>,
     templates: bool,
+    /// `#!shorthand` seen: bare class tokens are decoded through the codebook
+    /// (SPEC §3.x). Off until the directive appears.
+    shorthand: bool,
 }
 
 impl Parser {
@@ -289,6 +292,7 @@ impl Parser {
             step: None,
             warnings: Vec::new(),
             templates,
+            shorthand: false,
         }
     }
 
@@ -386,7 +390,12 @@ impl Parser {
                 nodes.push(Node::TextBlock(self.parse_text_block(depth)?));
             } else {
                 let first_tok = content.split_whitespace().next().unwrap();
-                if first_tok == "doctype" {
+                if content == "#!shorthand" {
+                    // File-level directive: enable class shorthand for the rest
+                    // of the file. Emits no node.
+                    self.shorthand = true;
+                    self.pos += 1;
+                } else if first_tok == "doctype" {
                     let rest = content["doctype".len()..].trim();
                     if !(rest.is_empty() || rest == "html") {
                         return err(
@@ -404,7 +413,7 @@ impl Parser {
                 } else {
                     let (logical, start) = self.join_continuations()?;
                     let mut cur = Cur::new(&logical, start);
-                    let mut el = parse_element(&mut cur, self.templates)?;
+                    let mut el = parse_element(&mut cur, self.templates, self.shorthand)?;
                     let children = self.parse_block(depth + 1)?;
                     innermost(&mut el).children = children;
                     check_void_content(&el)?;
@@ -859,7 +868,7 @@ fn scan_expr(cur: &mut Cur, brace_col: usize) -> Result<TplExpr> {
 }
 
 /// Parses one element from the cursor (SPEC §4). Recurses for `>` chains.
-fn parse_element(cur: &mut Cur, templates: bool) -> Result<Element> {
+fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Element> {
     let src = cur.s;
     let line = cur.line;
     cur.eat_ws();
@@ -989,7 +998,7 @@ fn parse_element(cur: &mut Cur, templates: bool) -> Result<Element> {
             if cur.at_end() {
                 return err(line, cur.col(), "expected an element after `>`");
             }
-            el.chain = Some(Box::new(parse_element(cur, templates)?));
+            el.chain = Some(Box::new(parse_element(cur, templates, shorthand)?));
             break;
         }
         if el.text.is_some() {
@@ -1009,10 +1018,24 @@ fn parse_element(cur: &mut Cur, templates: bool) -> Result<Element> {
             el.id = Some(id.to_string());
             continue;
         }
-        el.classes.push(ClassItem::Lit(tok.to_string()));
+        el.classes.push(ClassItem::Lit(class_token(tok, shorthand)));
     }
 
     Ok(el)
+}
+
+/// Resolves a bare class token to its literal class name. In `#!shorthand`
+/// mode a recognized code is decoded (`ti4` → `text-indigo-400`); a leading
+/// `=` escapes a token to stay verbatim (`=ti4` → `ti4`); anything else is
+/// left untouched.
+fn class_token(tok: &str, shorthand: bool) -> String {
+    if !shorthand {
+        return tok.to_string();
+    }
+    match tok.strip_prefix('=') {
+        Some(literal) => literal.to_string(),
+        None => crate::shorthand::decode(tok).unwrap_or_else(|| tok.to_string()),
+    }
 }
 
 /// A `{expr}` token in class position. The cursor sits on `{`.

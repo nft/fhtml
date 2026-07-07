@@ -1,0 +1,313 @@
+//! Class shorthand codebook.
+//!
+//! An *optional, opt-in* encoding for Tailwind class tokens: `ti4` decodes to
+//! `text-indigo-400`, `fx` to `flex`. Two layers share one table so the two
+//! directions can never drift:
+//!
+//! - a **generative grammar** for color utilities — `{property}{color}{shade}`
+//!   concatenated with no separators (`bg-indigo-400` → `bi4`);
+//! - a **curated table** for the most common non-color utilities (`rounded-full`
+//!   → `rf`), matched as a whole token and taking precedence over the grammar.
+//!
+//! [`decode`] expands one token (compile path); [`encode`] contracts one class
+//! (`html2fhtml`). [`encode`] emits a code *only if* it round-trips
+//! (`decode(encode(c)) == Some(c)`), so contraction can never produce a token
+//! that would decode to a different class — anything that doesn't round-trip is
+//! left verbatim by the caller.
+//!
+//! v1 covers color utilities and the table only. Variants (`hover:`, `dark:`,
+//! …) are deferred to v1.1 (plan §2a): a class containing `:` never encodes.
+
+/// Curated non-color utilities: `(code, class)`. Codes and classes are both
+/// unique (asserted in tests). Matched as an exact whole token, before the
+/// grammar. Seeded from `bench/cheatsheet.md` / corpus frequency; grow on
+/// demand — the grammar already covers the combinatorial color space.
+const TABLE: &[(&str, &str)] = &[
+    // display / layout
+    ("fx", "flex"),
+    ("ig", "inline-grid"),
+    ("gr", "grid"),
+    ("blk", "block"),
+    ("ib", "inline-block"),
+    ("hd", "hidden"),
+    ("rel", "relative"),
+    ("abs", "absolute"),
+    // flex/grid alignment
+    ("ic", "items-center"),
+    ("is", "items-start"),
+    ("ie", "items-end"),
+    ("jc", "justify-center"),
+    ("jb", "justify-between"),
+    ("je", "justify-end"),
+    ("js", "justify-start"),
+    ("fc", "flex-col"),
+    ("fwr", "flex-wrap"),
+    ("f1", "flex-1"),
+    // sizing
+    ("wf", "w-full"),
+    ("hf", "h-full"),
+    ("ws", "w-screen"),
+    ("hs", "h-screen"),
+    ("mxa", "mx-auto"),
+    // rounding
+    ("rf", "rounded-full"),
+    ("rd", "rounded"),
+    ("rsm", "rounded-sm"),
+    ("rmd", "rounded-md"),
+    ("rl", "rounded-lg"),
+    ("rx", "rounded-xl"),
+    ("r2x", "rounded-2xl"),
+    // shadow / border
+    ("sh", "shadow"),
+    ("shs", "shadow-sm"),
+    ("shm", "shadow-md"),
+    ("shl", "shadow-lg"),
+    ("bo", "border"),
+    // typography
+    ("txs", "text-xs"),
+    ("ts", "text-sm"),
+    ("tb", "text-base"),
+    ("tl", "text-lg"),
+    ("txl", "text-xl"),
+    ("t2x", "text-2xl"),
+    ("fmd", "font-medium"),
+    ("fsb", "font-semibold"),
+    ("fb", "font-bold"),
+    ("tc", "text-center"),
+    ("tr", "text-right"),
+    ("un", "underline"),
+    ("tra", "truncate"),
+    // position helpers
+    ("ins", "inset-0"),
+    ("po", "pointer-events-none"),
+    ("cp", "cursor-pointer"),
+    ("of", "overflow-hidden"),
+    ("sr", "sr-only"),
+];
+
+/// Color-utility property prefixes: `(code, full)`. Order longest-first so the
+/// greedy decode tries 2-char codes before 1-char; [`decode`] backtracks when a
+/// longer prefix yields no valid parse (e.g. `to4` → `text-orange-400`, not the
+/// dead end `to-` + `"4"`).
+const PROPS: &[(&str, &str)] = &[
+    ("bd", "border-"),
+    ("dv", "divide-"),
+    ("fm", "from-"),
+    ("pl", "placeholder-"),
+    ("vi", "via-"),
+    ("to", "to-"),
+    ("t", "text-"),
+    ("b", "bg-"),
+    ("r", "ring-"),
+    ("o", "outline-"),
+    ("f", "fill-"),
+    ("s", "stroke-"),
+];
+
+/// Shaded color codes: `(code, name)`, longest-first for greedy prefix match.
+const COLORS: &[(&str, &str)] = &[
+    ("sl", "slate"),
+    ("sk", "sky"),
+    ("st", "stone"),
+    ("gy", "gray"),
+    ("gn", "green"),
+    ("zn", "zinc"),
+    ("ne", "neutral"),
+    ("rd", "red"),
+    ("ro", "rose"),
+    ("am", "amber"),
+    ("em", "emerald"),
+    ("pu", "purple"),
+    ("pk", "pink"),
+    ("o", "orange"),
+    ("y", "yellow"),
+    ("l", "lime"),
+    ("t", "teal"),
+    ("c", "cyan"),
+    ("b", "blue"),
+    ("i", "indigo"),
+    ("v", "violet"),
+    ("f", "fuchsia"),
+];
+
+/// Shadeless colors: `black`/`white` carry no `-NNN` suffix (`text-white` → `tw`).
+const COLORS_NOSHADE: &[(&str, &str)] = &[("bk", "black"), ("w", "white")];
+
+/// Expands one shorthand token to its full class, or `None` if the token is not
+/// recognized (the caller then leaves it verbatim). Table first, then grammar.
+pub fn decode(tok: &str) -> Option<String> {
+    if tok.is_empty() {
+        return None;
+    }
+    if let Some(&(_, full)) = TABLE.iter().find(|(code, _)| *code == tok) {
+        return Some(full.to_string());
+    }
+    decode_grammar(tok)
+}
+
+fn decode_grammar(tok: &str) -> Option<String> {
+    for (pcode, pfull) in PROPS {
+        let Some(rest) = tok.strip_prefix(pcode) else {
+            continue;
+        };
+        // Shadeless colors must consume the whole remainder.
+        if let Some(&(_, cname)) = COLORS_NOSHADE.iter().find(|(ccode, _)| *ccode == rest) {
+            return Some(format!("{pfull}{cname}"));
+        }
+        // Shaded: a color prefix, then the rest is the entire shade.
+        for (ccode, cname) in COLORS {
+            let Some(shade_s) = rest.strip_prefix(ccode) else {
+                continue;
+            };
+            if let Some(shade) = decode_shade(shade_s) {
+                return Some(format!("{pfull}{cname}-{shade}"));
+            }
+        }
+        // This property prefix led nowhere — backtrack to a shorter one.
+    }
+    None
+}
+
+/// Decodes a shade tail: a single digit `1..9` is ×100 (the common 100–900);
+/// the rare `50`/`950` are written literally so no trailing zero is dropped.
+fn decode_shade(s: &str) -> Option<u16> {
+    match s {
+        "50" => Some(50),
+        "950" => Some(950),
+        _ => match s.as_bytes() {
+            [d @ b'1'..=b'9'] => Some((d - b'0') as u16 * 100),
+            _ => None,
+        },
+    }
+}
+
+/// Contracts one full class to its shortest shorthand, but only when the result
+/// round-trips. Returns `None` for anything not compressible (unknown class,
+/// a variant with `:`, or a code that would decode to something else).
+pub fn encode(class: &str) -> Option<String> {
+    let cand = encode_raw(class)?;
+    (decode(&cand).as_deref() == Some(class)).then_some(cand)
+}
+
+fn encode_raw(class: &str) -> Option<String> {
+    // Variants are v1.1 — never encode them (plan §2a).
+    if class.contains(':') {
+        return None;
+    }
+    if let Some(&(code, _)) = TABLE.iter().find(|(_, full)| *full == class) {
+        return Some(code.to_string());
+    }
+    for (pcode, pfull) in PROPS {
+        let Some(rest) = class.strip_prefix(pfull) else {
+            continue;
+        };
+        if let Some(&(ccode, _)) = COLORS_NOSHADE.iter().find(|(_, name)| *name == rest) {
+            return Some(format!("{pcode}{ccode}"));
+        }
+        if let Some((name, shade_s)) = rest.rsplit_once('-') {
+            if let Some(&(ccode, _)) = COLORS.iter().find(|(_, n)| *n == name) {
+                if let Some(scode) = encode_shade(shade_s) {
+                    return Some(format!("{pcode}{ccode}{scode}"));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn encode_shade(s: &str) -> Option<String> {
+    match s {
+        "50" => Some("50".to_string()),
+        "950" => Some("950".to_string()),
+        _ => {
+            let n: u16 = s.parse().ok()?;
+            ((100..=900).contains(&n) && n.is_multiple_of(100)).then(|| (n / 100).to_string())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    const SHADES: &[u16] = &[50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+
+    /// Every point of the grammar domain round-trips both ways.
+    #[test]
+    fn grammar_round_trips_exhaustively() {
+        for (_, pfull) in PROPS {
+            for (_, cname) in COLORS {
+                for shade in SHADES {
+                    let class = format!("{pfull}{cname}-{shade}");
+                    let code = encode(&class).unwrap_or_else(|| panic!("no encode for {class}"));
+                    assert_eq!(
+                        decode(&code).as_deref(),
+                        Some(class.as_str()),
+                        "code {code}"
+                    );
+                }
+            }
+            for (_, cname) in COLORS_NOSHADE {
+                let class = format!("{pfull}{cname}");
+                let code = encode(&class).unwrap_or_else(|| panic!("no encode for {class}"));
+                assert_eq!(
+                    decode(&code).as_deref(),
+                    Some(class.as_str()),
+                    "code {code}"
+                );
+            }
+        }
+    }
+
+    /// Every table entry round-trips, and codes/classes are unique.
+    #[test]
+    fn table_round_trips_and_is_unique() {
+        let mut codes = HashSet::new();
+        let mut classes = HashSet::new();
+        for (code, full) in TABLE {
+            assert!(codes.insert(*code), "duplicate table code {code}");
+            assert!(classes.insert(*full), "duplicate table class {full}");
+            assert_eq!(decode(code).as_deref(), Some(*full));
+            assert_eq!(encode(full).as_deref(), Some(*code), "class {full}");
+        }
+    }
+
+    /// The awkward property/color letter-overlap cases decode as intended.
+    #[test]
+    fn property_color_overlap_backtracks() {
+        assert_eq!(decode("to4").as_deref(), Some("text-orange-400"));
+        assert_eq!(decode("toi4").as_deref(), Some("to-indigo-400"));
+        assert_eq!(decode("bb5").as_deref(), Some("bg-blue-500"));
+        assert_eq!(decode("bi4").as_deref(), Some("bg-indigo-400"));
+        assert_eq!(decode("ti4").as_deref(), Some("text-indigo-400"));
+        assert_eq!(decode("bdi4").as_deref(), Some("border-indigo-400"));
+    }
+
+    #[test]
+    fn shade_edges() {
+        assert_eq!(decode("ti50").as_deref(), Some("text-indigo-50"));
+        assert_eq!(decode("ti950").as_deref(), Some("text-indigo-950"));
+        assert_eq!(decode("ti5").as_deref(), Some("text-indigo-500"));
+        assert_eq!(decode("ti9").as_deref(), Some("text-indigo-900"));
+    }
+
+    #[test]
+    fn shadeless_colors() {
+        assert_eq!(decode("tw").as_deref(), Some("text-white"));
+        assert_eq!(decode("tbk").as_deref(), Some("text-black"));
+        assert_eq!(encode("bg-white").as_deref(), Some("bw"));
+    }
+
+    #[test]
+    fn non_shorthand_is_left_alone() {
+        assert_eq!(decode(""), None);
+        assert_eq!(decode("w-1/2"), None);
+        assert_eq!(decode("data-[state=open]:bg-red-500"), None);
+        // Variants do not encode in v1.
+        assert_eq!(encode("hover:bg-blue-500"), None);
+        // Arbitrary values / unknown utilities stay verbatim.
+        assert_eq!(encode("bg-[#0f172a]"), None);
+        assert_eq!(encode("grid-cols-12"), None);
+    }
+}

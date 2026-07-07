@@ -15,6 +15,7 @@ mod fmt;
 mod jsgen;
 pub mod json;
 mod parser;
+pub mod shorthand;
 
 pub use emit::Mode;
 pub use error::Error;

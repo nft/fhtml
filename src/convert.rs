@@ -26,6 +26,9 @@ pub struct Options {
     /// Parse as a fragment with this context element (e.g. `table` for a bare
     /// `<tr>`) instead of as a document.
     pub fragment: Option<String>,
+    /// Contract class tokens through the shorthand codebook and emit the
+    /// `#!shorthand` directive.
+    pub shorthand: bool,
 }
 
 impl Default for Options {
@@ -34,6 +37,7 @@ impl Default for Options {
             convert_svg: false,
             chains: true,
             fragment: None,
+            shorthand: false,
         }
     }
 }
@@ -56,8 +60,15 @@ pub fn convert(html: &str, opts: &Options) -> Converted {
     for item in items_of(&roots.roots) {
         conv.convert_item(&item, &mut nodes);
     }
+    let body = format_nodes(&nodes);
     Converted {
-        fhtml: format_nodes(&nodes),
+        // The directive must precede all content so the compiler decodes every
+        // element's classes (parser sets the flag on first sight).
+        fhtml: if opts.shorthand {
+            format!("#!shorthand\n{body}")
+        } else {
+            body
+        },
         warnings: conv.warnings,
     }
 }
@@ -338,6 +349,23 @@ impl Conv<'_> {
         self.warnings.push(msg.into());
     }
 
+    /// Contracts one class token for the shorthand output. Returns the code
+    /// when it round-trips, an `=`-escaped literal when the class would itself
+    /// decode as a code (keeping it verbatim), else the class unchanged. The
+    /// result always decodes back to `class`.
+    fn contract_class(&self, class: &str) -> String {
+        if !self.opts.shorthand {
+            return class.to_string();
+        }
+        if let Some(code) = crate::shorthand::encode(class) {
+            code
+        } else if crate::shorthand::decode(class).is_some() {
+            format!("={class}")
+        } else {
+            class.to_string()
+        }
+    }
+
     fn convert_item(&mut self, item: &Item, out: &mut Vec<Node>) {
         match item {
             Item::Text(t) => match t.strip_suffix(' ') {
@@ -457,7 +485,7 @@ impl Conv<'_> {
                 "class" => el.classes.extend(
                     value
                         .split_ascii_whitespace()
-                        .map(|c| ClassItem::Lit(c.to_string())),
+                        .map(|c| ClassItem::Lit(self.contract_class(c))),
                 ),
                 n if BOOLEAN_ATTRS.contains(&n)
                     && (value.is_empty() || value.eq_ignore_ascii_case(n)) =>

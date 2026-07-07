@@ -16,6 +16,8 @@ OPTIONS:
   -o <PATH>          output file, or output directory for a directory input
   --convert-svg      convert svg/math subtrees instead of raw passthrough
   --no-chains        disable `>` chain synthesis
+  --shorthand        contract class tokens to the shorthand codebook and
+                     emit `#!shorthand`
   --fragment[=TAG]   parse input as a fragment (context element TAG,
                      default body) — for snippets that document parsing
                      mangles, e.g. a bare <tr>
@@ -56,6 +58,7 @@ fn run() -> Result<(), String> {
         match args[i].as_str() {
             "--convert-svg" => opts.convert_svg = true,
             "--no-chains" => opts.chains = false,
+            "--shorthand" => opts.shorthand = true,
             "--check" => do_check = true,
             "--dom-eq" => {
                 let a = args

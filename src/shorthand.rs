@@ -6,8 +6,10 @@
 //!
 //! - a **generative grammar** for color utilities — `{property}{color}{shade}`
 //!   concatenated with no separators (`bg-indigo-400` → `bi4`);
+//! - a **spacing grammar** for the padding/margin/gap/size scale, dropping the
+//!   hyphens (`px-4` → `px4`, `gap-x-6` → `gx6`, `-mt-4` → `-mt4`);
 //! - a **curated table** for the most common non-color utilities (`rounded-full`
-//!   → `rf`), matched as a whole token and taking precedence over the grammar.
+//!   → `rf`), matched as a whole token and taking precedence over the grammars.
 //!
 //! [`decode`] expands one token (compile path); [`encode`] contracts one class
 //! (`html2fhtml`). [`encode`] emits a code *only if* it round-trips
@@ -133,8 +135,48 @@ const COLORS: &[(&str, &str)] = &[
 /// Shadeless colors: `black`/`white` carry no `-NNN` suffix (`text-white` → `tw`).
 const COLORS_NOSHADE: &[(&str, &str)] = &[("bk", "black"), ("w", "white")];
 
+/// Spacing/sizing property prefixes: `(code, full)`. The code drops the code
+/// prefix's trailing hyphen; the value follows directly (`px-4` → `px4`,
+/// `gap-x-6` → `gx6`). Order longest-first for greedy decode. `pl` overlaps the
+/// color `placeholder-` prefix, but the value disambiguates: a numeric tail is
+/// spacing, a color tail is the color grammar (which runs first).
+const SPACING_PROPS: &[(&str, &str)] = &[
+    ("spx", "space-x-"),
+    ("spy", "space-y-"),
+    ("px", "px-"),
+    ("py", "py-"),
+    ("pt", "pt-"),
+    ("pr", "pr-"),
+    ("pb", "pb-"),
+    ("pl", "pl-"),
+    ("mx", "mx-"),
+    ("my", "my-"),
+    ("mt", "mt-"),
+    ("mr", "mr-"),
+    ("mb", "mb-"),
+    ("ml", "ml-"),
+    ("gx", "gap-x-"),
+    ("gy", "gap-y-"),
+    ("sz", "size-"),
+    ("p", "p-"),
+    ("m", "m-"),
+    ("g", "gap-"),
+    ("w", "w-"),
+    ("h", "h-"),
+];
+
+/// Tailwind's default spacing scale — the only values the spacing grammar
+/// accepts, so encode/decode stay bijective. `px` is the literal 1px step;
+/// fractions, `auto`, `full`, `screen` are left verbatim (or live in the table).
+const SPACING_SCALE: &[&str] = &[
+    "0", "0.5", "1", "1.5", "2", "2.5", "3", "3.5", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+    "14", "16", "20", "24", "28", "32", "36", "40", "44", "48", "52", "56", "60", "64", "72", "80",
+    "96", "px",
+];
+
 /// Expands one shorthand token to its full class, or `None` if the token is not
-/// recognized (the caller then leaves it verbatim). Table first, then grammar.
+/// recognized (the caller then leaves it verbatim). Table, then color grammar,
+/// then spacing grammar.
 pub fn decode(tok: &str) -> Option<String> {
     if tok.is_empty() {
         return None;
@@ -142,7 +184,25 @@ pub fn decode(tok: &str) -> Option<String> {
     if let Some(&(_, full)) = TABLE.iter().find(|(code, _)| *code == tok) {
         return Some(full.to_string());
     }
-    decode_grammar(tok)
+    decode_grammar(tok).or_else(|| decode_spacing(tok))
+}
+
+/// Decodes a spacing/sizing token, honoring a leading `-` for negative margins
+/// and insets (`-mt4` → `-mt-4`).
+fn decode_spacing(tok: &str) -> Option<String> {
+    let (neg, body) = match tok.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", tok),
+    };
+    for (pcode, pfull) in SPACING_PROPS {
+        let Some(val) = body.strip_prefix(pcode) else {
+            continue;
+        };
+        if SPACING_SCALE.contains(&val) {
+            return Some(format!("{neg}{pfull}{val}"));
+        }
+    }
+    None
 }
 
 fn decode_grammar(tok: &str) -> Option<String> {
@@ -210,6 +270,22 @@ fn encode_raw(class: &str) -> Option<String> {
                     return Some(format!("{pcode}{ccode}{scode}"));
                 }
             }
+        }
+    }
+    encode_spacing(class)
+}
+
+fn encode_spacing(class: &str) -> Option<String> {
+    let (neg, body) = match class.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", class),
+    };
+    for (pcode, pfull) in SPACING_PROPS {
+        let Some(val) = body.strip_prefix(pfull) else {
+            continue;
+        };
+        if SPACING_SCALE.contains(&val) {
+            return Some(format!("{neg}{pcode}{val}"));
         }
     }
     None
@@ -290,6 +366,40 @@ mod tests {
         assert_eq!(decode("ti950").as_deref(), Some("text-indigo-950"));
         assert_eq!(decode("ti5").as_deref(), Some("text-indigo-500"));
         assert_eq!(decode("ti9").as_deref(), Some("text-indigo-900"));
+    }
+
+    /// Every spacing prop × every scale value round-trips both ways.
+    #[test]
+    fn spacing_round_trips_exhaustively() {
+        for (_, pfull) in SPACING_PROPS {
+            for val in SPACING_SCALE {
+                let class = format!("{pfull}{val}");
+                let code = encode(&class).unwrap_or_else(|| panic!("no encode for {class}"));
+                assert_eq!(
+                    decode(&code).as_deref(),
+                    Some(class.as_str()),
+                    "code {code}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn spacing_examples_and_negatives() {
+        assert_eq!(decode("g4").as_deref(), Some("gap-4"));
+        assert_eq!(decode("px4").as_deref(), Some("px-4"));
+        assert_eq!(decode("gx6").as_deref(), Some("gap-x-6"));
+        assert_eq!(decode("spy4").as_deref(), Some("space-y-4"));
+        assert_eq!(decode("p0.5").as_deref(), Some("p-0.5"));
+        assert_eq!(decode("mpx").as_deref(), Some("m-px"));
+        // Negative margins keep the leading `-`.
+        assert_eq!(decode("-mt4").as_deref(), Some("-mt-4"));
+        assert_eq!(encode("-mt-4").as_deref(), Some("-mt4"));
+        // Off-scale values are not spacing tokens.
+        assert_eq!(decode("p13"), None);
+        // `pl` + numeric is padding-left; `pl` + color is placeholder (color wins).
+        assert_eq!(decode("pl2").as_deref(), Some("pl-2"));
+        assert_eq!(decode("plsl4").as_deref(), Some("placeholder-slate-400"));
     }
 
     #[test]

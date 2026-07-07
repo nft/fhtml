@@ -17,8 +17,14 @@
 //! that would decode to a different class — anything that doesn't round-trip is
 //! left verbatim by the caller.
 //!
-//! v1 covers color utilities and the table only. Variants (`hover:`, `dark:`,
-//! …) are deferred to v1.1 (plan §2a): a class containing `:` never encodes.
+//! **Variants** (`hover:`, `dark:`, `sm:`, stacked `dark:hover:…`) are handled
+//! *transparently*: every `:`-separated variant segment is kept verbatim and
+//! only the final base segment runs through the codebook (`hover:bg-blue-500`
+//! → `hover:bb5`). Measurement (plan §2a) showed abbreviating the variant words
+//! themselves saves nothing — `hover:` and a code like `hv:` both cost one BPE
+//! token, and abbreviations fragment *worse* when stacked — so v1.1 leaves the
+//! words alone and banks the base savings, at zero new ambiguity: the colon is
+//! an unambiguous separator, so no new codebook is needed.
 
 /// Curated non-color utilities: `(code, class)`. Codes and classes are both
 /// unique (asserted in tests). Matched as an exact whole token, before the
@@ -181,6 +187,21 @@ pub fn decode(tok: &str) -> Option<String> {
     if tok.is_empty() {
         return None;
     }
+    // Variant-transparent: keep the `:`-separated variant prefix verbatim,
+    // decode only the base after the last colon (`hover:bb5` → `hover:...`).
+    // Stacked variants fall out for free — `rsplit_once` peels one colon and
+    // leaves the rest (`dark:hover`) in the prefix.
+    if let Some((prefix, base)) = tok.rsplit_once(':') {
+        return decode_base(base).map(|full| format!("{prefix}:{full}"));
+    }
+    decode_base(tok)
+}
+
+/// Decodes a base (variant-free) token: table, then color grammar, then spacing.
+fn decode_base(tok: &str) -> Option<String> {
+    if tok.is_empty() {
+        return None;
+    }
     if let Some(&(_, full)) = TABLE.iter().find(|(code, _)| *code == tok) {
         return Some(full.to_string());
     }
@@ -250,10 +271,15 @@ pub fn encode(class: &str) -> Option<String> {
 }
 
 fn encode_raw(class: &str) -> Option<String> {
-    // Variants are v1.1 — never encode them (plan §2a).
-    if class.contains(':') {
-        return None;
+    // Variant-transparent: encode only the base behind the last colon, keep
+    // the variant prefix verbatim (`hover:bg-blue-500` → `hover:bb5`).
+    if let Some((prefix, base)) = class.rsplit_once(':') {
+        return encode_base(base).map(|code| format!("{prefix}:{code}"));
     }
+    encode_base(class)
+}
+
+fn encode_base(class: &str) -> Option<String> {
     if let Some(&(code, _)) = TABLE.iter().find(|(_, full)| *full == class) {
         return Some(code.to_string());
     }
@@ -413,11 +439,47 @@ mod tests {
     fn non_shorthand_is_left_alone() {
         assert_eq!(decode(""), None);
         assert_eq!(decode("w-1/2"), None);
-        assert_eq!(decode("data-[state=open]:bg-red-500"), None);
-        // Variants do not encode in v1.
-        assert_eq!(encode("hover:bg-blue-500"), None);
         // Arbitrary values / unknown utilities stay verbatim.
         assert_eq!(encode("bg-[#0f172a]"), None);
         assert_eq!(encode("grid-cols-12"), None);
+    }
+
+    /// Variants keep their `:`-separated prefix verbatim and encode the base.
+    #[test]
+    fn variants_encode_base_only() {
+        // Single variant, base via each grammar layer + the table.
+        assert_eq!(encode("hover:bg-blue-500").as_deref(), Some("hover:bb5"));
+        assert_eq!(decode("hover:bb5").as_deref(), Some("hover:bg-blue-500"));
+        assert_eq!(encode("dark:text-white").as_deref(), Some("dark:tw"));
+        assert_eq!(encode("sm:px-6").as_deref(), Some("sm:px6"));
+        assert_eq!(
+            encode("focus:ring-indigo-500").as_deref(),
+            Some("focus:ri5")
+        );
+        assert_eq!(encode("hover:underline").as_deref(), Some("hover:un"));
+        // Stacked variants: only the last colon is the base boundary.
+        assert_eq!(
+            encode("dark:hover:bg-slate-800").as_deref(),
+            Some("dark:hover:bsl8")
+        );
+        assert_eq!(
+            decode("dark:hover:bsl8").as_deref(),
+            Some("dark:hover:bg-slate-800")
+        );
+        // Negative spacing behind a variant keeps its leading `-`.
+        assert_eq!(encode("sm:-mt-4").as_deref(), Some("sm:-mt4"));
+        assert_eq!(decode("sm:-mt4").as_deref(), Some("sm:-mt-4"));
+        // Base that doesn't encode leaves the whole class verbatim.
+        assert_eq!(encode("focus:outline-none"), None);
+        assert_eq!(encode("sm:table-cell"), None);
+        // Even an arbitrary `[…]` variant prefix is kept verbatim; only its
+        // base is contracted, and it round-trips.
+        assert_eq!(
+            encode("data-[state=open]:bg-red-500").as_deref(),
+            Some("data-[state=open]:brd5")
+        );
+        // A colon *inside* an arbitrary value (no real variant) must not
+        // produce a bogus base — it simply stays verbatim.
+        assert_eq!(encode("bg-[url(https://x)]"), None);
     }
 }

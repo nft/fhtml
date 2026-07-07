@@ -2,8 +2,18 @@
 """LLM generation-error benchmark: can models *write* fhtml correctly?
 
 Task: translate each corpus component's canonical pretty HTML into a target
-syntax (fhtml or pug — Pug is the control: the incumbent indentation
-language). Grading is fully automatic:
+syntax. Targets:
+
+  fhtml      plain fhtml (the primary subject)
+  pug        the control — the incumbent indentation language
+  shorthand  fhtml with the class shorthand:
+             system prompt carries the extra `bench/shorthand-legend.md`, the
+             model emits `#!shorthand` + contracted classes. Tests whether the
+             codebook is *authorable*, not just machine-emittable. Pair with
+             `bench/shorthand_economics.py` for the net-token (legend-cost)
+             half of the gate.
+
+Grading is fully automatic:
 
   compile  the model's output compiles (fhtml binary / real Pug compiler)
   dom      the compiled HTML is normalized-DOM-equivalent to the reference
@@ -26,8 +36,9 @@ Zero Python deps (stdlib urllib). Pug grading needs
 Usage:
   export ANTHROPIC_API_KEY=…                  # or OPENROUTER_API_KEY=…
   python3 bench/run.py                        # populates bench/out/ first
+  python3 bench/gen_legend.py                 # for --targets shorthand
   python3 bench/generate.py --models claude-haiku-4-5-20251001 \
-      --targets fhtml,pug [--limit 10] [--verbose] [--resume]
+      --targets fhtml,pug,shorthand [--limit 10] [--verbose] [--resume]
 
 results.json is rewritten after every graded case, so an interrupted run
 loses nothing; rerun with --resume to skip already-graded cases.
@@ -80,7 +91,22 @@ PROMPT = {
         "':', '/', '.', or '[' must go in a (class=\"...\") attribute. "
         "Reply with ONLY the Pug source — no code fences, no commentary."
     ),
+    # shorthand = fhtml + the class-shorthand codebook. Same structural language; classes are contracted via the
+    # legend. It is a superset, so an unknown class written in full still
+    # compiles — that safety net is what makes the reliability question fair.
+    "shorthand": (
+        "You translate HTML into fhtml, a whitespace-based markup language, "
+        "using its class shorthand. Two references follow.\n\n"
+        "fhtml syntax:\n\n{cheatsheet}\n\n"
+        "class shorthand:\n\n{legend}\n\n"
+        "Reply with ONLY the fhtml source (first line `#!shorthand`) — no "
+        "code fences, no commentary."
+    ),
 }
+
+# Targets compiled by the fhtml binary (the `#!shorthand` directive in-source
+# drives expansion for the shorthand target); everything else is Pug.
+FHTML_TARGETS = ("fhtml", "shorthand")
 
 
 def run(cmd, stdin=None):
@@ -188,12 +214,24 @@ def strip_fences(text):
     return text + "\n"
 
 
+def ensure_directive(source):
+    """Guarantee the `#!shorthand` opt-in on the first non-empty line so a
+    forgotten boilerplate line doesn't get scored as a codes-reliability miss.
+    Returns (source, was_missing)."""
+    for line in source.splitlines():
+        if line.strip():
+            if line.strip() == "#!shorthand":
+                return source, False
+            break
+    return "#!shorthand\n" + source, True
+
+
 def compile_output(target, source, workdir, stem):
     """Model output → HTML, or an error string."""
     src_path = os.path.join(workdir, f"{stem}.{target}")
     with open(src_path, "w") as fh:
         fh.write(source)
-    if target == "fhtml":
+    if target in FHTML_TARGETS:
         code, html, err = run([FHTML, "--min", src_path])
         return (html, None) if code == 0 else (None, err.strip())
     script = (
@@ -236,6 +274,8 @@ def fewshot_messages(target, pretty_dir):
             html = fh.read()
         if target == "fhtml":
             _, out, _ = run([H2F, html_path])
+        elif target == "shorthand":
+            _, out, _ = run([H2F, "--shorthand", html_path])
         else:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             import pug_emit
@@ -273,6 +313,11 @@ def main():
 
     with open(os.path.join(ROOT, "bench", "cheatsheet.md")) as fh:
         cheatsheet = fh.read()
+    legend = ""
+    legend_path = os.path.join(ROOT, "bench", "shorthand-legend.md")
+    if os.path.exists(legend_path):
+        with open(legend_path) as fh:
+            legend = fh.read()
 
     stems = sorted(
         os.path.splitext(f)[0].replace(".pretty", "")
@@ -282,6 +327,9 @@ def main():
         stems = stems[: args.limit]
     models = args.models.split(",")
     targets = args.targets.split(",")
+    if "shorthand" in targets and not legend:
+        sys.exit("bench/shorthand-legend.md missing — run "
+                 "`python3 bench/gen_legend.py` first")
 
     os.makedirs(GEN, exist_ok=True)
     # results.json is the accumulator across runs and models; it is rewritten
@@ -312,7 +360,7 @@ def main():
 
     for model in models:
         for target in targets:
-            system = PROMPT[target].format(cheatsheet=cheatsheet)
+            system = PROMPT[target].format(cheatsheet=cheatsheet, legend=legend)
             shots = fewshot_messages(target, pretty_dir)
             if args.verbose:
                 vblock(f"system prompt · {model} / {target}", system)
@@ -345,6 +393,9 @@ def main():
                         f"same command with --resume to continue from "
                         f"`{stem}`.")
                 source = strip_fences(raw)
+                directive_missing = False
+                if target == "shorthand":
+                    source, directive_missing = ensure_directive(source)
                 if args.verbose:
                     vblock(f"completion · {model} / {target} / {stem} "
                            f"({time.time() - t0:.1f}s, {len(raw)} bytes)", raw)
@@ -365,6 +416,10 @@ def main():
                     "model": model, "target": target, "component": stem,
                     "compile": err is None, "dom": ok_dom, "status": status,
                     "error": err or (None if ok_dom else dom_err),
+                    # shorthand-only: model forgot the `#!shorthand` opt-in
+                    # line (auto-added so codes are still graded fairly).
+                    **({"directive_missing": directive_missing}
+                       if target == "shorthand" else {}),
                 }
                 save()
                 print(f"{model} {target} {stem}: {MARKS[status]}", flush=True)
@@ -378,10 +433,13 @@ def main():
             n_compile = sum(1 for r in recs if r["compile"])
             n_dom = sum(1 for r in recs if r["dom"])
             n_ws = sum(1 for r in recs if r.get("status") == "ws-only")
+            tail = f"(+{n_ws} whitespace-only misses)"
+            if target == "shorthand":
+                n_miss = sum(1 for r in recs if r.get("directive_missing"))
+                tail += f"; {n_miss}/{n} forgot the #!shorthand line"
             print(
                 f"\n== {model} / {target}: compile {n_compile}/{n}, "
-                f"DOM-equivalent {n_dom}/{n} "
-                f"(+{n_ws} whitespace-only misses)\n", flush=True,
+                f"DOM-equivalent {n_dom}/{n} {tail}\n", flush=True,
             )
 
     print(f"raw results ({len(merged)} cases): {res_path}")

@@ -76,9 +76,6 @@ pub struct Document {
 /// One `def name(param param=default …)` component (SPEC §10.3). Definition
 /// order doesn't matter: calls may reference a `def` that appears later, so
 /// name resolution happens at render time, not here.
-// TEMPORARY allow: the renderer starts reading these fields later
-//.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Def {
     pub name: String,
@@ -87,7 +84,6 @@ pub struct Def {
     pub line: usize,
 }
 
-#[allow(dead_code)] // TEMPORARY: read later
 #[derive(Debug)]
 pub struct Param {
     pub name: String,
@@ -98,7 +94,6 @@ pub struct Param {
 /// One `+name(args)` component call (SPEC §10.4). Arguments are named-only;
 /// whether each name matches a parameter is checked at render time (the
 /// `def` may appear later in the file).
-#[allow(dead_code)] // TEMPORARY: read later
 #[derive(Debug)]
 pub struct Call {
     pub name: String,
@@ -112,7 +107,6 @@ pub struct Call {
 /// A call argument. The value reuses the attribute shapes: `Bool` for a bare
 /// name (= `true`), `Str` for a quoted string with interpolation, `Expr` for
 /// an unquoted expression (SPEC §10.4 — never a coerced string).
-#[allow(dead_code)] // TEMPORARY: read later
 #[derive(Debug)]
 pub struct Arg {
     pub name: String,

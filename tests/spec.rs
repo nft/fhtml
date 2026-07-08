@@ -1398,13 +1398,208 @@ else
         );
     }
 
-    // TEMPORARY: calls parse end-to-end
-    // but rendering them is not implemented yet — this stub error flips there.
+    // --------------------------------- §10.3–§10.4 component calls render
+
     #[test]
-    fn call_render_is_stage_2_stub() {
-        let src = "def card(title)\n  h3 \"{title}\"\n+card(title='x')\n";
+    fn golden_call_from_spec_10_4() {
+        let src = r#"def card(title compact=false)
+  . rounded-xl p-6 {compact ? 'text-sm' : 'text-base'}
+    h3 font-semibold "{title}"
+    children
++card(title="Monthly stats" compact)
+  p text-sm "Revenue is up 12%."
+"#;
+        assert_eq!(
+            render(src, &Value::Null, Mode::Min).unwrap(),
+            "<div class=\"rounded-xl p-6 text-sm\"><h3 class=\"font-semibold\">Monthly stats</h3>\
+             <p class=\"text-sm\">Revenue is up 12%.</p></div>"
+        );
+    }
+
+    #[test]
+    fn defaults_evaluate_per_call_and_args_override() {
+        let src = "def badge(kind='info' n=3)\n  span \"{kind}:{n}\"\n+badge\n+badge(kind='warn' n={1 + 1})\n";
+        assert_eq!(
+            render(src, &Value::Null, Mode::Min).unwrap(),
+            "<span>info:3</span><span>warn:2</span>"
+        );
+    }
+
+    #[test]
+    fn argument_values_are_typed_not_strings() {
+        // §10.4: unquoted args go through the expression grammar — `n=3` is
+        // the number 3 (arithmetic works), bare `on` is boolean true.
+        let src = "def c(n on=false)\n  p \"{n + 1}\"\n  if on\n    p \"on\"\n+c(n=3 on)\n";
+        assert_eq!(
+            render(src, &Value::Null, Mode::Min).unwrap(),
+            "<p>4</p><p>on</p>"
+        );
+    }
+
+    #[test]
+    fn expression_args_pass_structured_values() {
+        let src = "def who(user)\n  p \"{user.name} <{user.email}>\"\n+who(user=member.profile)\n";
+        assert_eq!(
+            min_with(
+                src,
+                r#"{"member": {"profile": {"name": "Erin", "email": "e@x.io"}}}"#
+            ),
+            "<p>Erin &lt;e@x.io&gt;</p>"
+        );
+    }
+
+    #[test]
+    fn quoted_args_interpolate_in_caller_scope() {
+        let src = "def h(title)\n  h1 \"{title}\"\n+h(title=\"Hi, {user.name}!\")\n";
+        assert_eq!(
+            min_with(src, r#"{"user": {"name": "E"}}"#),
+            "<h1>Hi, E!</h1>"
+        );
+    }
+
+    #[test]
+    fn component_scope_is_closed() {
+        // §10.3: only the parameters are in scope in the body — the data
+        // root is not visible, and a param shadows a data name for the body
+        // while the caller block still sees the caller's scope.
+        let src =
+            "def c(x)\n  p \"{x}|{secret}\"\n  children\n+c(x='param')\n  p \"{secret}|{x}\"\n";
+        assert_eq!(
+            min_with(src, r#"{"secret": "s", "x": "data-x"}"#),
+            "<p>param|</p><p>s|data-x</p>"
+        );
+    }
+
+    #[test]
+    fn ctx_reaches_component_bodies_and_defaults() {
+        // §9.4/§10.3: `ctx` is in every scope; defaults may reference it.
+        let src = "def c(limit={ctx.pageSize - 1})\n  p \"{ctx.site}:{limit}\"\n+c\n";
+        let out = render_full(
+            src,
+            &Value::Null,
+            &data(r#"{"site": "acme", "pageSize": 10}"#),
+            Mode::Min,
+        )
+        .unwrap();
+        assert_eq!(out.html, "<p>acme:9</p>");
+    }
+
+    #[test]
+    fn children_repeats_and_empty_block_emits_nothing() {
+        let src = "def twice()\n  children\n  children\n+twice\n  p \"x\"\n+twice\n";
+        assert_eq!(
+            render(src, &Value::Null, Mode::Min).unwrap(),
+            "<p>x</p><p>x</p>"
+        );
+    }
+
+    #[test]
+    fn children_nests_through_component_layers() {
+        // A block passed to an inner call may itself say `children` — that is
+        // the *outer* component's children, rendered in its caller's scope.
+        let src = "def outer()\n  +inner\n    children\ndef inner()\n  . inner\n    children\n+outer\n  p \"{msg}\"\n";
+        assert_eq!(
+            min_with(src, r#"{"msg": "hi"}"#),
+            "<div class=\"inner\"><p>hi</p></div>"
+        );
+    }
+
+    #[test]
+    fn loop_variables_flow_into_args_and_blocks() {
+        let src = "def row(o)\n  li \"{o.id}\"\n  children\nul\n  for o in orders\n    +row(o=o)\n      em \"{o.note}\"\n";
+        assert_eq!(
+            min_with(
+                src,
+                r#"{"orders": [{"id": 1, "note": "a"}, {"id": 2, "note": "b"}]}"#
+            ),
+            "<ul><li>1</li><em>a</em><li>2</li><em>b</em></ul>"
+        );
+    }
+
+    #[test]
+    fn recursion_renders_trees() {
+        let src = "def tree(n)\n  li \"{n.v}\"\n  if n.kids\n    ul\n      for k in n.kids\n        +tree(n=k)\nul\n  +tree(n=root)\n";
+        assert_eq!(
+            min_with(
+                src,
+                r#"{"root": {"v": "a", "kids": [{"v": "b"}, {"v": "c", "kids": [{"v": "d"}]}]}}"#
+            ),
+            "<ul><li>a</li><ul><li>b</li><li>c</li><ul><li>d</li></ul></ul></ul>"
+        );
+    }
+
+    #[test]
+    fn call_depth_cap_errors_at_the_call_site() {
+        // §10.3: cap of 64, error position = the exceeding call.
+        let src = "def loop()\n  +loop\n+loop\n";
         let e = render(src, &Value::Null, Mode::Min).unwrap_err();
-        assert!(e.msg.contains("not implemented"), "got: {}", e.msg);
+        assert!(e.msg.contains("64"), "got: {}", e.msg);
+        assert_eq!((e.line, e.col), (2, 1));
+    }
+
+    #[test]
+    fn call_expands_at_call_depth_in_pretty() {
+        let src = "def item(t)\n  li \"{t}\"\nul\n  +item(t='a')\n";
+        assert_eq!(
+            render(src, &Value::Null, Mode::Pretty).unwrap(),
+            "<ul>\n  <li>a</li>\n</ul>\n"
+        );
+    }
+
+    #[test]
+    fn error_unknown_component() {
+        let e = render("+ghost\n", &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("unknown component"), "got: {}", e.msg);
+        assert!(e.msg.contains("`def ghost(…)`"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn error_unknown_argument_lists_params() {
+        let src = "def card(title compact=false)\n  p \"{title}\"\n+card(text='x')\n";
+        let e = render(src, &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("unknown argument `text`"), "got: {}", e.msg);
+        assert!(e.msg.contains("`title`, `compact`"), "got: {}", e.msg);
+        assert_eq!((e.line, e.col), (3, 7)); // the argument name
+    }
+
+    #[test]
+    fn error_missing_required_argument() {
+        let src = "def card(title compact=false)\n  p \"{title}\"\n+card(compact)\n";
+        let e = render(src, &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("missing argument `title`"), "got: {}", e.msg);
         assert_eq!(e.line, 3);
+    }
+
+    #[test]
+    fn error_block_to_childless_component() {
+        // §10.4: silently dropping caller markup would hide real mistakes.
+        let src = "def icon()\n  span \"*\"\n+icon\n  p \"lost\"\n";
+        let e = render(src, &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("never uses `children`"), "got: {}", e.msg);
+        assert_eq!(e.line, 3);
+    }
+
+    #[test]
+    fn golden_blog_cards_def_matches_plain_fhtml() {
+        // The measurement demo (−34% tokens vs plain fhtml): one `def post(…)` + three calls must
+        // produce byte-identical output to the fully expanded file.
+        let plain = include_str!("corpus/blog-cards.fhtml");
+        let def = include_str!("corpus/blog-cards-def.fhtml");
+        for mode in [Mode::Min, Mode::Pretty] {
+            assert_eq!(
+                render(def, &Value::Null, mode).unwrap(),
+                render(plain, &Value::Null, mode).unwrap(),
+                "mode {mode:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn calls_check_before_rendering_even_on_dead_branches() {
+        // The component table is validated up front — a bad call inside a
+        // branch this render never takes still errors.
+        let src = "def c(a)\n  p \"{a}\"\nif false\n  +c(wrong='x')\n";
+        let e = render(src, &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("unknown argument"), "got: {}", e.msg);
     }
 }

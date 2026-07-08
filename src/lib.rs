@@ -2,10 +2,10 @@
 //! language. See SPEC.md for the normative language definition.
 //!
 //! Implements the static markup layer (SPEC §1–§8, §11), the canonical formatter,
-//! and the template layer (SPEC §9 interpolation, §10.1–§10.2 statements).
-//! Components (§10.3–§10.4) parse; rendering, formatting, and the JS backend
-//! land later. `include` (§10.5) is
-//! recognized and rejected with a clear "not implemented" error.
+//! the template layer (SPEC §9 interpolation, §10.1–§10.2 statements),
+//! and components (§10.3–§10.4 `def`/`+call`/`children`) on the render path.
+//! Formatting and the JS backend for components land later. `include` (§10.5) is recognized and rejected
+//! with a clear "not implemented" error.
 
 #[cfg(feature = "convert")]
 pub mod convert;
@@ -82,7 +82,7 @@ pub fn compile_opts(src: &str, opts: &Options) -> Result<Output, Error> {
     }
     // A literal-only tree evaluates nothing, so this cannot error.
     Ok(Output {
-        html: emit::render_nodes(&doc.body, opts.mode, &Value::Null, &Value::Null)?,
+        html: emit::render_document(&doc, opts.mode, &Value::Null, &Value::Null)?,
         warnings,
     })
 }
@@ -100,11 +100,8 @@ pub fn render(src: &str, data: &Value, mode: Mode) -> Result<String, Error> {
 /// the offending interpolation or statement, like parse errors.
 pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<Output, Error> {
     let (doc, warnings) = parser::parse(src, true)?;
-    // `def`s are inert here — they emit nothing at their definition site.
-    // Rendering a `+call` is not implemented yet and errors
-    // in the emitter for now.
     Ok(Output {
-        html: emit::render_nodes(&doc.body, mode, data, ctx)?,
+        html: emit::render_document(&doc, mode, data, ctx)?,
         warnings,
     })
 }
@@ -116,7 +113,7 @@ pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<O
 /// source text.
 pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
     let (doc, warnings) = parser::parse(src, true)?;
-    // gate: the JS backend for
+    // Gate: the JS backend for
     // components is not implemented yet.
     if let Some((line, what)) = parser::first_p2_use(&doc) {
         return error::err(
@@ -137,7 +134,7 @@ pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
 /// `compile(format(s)) == compile(s)` and `format(format(s)) == format(s)`.
 pub fn format(src: &str) -> Result<String, Error> {
     let (doc, _) = parser::parse(src, true)?;
-    // gate: formatting components is not implemented yet.
+    // Gate: formatting components is not implemented yet.
     if let Some((line, what)) = parser::first_p2_use(&doc) {
         return error::err(
             line,

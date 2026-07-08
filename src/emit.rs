@@ -8,9 +8,14 @@
 //! interpolation against caller data. Render errors carry the file position
 //! of the interpolation or statement, in the same format as parse errors.
 
+use std::collections::HashMap;
+
 use crate::error::{err, Error, Result};
 use crate::expr::{self, Scope, Value};
-use crate::parser::{is_void, AttrValue, ClassItem, Element, ForLoop, Node, TextPart, TplExpr};
+use crate::parser::{
+    is_void, Arg, AttrValue, Call, ClassItem, Def, Document, Element, ForLoop, Node, TextPart,
+    TplExpr,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -18,17 +23,164 @@ pub enum Mode {
     Min,
 }
 
-/// Renders nodes against `data` (the name-resolution root) and `ctx` (the
-/// reserved context root, SPEC §9.4). Pass `Value::Null` for an empty scope.
-pub fn render_nodes(nodes: &[Node], mode: Mode, data: &Value, ctx: &Value) -> Result<String> {
+/// Component call-depth cap (SPEC §10.3): recursion is legal, runaway
+/// recursion is a render error at the call site.
+const MAX_CALL_DEPTH: usize = 64;
+
+/// Root of every component scope — components are closed over nothing
+/// (SPEC §10.3), so inside a body any name that is not a parameter is `null`.
+static NULL: Value = Value::Null;
+
+/// Renders a document against `data` (the name-resolution root) and `ctx`
+/// (the reserved context root, SPEC §9.4). Pass `Value::Null` for an empty
+/// scope. All component calls are checked up front — unknown components,
+/// unknown or missing arguments, and dropped blocks error before any output.
+pub fn render_document<'a>(
+    doc: &'a Document,
+    mode: Mode,
+    data: &'a Value,
+    ctx: &'a Value,
+) -> Result<String> {
+    let defs = check_components(doc)?;
     let mut r = R {
         mode,
         scope: Scope::new(data),
         ctx,
         out: String::new(),
+        defs,
+        frames: Vec::new(),
     };
-    r.block(nodes, 0)?;
+    r.block(&doc.body, 0)?;
     Ok(r.out)
+}
+
+/// A component with its lexical `children`-usage, precomputed once.
+struct DefInfo<'a> {
+    def: &'a Def,
+    uses_children: bool,
+}
+
+/// Builds the component table and statically checks every call in the file
+/// (SPEC §10.4) — body and def bodies alike, so a mistake errors even when
+/// the call sits on a branch this render never takes.
+fn check_components(doc: &Document) -> Result<HashMap<&str, DefInfo<'_>>> {
+    let mut defs = HashMap::new();
+    for def in &doc.defs {
+        let mut uses_children = false;
+        visit(&def.body, &mut |node| {
+            if matches!(node, Node::Children { .. }) {
+                uses_children = true;
+            }
+            Ok(())
+        })?;
+        // Duplicate names are a parse error, so plain insert.
+        defs.insert(def.name.as_str(), DefInfo { def, uses_children });
+    }
+    let mut check = |node: &Node| {
+        let Node::Call(c) = node else { return Ok(()) };
+        let Some(info) = defs.get(c.name.as_str()) else {
+            return err(
+                c.line,
+                1,
+                format!(
+                    "unknown component `+{}` — no `def {}(…)` in this file",
+                    c.name, c.name
+                ),
+            );
+        };
+        for arg in &c.args {
+            if !info.def.params.iter().any(|p| p.name == arg.name) {
+                return err(
+                    arg.line,
+                    arg.col,
+                    format!(
+                        "unknown argument `{}` — `{}` has {}",
+                        arg.name,
+                        c.name,
+                        describe_params(info.def)
+                    ),
+                );
+            }
+        }
+        for p in &info.def.params {
+            if p.default.is_none() && !c.args.iter().any(|a| a.name == p.name) {
+                return err(
+                    c.line,
+                    1,
+                    format!(
+                        "missing argument `{}` — the parameter has no default in `def {}` (line {})",
+                        p.name, c.name, info.def.line
+                    ),
+                );
+            }
+        }
+        if !c.children.is_empty() && !info.uses_children {
+            return err(
+                c.line,
+                1,
+                format!(
+                    "`{}` never uses `children`, so this block would be dropped (SPEC §10.4) — remove it, or add `children` to `def {}` (line {})",
+                    c.name, c.name, info.def.line
+                ),
+            );
+        }
+        Ok(())
+    };
+    for def in &doc.defs {
+        visit(&def.body, &mut check)?;
+    }
+    visit(&doc.body, &mut check)?;
+    Ok(defs)
+}
+
+fn describe_params(def: &Def) -> String {
+    if def.params.is_empty() {
+        "no parameters".to_string()
+    } else {
+        let names: Vec<_> = def.params.iter().map(|p| format!("`{}`", p.name)).collect();
+        format!("parameters {}", names.join(", "))
+    }
+}
+
+/// Depth-first visit of every node in a tree, including statement bodies,
+/// chain children, and the blocks passed to calls.
+fn visit<'a>(nodes: &'a [Node], f: &mut impl FnMut(&'a Node) -> Result<()>) -> Result<()> {
+    for node in nodes {
+        f(node)?;
+        match node {
+            Node::Element(el) => {
+                let mut cur = el;
+                loop {
+                    visit(&cur.children, f)?;
+                    match &cur.chain {
+                        Some(next) => cur = next,
+                        None => break,
+                    }
+                }
+            }
+            Node::If(chain) => {
+                for arm in &chain.arms {
+                    visit(&arm.body, f)?;
+                }
+                if let Some(body) = &chain.else_body {
+                    visit(body, f)?;
+                }
+            }
+            Node::For(l) => {
+                visit(&l.body, f)?;
+                if let Some(empty) = &l.empty {
+                    visit(empty, f)?;
+                }
+            }
+            Node::Call(c) => visit(&c.children, f)?,
+            Node::Children { .. }
+            | Node::TextBlock(_)
+            | Node::Raw(_)
+            | Node::Comment { .. }
+            | Node::Doctype => {}
+        }
+    }
+    Ok(())
 }
 
 /// Entity-escaping per SPEC §11: attribute values escape `& < > "`; text
@@ -53,9 +205,20 @@ struct R<'a> {
     scope: Scope<'a>,
     ctx: &'a Value,
     out: String,
+    defs: HashMap<&'a str, DefInfo<'a>>,
+    /// One frame per component call in progress — the call depth. Each holds
+    /// the caller's context, captured at call time, which `children` restores
+    /// while it renders the caller's block (SPEC §10.3–§10.4).
+    frames: Vec<Frame<'a>>,
 }
 
-impl R<'_> {
+/// The caller's context, saved across a component call.
+struct Frame<'a> {
+    scope: Scope<'a>,
+    children: &'a [Node],
+}
+
+impl<'a> R<'a> {
     fn eval(&self, t: &TplExpr) -> Result<Value> {
         expr::eval(&t.expr, &self.scope, self.ctx).map_err(|e| Error {
             line: t.line,
@@ -134,14 +297,14 @@ impl R<'_> {
         Ok(s)
     }
 
-    fn block(&mut self, nodes: &[Node], depth: usize) -> Result<()> {
+    fn block(&mut self, nodes: &'a [Node], depth: usize) -> Result<()> {
         for node in nodes {
             self.node(node, depth)?;
         }
         Ok(())
     }
 
-    fn node(&mut self, node: &Node, depth: usize) -> Result<()> {
+    fn node(&mut self, node: &'a Node, depth: usize) -> Result<()> {
         let ind = if self.mode == Mode::Pretty {
             "  ".repeat(depth)
         } else {
@@ -206,27 +369,84 @@ impl R<'_> {
                 }
             }
             Node::For(f) => self.for_loop(f, depth)?,
-            // stub: calls parse but
-            // component rendering is not implemented yet.
-            Node::Call(c) => {
-                return err(
-                    c.line,
-                    1,
-                    format!(
-                        "`+{}` parses, but component rendering is not implemented yet",
-                        c.name
-                    ),
-                )
+            Node::Call(c) => self.call(c, depth)?,
+            // Emits the caller's block in the caller's context (SPEC §10.3).
+            // The parser guarantees this sits inside a `def` body, and def
+            // bodies only render through `call`, so a frame always exists.
+            Node::Children { .. } => {
+                let mut frame = self.frames.pop().expect("`children` renders under a call");
+                std::mem::swap(&mut self.scope, &mut frame.scope);
+                let result = self.block(frame.children, depth);
+                std::mem::swap(&mut self.scope, &mut frame.scope);
+                self.frames.push(frame);
+                result?;
             }
-            // Only legal inside `def` bodies, which nothing renders yet.
-            Node::Children { .. } => unreachable!("`children` parses only inside `def` bodies"),
         }
         Ok(())
     }
 
+    /// Expands a component call (SPEC §10.3–§10.4): arguments and defaults
+    /// evaluate in the caller's scope, the body renders in a fresh scope
+    /// holding only the parameters (plus the unshadowable `ctx`), and the
+    /// caller's context is framed for `children`.
+    fn call(&mut self, c: &'a Call, depth: usize) -> Result<()> {
+        if self.frames.len() >= MAX_CALL_DEPTH {
+            return err(
+                c.line,
+                1,
+                format!(
+                    "`+{}` exceeds the component call depth cap of {MAX_CALL_DEPTH} (SPEC §10.3) — recursion needs a base case",
+                    c.name
+                ),
+            );
+        }
+        let def = self.defs[c.name.as_str()].def; // resolved in check_components
+        let mut scope = Scope::new(&NULL);
+        for p in &def.params {
+            let value = match c.args.iter().find(|a| a.name == p.name) {
+                Some(arg) => self.arg_value(arg)?,
+                // Presence was checked up front: no argument means a default
+                // exists. Defaults are expressions, evaluated at each call in
+                // the caller's scope (SPEC §10.3).
+                None => self.eval(p.default.as_ref().expect("checked"))?,
+            };
+            scope.push(p.name.as_str(), value);
+        }
+        let caller = std::mem::replace(&mut self.scope, scope);
+        self.frames.push(Frame {
+            scope: caller,
+            children: &c.children,
+        });
+        let result = self.block(&def.body, depth);
+        let frame = self.frames.pop().expect("pushed above");
+        self.scope = frame.scope;
+        result
+    }
+
+    /// An argument's value (SPEC §10.4): bare = `true`; unquoted = the
+    /// expression's value; quoted = the string, interpolations stringified —
+    /// no entity escaping here, the value is data, not output.
+    fn arg_value(&self, arg: &Arg) -> Result<Value> {
+        match &arg.value {
+            AttrValue::Bool => Ok(Value::Bool(true)),
+            AttrValue::Expr(t) => self.eval(t),
+            AttrValue::Str(parts) => {
+                let mut s = String::new();
+                for part in parts {
+                    match part {
+                        TextPart::Lit(l) => s.push_str(l),
+                        // Raw `{!…}` cannot parse in argument strings.
+                        TextPart::Interp { expr, .. } => s.push_str(&self.eval_string(expr)?),
+                    }
+                }
+                Ok(Value::Str(s))
+            }
+        }
+    }
+
     /// SPEC §10.2: lists (index = position) and maps (name = value, index =
     /// key, insertion order); `empty` on empty-or-null; anything else errors.
-    fn for_loop(&mut self, f: &ForLoop, depth: usize) -> Result<()> {
+    fn for_loop(&mut self, f: &'a ForLoop, depth: usize) -> Result<()> {
         match self.eval(&f.iter)? {
             Value::List(items) if !items.is_empty() => {
                 for (i, item) in items.into_iter().enumerate() {
@@ -264,7 +484,7 @@ impl R<'_> {
 
     /// One loop pass: bind var (and index), render, unbind. Loop variables
     /// shadow outer names, never `ctx` (the parser rejects that binding).
-    fn iteration(&mut self, f: &ForLoop, depth: usize, item: Value, index: Value) -> Result<()> {
+    fn iteration(&mut self, f: &'a ForLoop, depth: usize, item: Value, index: Value) -> Result<()> {
         self.scope.push(f.var.as_str(), item);
         if let Some(idx) = &f.index {
             self.scope.push(idx.as_str(), index);
@@ -277,7 +497,7 @@ impl R<'_> {
         result
     }
 
-    fn element(&mut self, el: &Element, depth: usize) -> Result<()> {
+    fn element(&mut self, el: &'a Element, depth: usize) -> Result<()> {
         // A `>` chain renders glued on one line: opens (each followed by its own
         // inline text), then either the innermost's children as a block, or the
         // closings immediately (SPEC §4.6, §5).

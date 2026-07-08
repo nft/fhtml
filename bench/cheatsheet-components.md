@@ -37,7 +37,14 @@ ul grid grid-cols-3 gap-6
   Put the longest varying content (a sentence, a paragraph) in the block
   instead of a parameter. A block is only allowed if the def uses `children`.
 - A parameter without a default is required at every call.
-- Repeated inline `<svg>` icons factor well: put the raw `<svg …>` lines
-  inside a def's body and call it wherever the icon repeats.
+- **Parameterize EVERY difference between the repeats** — ids, `aria-label`s,
+  a `checked` flag, the selected item's extra classes. Compare the instances
+  token by token; a difference you flatten away corrupts the output. If the
+  blocks differ in structure, leave them plain.
+- Byte-identical repeated `<svg>` icons factor well: put the raw `<svg …>`
+  lines inside a def's body. Identical ONLY — interpolation does not run
+  inside raw `<` lines, so a `{path_d}` there stays literal text.
+- A text-only child line starts with `|`. A bare quoted line is an ERROR —
+  quotes only attach text to an element's own line.
 - Markup that does **not** repeat stays plain — never wrap single-use markup
   in a def; that costs tokens instead of saving them.

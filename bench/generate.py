@@ -227,9 +227,8 @@ def api_call(provider, model, system, messages, key, max_retries=3,
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 529) and attempt < max_retries:
                 delay = 5 * (attempt + 1)
-                if verbose:
-                    print(f"[api] HTTP {e.code}, retry "
-                          f"{attempt + 1}/{max_retries} in {delay}s", flush=True)
+                print(f"[api] HTTP {e.code}, retry "
+                      f"{attempt + 1}/{max_retries} in {delay}s", flush=True)
                 time.sleep(delay)
                 continue
             detail = e.read().decode()[:500]
@@ -247,9 +246,8 @@ def api_call(provider, model, system, messages, key, max_retries=3,
             # malformed bodies: transient — retry the same request.
             if attempt < max_retries:
                 delay = 5 * (attempt + 1)
-                if verbose:
-                    print(f"[api] {type(e).__name__}: {e} — retry "
-                          f"{attempt + 1}/{max_retries} in {delay}s", flush=True)
+                print(f"[api] {type(e).__name__}: {e} — retry "
+                      f"{attempt + 1}/{max_retries} in {delay}s", flush=True)
                 time.sleep(delay)
                 continue
             raise RuntimeError(
@@ -488,6 +486,9 @@ def main():
                                            legend=legend,
                                            components=components)
             shots = fewshot_messages(target, pretty_dir)
+            # Attributable silence: a slow endpoint can sit minutes inside
+            # one request; without this line that looks like a hang.
+            print(f"-- {model} / {target} ({len(stems)} cases)", flush=True)
             if args.verbose:
                 vblock(f"system prompt · {model} / {target}", system)
                 print(f"[gen] few-shot examples: {len(shots) // 2} "

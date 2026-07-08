@@ -339,6 +339,39 @@ fn consistent_files_warn_nothing() {
     assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
 }
 
+#[test]
+fn attr_shaped_class_token_compiles_with_warning() {
+    // The top DOM-corruption hazard in generated fhtml: an attribute
+    // written as a bare token becomes a class, verbatim (SPEC §3) — so it
+    // compiles, but warns. Tailwind's `=` syntax carries `[`/`]`/`:`.
+    let out = fhtml::compile_full(
+        "div aria-hidden=true absolute > span role=status\n",
+        Mode::Min,
+    )
+    .unwrap();
+    assert_eq!(
+        out.html,
+        "<div class=\"aria-hidden=true absolute\"><span class=\"role=status\"></span></div>"
+    );
+    assert_eq!(out.warnings.len(), 2, "warnings: {:?}", out.warnings);
+    assert!(
+        out.warnings[0].contains("`div(aria-hidden=true)`"),
+        "got: {}",
+        out.warnings[0]
+    );
+    assert!(
+        out.warnings[1].contains("`span(role=status)`"),
+        "got: {}",
+        out.warnings[1]
+    );
+    let out = fhtml::compile_full(
+        "div data-[state=open]:flex w-1/2 supports-[display=grid]:grid\n",
+        Mode::Min,
+    )
+    .unwrap();
+    assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
+}
+
 // ------------------------------------------------------------------ fmt
 
 #[test]

@@ -105,7 +105,12 @@ tag(attrs) tokens… "text" > chained-element
 3. The compiler never parses the interior of a class token. All Tailwind syntax —
    `py-2.5`, `w-1/2`, `hover:bg-zinc-200`, `active:translate-y-[0.5px]`,
    `data-[state=open]:bg-red-500`, `bg-[url(/x.png)]`, `[&>li]:mt-0`, `!mt-0`, `-mt-2`,
-   `*:pt-2`, `@lg:flex` — passes through untouched.
+   `*:pt-2`, `@lg:flex` — passes through untouched. One measured hazard gets a
+   **warning** (never an error — the token still compiles verbatim): a bare token shaped
+   like a plain attribute assignment (`aria-hidden=true` — `name=value` where the name is
+   letters/digits/`-`/`_` and the token has no `[`/`]`/`:`) is almost always an attribute
+   that missed its parens; the warning suggests `div(aria-hidden=true)`. Tailwind's own
+   `=` syntax always carries `[`/`]`/`:` and never warns.
 
 ### 4.3 Attributes
 

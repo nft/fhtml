@@ -515,6 +515,7 @@ impl Parser {
                     let (logical, start) = self.join_continuations()?;
                     let mut cur = Cur::new(&logical, start);
                     let mut el = parse_element(&mut cur, self.templates, self.shorthand)?;
+                    self.warn_attr_shaped_classes(&el);
                     let children = self.parse_block(depth + 1)?;
                     innermost(&mut el).children = children;
                     check_void_content(&el)?;
@@ -523,6 +524,28 @@ impl Parser {
             }
         }
         Ok(nodes)
+    }
+
+    /// A bare class token shaped like `name=value` is almost always an
+    /// attribute that missed its parens (`div aria-hidden=true …`) — the
+    /// top DOM-corruption hazard in generated fhtml. Classes are never
+    /// parsed (SPEC §3), so it compiles; this warns. Tailwind's own `=`
+    /// syntax always carries `[`/`]`/`:` (`data-[state=open]:flex`), which
+    /// is exempt.
+    fn warn_attr_shaped_classes(&mut self, el: &Element) {
+        for item in &el.classes {
+            if let ClassItem::Lit(tok) = item {
+                if class_token_looks_like_attr(tok) {
+                    self.warnings.push(format!(
+                        "{}:1: warning: class token `{tok}` looks like an attribute — attributes go in parens butted to the tag: `{}({tok})`",
+                        el.line, el.tag
+                    ));
+                }
+            }
+        }
+        if let Some(chain) = &el.chain {
+            self.warn_attr_shaped_classes(chain);
+        }
     }
 
     /// Dispatches a line whose first token is a statement keyword or `+call`.
@@ -1520,6 +1543,20 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
     }
 
     Ok(el)
+}
+
+/// `name=value` with a plain HTML-attribute-shaped name and none of
+/// Tailwind's `[`/`]`/`:` — see [`Parser::warn_attr_shaped_classes`].
+fn class_token_looks_like_attr(tok: &str) -> bool {
+    let Some((name, _)) = tok.split_once('=') else {
+        return false;
+    };
+    !name.is_empty()
+        && name.chars().next().unwrap().is_ascii_alphabetic()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && !tok.contains([':', '[', ']'])
 }
 
 /// Resolves a bare class token to its literal class name. In `#!shorthand`

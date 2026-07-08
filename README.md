@@ -94,6 +94,20 @@ ul divide-y
     li text-gray-400 "Nothing here yet."
 ```
 
+Repetition factors into components: `def` declares one (top level, closed over nothing —
+parameters only), `+name(args)` instantiates it, and the call's indented block becomes
+`children` (SPEC §10.3–§10.4):
+
+```fhtml
+def card(title wide=false)
+  . rounded-xl bg-white p-6 shadow {wide ? 'col-span-2' : ''}
+    h3 text-lg font-semibold "{title}"
+    children
+
++card(title="Monthly stats" wide=true)
+  p text-sm text-gray-600 "Revenue is up 12%."
+```
+
 ```sh
 fhtml page.fhtml --data data.json            # render with data
 fhtml page.fhtml --data d.json --ctx c.json  # + the read-only `ctx` root

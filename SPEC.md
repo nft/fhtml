@@ -317,12 +317,15 @@ def name(param param=default …)
   appears later in the file.
 - Recursion (a component calling itself, directly or mutually) is legal — trees are a real
   use case — bounded by a render-time **call-depth cap of 64**; exceeding it is a render
-  error carrying the call site's line/column.
+  error carrying the exceeding call's line, column 1.
 - **Defaults are expressions** (§9.3), not attribute-value strings: in
   `def alert(kind='info' compact=false max=3)`, `compact` is boolean and `max` is a number —
   never the strings `"false"`/`"3"`. An unquoted default must contain no whitespace; brace a
   spaced expression: `limit={ctx.pageSize - 1}`. Defaults may reference `ctx` but not other
-  parameters, and are evaluated at each call.
+  parameters, and are evaluated at each call **in the caller's scope**, exactly like
+  arguments — a default sees the caller's data roots and loop variables. Parameters bind in
+  declaration order (so evaluation errors surface in that order); each error carries the
+  argument's or default's own line/column.
 - Inside the body, only the parameters and `children` are in scope — components are closed
   over nothing (explicit data flow, no surprise coupling).
 - `children` (statement, alone on its line) emits the caller's block — the React mental
@@ -382,7 +385,10 @@ include ./partials/head
   constructs); `--target=js` emits a self-contained ES module exporting
   `(data, ctx = {}) => string` with output byte-identical to the native renderer,
   including render-error positions. Rendering without data (`--data` absent) uses an
-  empty scope: every name is `null`.
+  empty scope: every name is `null`. Components compile too — each `def` becomes a
+  nested function, `children` a thunk closing over the caller's scope — and the static
+  component checks (unknown component, unknown/missing argument, block to a childless
+  `def`) fail at *compile* time for the JS target, with the renderer's messages.
 - **Errors** carry file, line, column, and the offending token; parsing is strict — there
   is no recovery mode that silently guesses (an agent retry loop needs precise, honest
   errors more than it needs leniency). Non-fatal hazards (uneven indent steps, §2 rule 6)
@@ -390,7 +396,11 @@ include ./partials/head
 - **Canonical form**: `fhtml fmt` reformats source to 2-space indentation (spaces only),
   `.` for `div`, and minimal quoting. Invariant: formatting never changes the compiled
   output, and formatting twice equals formatting once. Silent `//` comments survive
-  formatting. The intended agent workflow is *write → fmt → build*.
+  formatting. `def`s reprint where they stand (never hoisted past surrounding comments);
+  param/arg lists get single spaces; string-valued call arguments are **always** quoted
+  (a bare value would reparse as an expression); an interpolation whose expression begins
+  with `!` prints as `{ !expr}` — `{!` is the raw sigil (§9.3). The intended agent
+  workflow is *write → fmt → build*.
 
 ## 12. Reserved words
 

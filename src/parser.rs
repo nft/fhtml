@@ -298,60 +298,6 @@ fn element_template_use(el: &Element) -> Option<(usize, usize, String)> {
     first_template_use(&el.children)
 }
 
-/// TEMPORARY gate: components parse
-/// and render, but the JS backend lands later —
-/// `--target=js` refuses files that use them. Deleted when it ships.
-pub fn first_p2_use(doc: &Document) -> Option<(usize, String)> {
-    if let Some(d) = doc.defs.first() {
-        return Some((d.line, "`def`".to_string()));
-    }
-    first_call_use(&doc.body)
-}
-
-fn first_call_use(nodes: &[Node]) -> Option<(usize, String)> {
-    for node in nodes {
-        match node {
-            Node::Call(c) => return Some((c.line, format!("`+{}`", c.name))),
-            Node::Children { line } => return Some((*line, "`children`".to_string())),
-            Node::Element(el) => {
-                let mut cur = el;
-                loop {
-                    if let Some(found) = first_call_use(&cur.children) {
-                        return Some(found);
-                    }
-                    match &cur.chain {
-                        Some(next) => cur = next,
-                        None => break,
-                    }
-                }
-            }
-            Node::If(chain) => {
-                for arm in &chain.arms {
-                    if let Some(found) = first_call_use(&arm.body) {
-                        return Some(found);
-                    }
-                }
-                if let Some(found) = chain.else_body.as_deref().and_then(first_call_use) {
-                    return Some(found);
-                }
-            }
-            Node::For(f) => {
-                if let Some(found) = first_call_use(&f.body) {
-                    return Some(found);
-                }
-                if let Some(found) = f.empty.as_deref().and_then(first_call_use) {
-                    return Some(found);
-                }
-            }
-            // A marker means `doc.defs` is non-empty, so `first_p2_use`
-            // already returned before walking here.
-            Node::DefSite(_) => {}
-            Node::TextBlock(_) | Node::Raw(_) | Node::Comment { .. } | Node::Doctype => {}
-        }
-    }
-    None
-}
-
 fn describe_indent(s: &str) -> String {
     if s.is_empty() {
         "none".to_string()

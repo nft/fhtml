@@ -196,3 +196,117 @@ html(lang=en)
     h.assert_parity(static_src, "{}", "{}", Mode::Pretty);
     h.assert_parity(static_src, "{}", "{}", Mode::Min);
 }
+
+#[test]
+fn js_components_match_rust_renderer() {
+    if !node_available() {
+        eprintln!("skipping js parity test: `node` not found on PATH");
+        return;
+    }
+    let mut h = Harness::new("components");
+
+    // The SPEC §10.4 shapes in one file: params with expression defaults,
+    // bare/quoted/unquoted args, `children`, a call nested under elements
+    // and a loop (the def body renders at the call's depth — the dynamic
+    // Pretty indent path), and a childless call to a children-using def.
+    let full = r#"def card(title kind='note' n={1 + 1} wide=false)
+  article rounded {wide ? 'w-full' : 'w-64'} {kind}
+    h3 "{title} ({n})"
+    . body
+      children
+section px-4
+  for item, i in items
+    +card(title="{i}: {item.name}" kind={item.kind || 'plain'} n={i * 10} wide={item.big})
+      p "{item.desc}"
+      if item.hot
+        span "hot"
+  +card(title="empty")
+"#;
+    let data = r#"{"items": [
+        {"name": "A & B", "kind": "alert", "desc": "first <one>", "big": true, "hot": true},
+        {"name": "c", "desc": "second"}
+    ]}"#;
+    for mode in [Mode::Pretty, Mode::Min] {
+        h.assert_parity(full, data, "{}", mode);
+        h.assert_parity(full, r#"{"items": []}"#, "{}", mode);
+    }
+
+    // Closed scopes (SPEC §10.3): inside the body, unbound names are null
+    // and `ctx` still reaches; the same name resolves differently in the
+    // caller's block.
+    h.assert_parity(
+        "def probe(x)\n  p \"{x}|{name}|{ctx.theme}\"\n  children\n+probe(x={name})\n  p \"{name}\"",
+        r#"{"name": "root"}"#,
+        r#"{"theme": "dark"}"#,
+        Mode::Min,
+    );
+
+    // `children` through layers: a block passed to an inner call renders
+    // the *outer* component's children, in the outer caller's scope —
+    // and repeats when `children` appears twice.
+    h.assert_parity(
+        "def inner\n  . i\n    children\ndef outer\n  +inner\n    children\n    children\n+outer\n  p \"{name}\"",
+        r#"{"name": "caller"}"#,
+        "{}",
+        Mode::Min,
+    );
+
+    // Recursion: a tree via data, exercising the depth counter and the
+    // accumulated Pretty indent across recursive calls.
+    let tree = "def tree(node)\n  li\n    span \"{node.label}\"\n    if node.kids\n      ul\n        for k in node.kids\n          +tree(node={k})\nul\n  +tree(node={root})\n";
+    let tree_data = r#"{"root": {"label": "a", "kids": [
+        {"label": "b", "kids": [{"label": "c"}]},
+        {"label": "d"}
+    ]}}"#;
+    for mode in [Mode::Pretty, Mode::Min] {
+        h.assert_parity(tree, tree_data, "{}", mode);
+    }
+
+    // Runtime errors carry identical position + message both sides: the
+    // depth cap at the exceeding call site (mutual recursion), a bad
+    // argument expression, and a bad default evaluated at the call.
+    h.assert_parity("def a\n  +b\ndef b\n  +a\n+a\n", "{}", "{}", Mode::Min);
+    h.assert_parity(
+        "def c(n)\n  p \"{n}\"\n+c(n={items + 1})\n",
+        r#"{"items": []}"#,
+        "{}",
+        Mode::Min,
+    );
+    h.assert_parity(
+        "def c(n={miss / 2})\n  p \"{n}\"\n+c\n",
+        r#"{"miss": "x"}"#,
+        "{}",
+        Mode::Min,
+    );
+
+    // The measured demo, both modes — the corpus golden as parity.
+    let blog = include_str!("corpus/blog-cards-def.fhtml");
+    for mode in [Mode::Pretty, Mode::Min] {
+        h.assert_parity(blog, "null", "{}", mode);
+    }
+}
+
+#[test]
+fn js_component_checks_are_compile_errors() {
+    // The static call checks (SPEC §10.4) run before code generation, so
+    // for `--target=js` they are compile errors — same messages and
+    // positions as the renderer, which reports them at render time. No
+    // `node` needed here.
+    let e = compile_to_js("+ghost\n", Mode::Min).unwrap_err();
+    assert_eq!((e.line, e.col), (1, 1));
+    assert!(
+        e.msg.contains("unknown component `+ghost`"),
+        "got: {}",
+        e.msg
+    );
+
+    let src = "def c(a)\n  p \"{a}\"\nif false\n  +c(wrong=1)\n";
+    let e = compile_to_js(src, Mode::Min).unwrap_err();
+    assert!(e.msg.contains("unknown argument `wrong`"), "got: {}", e.msg);
+
+    let e = compile_to_js("def c\n  p \"x\"\n+c\n  p \"dropped\"\n", Mode::Min).unwrap_err();
+    assert!(e.msg.contains("never uses `children`"), "got: {}", e.msg);
+
+    let e = compile_to_js("def c(a)\n  p \"{a}\"\n+c\n", Mode::Min).unwrap_err();
+    assert!(e.msg.contains("missing argument `a`"), "got: {}", e.msg);
+}

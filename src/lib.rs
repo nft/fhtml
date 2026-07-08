@@ -3,9 +3,9 @@
 //!
 //! Implements the static markup layer (SPEC §1–§8, §11), the canonical formatter,
 //! the template layer (SPEC §9 interpolation, §10.1–§10.2 statements),
-//! and components (§10.3–§10.4 `def`/`+call`/`children`) on the render and
-//! `fmt` paths. The JS backend for components lands later. `include` (§10.5) is recognized and rejected
-//! with a clear "not implemented" error.
+//! and components (§10.3–§10.4 `def`/`+call`/`children`) across the whole
+//! toolchain — render, `fmt`, and `--target=js`. `include` (§10.5) is
+//! recognized and rejected with a clear "not implemented" error.
 
 #[cfg(feature = "convert")]
 pub mod convert;
@@ -113,17 +113,8 @@ pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<O
 /// source text.
 pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
     let (doc, warnings) = parser::parse(src, true)?;
-    // Gate: the JS backend for
-    // components is not implemented yet.
-    if let Some((line, what)) = parser::first_p2_use(&doc) {
-        return error::err(
-            line,
-            1,
-            format!("{what} has no `--target=js` support yet — components parse, but the JS backend for them is not implemented"),
-        );
-    }
     Ok(Output {
-        html: jsgen::generate(&doc.body, mode),
+        html: jsgen::generate(&doc, mode)?,
         warnings,
     })
 }

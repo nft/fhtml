@@ -24,8 +24,9 @@ pub enum Mode {
 }
 
 /// Component call-depth cap (SPEC §10.3): recursion is legal, runaway
-/// recursion is a render error at the call site.
-const MAX_CALL_DEPTH: usize = 64;
+/// recursion is a render error at the call site. `jsgen` bakes the same cap
+/// (and message) into compiled modules.
+pub(crate) const MAX_CALL_DEPTH: usize = 64;
 
 /// Root of every component scope — components are closed over nothing
 /// (SPEC §10.3), so inside a body any name that is not a parameter is `null`.
@@ -55,15 +56,17 @@ pub fn render_document<'a>(
 }
 
 /// A component with its lexical `children`-usage, precomputed once.
-struct DefInfo<'a> {
-    def: &'a Def,
+pub(crate) struct DefInfo<'a> {
+    pub(crate) def: &'a Def,
     uses_children: bool,
 }
 
 /// Builds the component table and statically checks every call in the file
 /// (SPEC §10.4) — body and def bodies alike, so a mistake errors even when
-/// the call sits on a branch this render never takes.
-fn check_components(doc: &Document) -> Result<HashMap<&str, DefInfo<'_>>> {
+/// the call sits on a branch this render never takes. Shared with `jsgen`:
+/// `--target=js` reports the same mistakes with the same messages, at
+/// compile time.
+pub(crate) fn check_components(doc: &Document) -> Result<HashMap<&str, DefInfo<'_>>> {
     let mut defs = HashMap::new();
     for def in &doc.defs {
         let mut uses_children = false;

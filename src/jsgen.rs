@@ -349,6 +349,11 @@ impl G {
             Node::Element(el) => self.element(el, depth),
             Node::If(chain) => self.if_chain(chain, depth),
             Node::For(f) => self.for_loop(f, depth),
+            // gate in `lib::compile_to_js`:
+            // the JS backend for components is not implemented yet.
+            Node::Call(_) | Node::Children { .. } => {
+                unreachable!("components are gated out of `--target=js` until it is implemented")
+            }
         }
     }
 

@@ -231,15 +231,20 @@ fn error_template_constructs_are_not_static() {
 }
 
 #[test]
-fn error_component_call_is_p2() {
+fn error_components_are_not_static() {
+    // SPEC §11: `def`/`+call` are template constructs — the static path
+    // rejects them like any other (they parse; render is the other path).
     let e = error("+card(title=\"x\")");
-    assert!(e.contains("composition layer"), "got: {e}");
+    assert!(e.contains("static"), "got: {e}");
     let e = error("def card(title)\n  p \"x\"");
-    assert!(e.contains("composition layer"), "got: {e}");
-    let e = error("children");
-    assert!(e.contains("composition layer"), "got: {e}");
+    assert!(e.contains("static"), "got: {e}");
+}
+
+#[test]
+fn error_include_is_not_implemented() {
     let e = error("include ./partials/head");
     assert!(e.contains("composition layer"), "got: {e}");
+    assert!(e.contains("10.5"), "got: {e}");
 }
 
 #[test]
@@ -946,6 +951,134 @@ mod template_parse {
         );
     }
 
+    // ------------------------------------- §10.3 def / children (parse layer)
+
+    #[test]
+    fn def_parses_with_params_defaults_and_children() {
+        // Defaults are expressions: string, number, boolean, braced (§10.3).
+        parses("def alert(kind='info' compact=false max=3)\n  p \"{kind}\"\n  children\n");
+        parses("def footer\n  p \"x\"\n"); // zero params, parens optional
+        parses("def footer()\n  p \"x\"\n");
+        parses("def card(limit={ctx.pageSize - 1})\n  p \"{limit}\"\n");
+    }
+
+    #[test]
+    fn def_forward_reference_parses() {
+        // Definition order doesn't matter (§10.3): the call comes first.
+        parses("+card(title='x')\ndef card(title)\n  p \"{title}\"\n");
+    }
+
+    #[test]
+    fn error_def_only_at_top_level() {
+        let e = error("div p-4\n  def inner(x)\n    p \"x\"");
+        assert!(e.contains("top level"), "got: {e}");
+        let e = error("if flag\n  def inner(x)\n    p \"x\"");
+        assert!(e.contains("top level"), "got: {e}");
+        let e = error("def outer(x)\n  def inner(y)\n    p \"y\"");
+        assert!(e.contains("top level"), "got: {e}");
+    }
+
+    #[test]
+    fn error_def_redefinition() {
+        let e = error("def card(a)\n  p \"1\"\ndef card(b)\n  p \"2\"");
+        assert!(e.contains("already defined"), "got: {e}");
+        assert!(e.contains("line 1"), "got: {e}");
+    }
+
+    #[test]
+    fn error_def_shape() {
+        let e = error("def\n  p \"x\"");
+        assert!(e.contains("component name"), "got: {e}");
+        let e = error("def if(x)\n  p \"x\"");
+        assert!(e.contains("reserved word"), "got: {e}");
+        let e = error("def card(title) p-4\n  p \"x\"");
+        assert!(e.contains("after the parameter list"), "got: {e}");
+        let e = error("def card(title)");
+        assert!(e.contains("needs an indented block"), "got: {e}");
+        let e = error("def card(title\n  p \"x\"");
+        assert!(e.contains("unclosed parameter list"), "got: {e}");
+    }
+
+    #[test]
+    fn error_def_params() {
+        let e = error("def card(a a)\n  p \"x\"");
+        assert!(e.contains("duplicate parameter"), "got: {e}");
+        let e = error("def card(ctx)\n  p \"x\"");
+        assert!(e.contains("cannot be shadowed"), "got: {e}");
+        let e = error("def card(true)\n  p \"x\"");
+        assert!(e.contains("expression literal"), "got: {e}");
+        let e = error("def card(a=)\n  p \"x\"");
+        assert!(e.contains("missing default"), "got: {e}");
+        // A spaced default needs braces (§10.3).
+        let e = error("def card(a=x + y)\n  p \"x\"");
+        assert!(e.contains("braces"), "got: {e}");
+    }
+
+    #[test]
+    fn error_children_placement() {
+        let e = error("children");
+        assert!(e.contains("inside a `def` body"), "got: {e}");
+        let e = error("div p-4\n  children");
+        assert!(e.contains("inside a `def` body"), "got: {e}");
+        let e = error("def card(x)\n  children now");
+        assert!(e.contains("takes nothing"), "got: {e}");
+    }
+
+    #[test]
+    fn children_inside_def_statements_parses() {
+        // The def body is the scope, however deeply nested (§10.3).
+        parses("def card(x)\n  if x\n    children\n  else\n    p \"none\"\n");
+    }
+
+    // ------------------------------------------ §10.4 +call (parse layer)
+
+    #[test]
+    fn call_parses_all_argument_shapes() {
+        // bare = true, quoted = string (with interpolation), unquoted =
+        // expression, braced = spaced expression (§10.4).
+        parses("+card(title=\"Monthly {kind}\" compact count=3 show=false user=member.profile n={a + b})\n");
+        parses("+card\n"); // legal when every param has a default (§10.4)
+        parses("+card(title='x')\n  p text-sm \"the children block\"\n");
+    }
+
+    #[test]
+    fn error_call_shape() {
+        let e = error("+ card(title='x')");
+        assert!(e.contains("needs a name"), "got: {e}");
+        let e = error("+card(title='x') p-4");
+        assert!(e.contains("after the component call"), "got: {e}");
+        let e = error("+card(title='x'");
+        assert!(e.contains("unclosed argument list"), "got: {e}");
+    }
+
+    #[test]
+    fn error_call_args() {
+        let e = error("+card(a=1 a=2)");
+        assert!(e.contains("duplicate argument"), "got: {e}");
+        let e = error("+card(a=)");
+        assert!(e.contains("missing value"), "got: {e}");
+        // Unquoted values are expressions — a bare path must be quoted (§10.4).
+        let e = error("+card(href=/blog/x)");
+        assert!(e.contains("quote a string"), "got: {e}");
+    }
+
+    #[test]
+    fn error_call_cannot_be_chain_target() {
+        // §10.4: `>` chains single elements; a call is not an element.
+        let e = error("li > +card(title='x')");
+        assert!(e.contains("cannot be the target"), "got: {e}");
+    }
+
+    #[test]
+    fn no_templates_rejects_components() {
+        let e = no_templates_error("def card(title)\n  p \"x\"");
+        assert!(e.contains("--no-templates"), "got: {e}");
+        let e = no_templates_error("+card(title='x')");
+        assert!(e.contains("--no-templates"), "got: {e}");
+        let e = no_templates_error("children");
+        assert!(e.contains("--no-templates"), "got: {e}");
+    }
+
     // ------------------------------------------------- §9.2 --no-templates
 
     #[test]
@@ -1250,5 +1383,28 @@ else
             render(src, &data(r#"{"x": true}"#), Mode::Pretty).unwrap(),
             "<div>\n  <p>a</p>\n</div>\n"
         );
+    }
+
+    // ---------------------------------------- §10.3 def (definition is inert)
+
+    #[test]
+    fn def_emits_nothing_at_definition_site() {
+        // §10.3: a definition renders nothing where it stands; a file whose
+        // defs are never called renders exactly its body.
+        let src = "def card(title)\n  h3 \"{title}\"\np \"after\"\n";
+        assert_eq!(
+            render(src, &Value::Null, Mode::Min).unwrap(),
+            "<p>after</p>"
+        );
+    }
+
+    // TEMPORARY: calls parse end-to-end
+    // but rendering them is not implemented yet — this stub error flips there.
+    #[test]
+    fn call_render_is_stage_2_stub() {
+        let src = "def card(title)\n  h3 \"{title}\"\n+card(title='x')\n";
+        let e = render(src, &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("not implemented"), "got: {}", e.msg);
+        assert_eq!(e.line, 3);
     }
 }

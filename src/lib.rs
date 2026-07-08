@@ -3,8 +3,9 @@
 //!
 //! Implements the static markup layer (SPEC §1–§8, §11), the canonical formatter,
 //! and the template layer (SPEC §9 interpolation, §10.1–§10.2 statements).
-//! Composition constructs (§10.3–§10.5) are recognized and rejected with a
-//! clear "composition-layer" error.
+//! Components (§10.3–§10.4) parse; rendering, formatting, and the JS backend
+//! land later. `include` (§10.5) is
+//! recognized and rejected with a clear "not implemented" error.
 
 #[cfg(feature = "convert")]
 pub mod convert;
@@ -71,8 +72,8 @@ pub fn compile_full(src: &str, mode: Mode) -> Result<Output, Error> {
 /// at parse time with static-path wording (SPEC §9.2) and requires `\{` for literal
 /// braces in text.
 pub fn compile_opts(src: &str, opts: &Options) -> Result<Output, Error> {
-    let (nodes, warnings) = parser::parse(src, opts.templates)?;
-    if let Some((line, col, what)) = parser::first_template_use(&nodes) {
+    let (doc, warnings) = parser::parse(src, opts.templates)?;
+    if let Some((line, col, what)) = parser::first_template_use_doc(&doc) {
         return error::err(
             line,
             col,
@@ -81,7 +82,7 @@ pub fn compile_opts(src: &str, opts: &Options) -> Result<Output, Error> {
     }
     // A literal-only tree evaluates nothing, so this cannot error.
     Ok(Output {
-        html: emit::render_nodes(&nodes, opts.mode, &Value::Null, &Value::Null)?,
+        html: emit::render_nodes(&doc.body, opts.mode, &Value::Null, &Value::Null)?,
         warnings,
     })
 }
@@ -98,9 +99,12 @@ pub fn render(src: &str, data: &Value, mode: Mode) -> Result<String, Error> {
 /// returns warnings alongside. Render errors carry the file line/column of
 /// the offending interpolation or statement, like parse errors.
 pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<Output, Error> {
-    let (nodes, warnings) = parser::parse(src, true)?;
+    let (doc, warnings) = parser::parse(src, true)?;
+    // `def`s are inert here — they emit nothing at their definition site.
+    // Rendering a `+call` is not implemented yet and errors
+    // in the emitter for now.
     Ok(Output {
-        html: emit::render_nodes(&nodes, mode, data, ctx)?,
+        html: emit::render_nodes(&doc.body, mode, data, ctx)?,
         warnings,
     })
 }
@@ -111,9 +115,18 @@ pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<O
 /// for uniformity. The returned [`Output`]'s `html` field holds the module
 /// source text.
 pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
-    let (nodes, warnings) = parser::parse(src, true)?;
+    let (doc, warnings) = parser::parse(src, true)?;
+    // gate: the JS backend for
+    // components is not implemented yet.
+    if let Some((line, what)) = parser::first_p2_use(&doc) {
+        return error::err(
+            line,
+            1,
+            format!("{what} has no `--target=js` support yet — components parse, but the JS backend for them is not implemented"),
+        );
+    }
     Ok(Output {
-        html: jsgen::generate(&nodes, mode),
+        html: jsgen::generate(&doc.body, mode),
         warnings,
     })
 }
@@ -123,6 +136,14 @@ pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
 /// expressions are reprinted from source text. Invariants:
 /// `compile(format(s)) == compile(s)` and `format(format(s)) == format(s)`.
 pub fn format(src: &str) -> Result<String, Error> {
-    let (nodes, _) = parser::parse(src, true)?;
-    Ok(fmt::format_nodes(&nodes))
+    let (doc, _) = parser::parse(src, true)?;
+    // gate: formatting components is not implemented yet.
+    if let Some((line, what)) = parser::first_p2_use(&doc) {
+        return error::err(
+            line,
+            1,
+            format!("{what} is not supported by `fhtml fmt` yet — components parse, but formatting them is not implemented"),
+        );
+    }
+    Ok(fmt::format_nodes(&doc.body))
 }

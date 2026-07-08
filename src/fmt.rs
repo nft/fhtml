@@ -59,6 +59,11 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
                 fmt_node(out, child, depth + 1);
             }
         }
+        // gate in `lib::format`:
+        // formatting components is not implemented yet.
+        Node::Call(_) | Node::Children { .. } => {
+            unreachable!("components are gated out of `format` until it is implemented")
+        }
         Node::If(chain) => fmt_if(out, chain, depth),
         Node::For(f) => {
             match &f.index {

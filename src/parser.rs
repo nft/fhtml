@@ -1,10 +1,10 @@
 //! Parser for the fhtml markup layer (SPEC §1–§8) and the template layer
-//! (SPEC §9 interpolation, §10.1–§10.2 statements).
+//! (SPEC §9 interpolation, §10.1–§10.2 statements, §10.3–§10.4 components).
 //!
-//! Composition constructs (SPEC §10.3–§10.5: `def`, `children`, `include`,
-//! `+call`) are recognized and rejected with a clear "composition layer, not implemented"
-//! error so the syntax space stays reserved. Parsing with `templates: false`
-//! enforces static-only (SPEC §9.2): any template construct is an error.
+//! `include` (SPEC §10.5) is recognized and rejected with a clear "not
+//! implemented" error so the syntax space stays reserved. Parsing with
+//! `templates: false` enforces static-only (SPEC §9.2): any template construct is an
+//! error.
 
 use crate::error::{err, Result};
 use crate::expr::{self, Expr};
@@ -12,9 +12,6 @@ use crate::expr::{self, Expr};
 pub const RESERVED: [&str; 8] = [
     "if", "elif", "else", "for", "empty", "def", "children", "include",
 ];
-
-/// Composition-layer keywords deferred.
-const P2_RESERVED: [&str; 3] = ["def", "children", "include"];
 
 pub const VOID: [&str; 13] = [
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
@@ -68,6 +65,62 @@ pub enum ClassItem {
     Interp(TplExpr),
 }
 
+/// A parsed file: the component definitions (top-level only, SPEC §10.3) and
+/// the markup that renders — a `def` emits nothing at its definition site.
+#[derive(Debug)]
+pub struct Document {
+    pub defs: Vec<Def>,
+    pub body: Vec<Node>,
+}
+
+/// One `def name(param param=default …)` component (SPEC §10.3). Definition
+/// order doesn't matter: calls may reference a `def` that appears later, so
+/// name resolution happens at render time, not here.
+// TEMPORARY allow: the renderer starts reading these fields later
+//.
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct Def {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub body: Vec<Node>,
+    pub line: usize,
+}
+
+#[allow(dead_code)] // TEMPORARY: read later
+#[derive(Debug)]
+pub struct Param {
+    pub name: String,
+    /// Default value — an expression (SPEC §10.3), evaluated at each call.
+    pub default: Option<TplExpr>,
+}
+
+/// One `+name(args)` component call (SPEC §10.4). Arguments are named-only;
+/// whether each name matches a parameter is checked at render time (the
+/// `def` may appear later in the file).
+#[allow(dead_code)] // TEMPORARY: read later
+#[derive(Debug)]
+pub struct Call {
+    pub name: String,
+    pub args: Vec<Arg>,
+    /// The indented block — the component's `children`, evaluated in the
+    /// caller's scope.
+    pub children: Vec<Node>,
+    pub line: usize,
+}
+
+/// A call argument. The value reuses the attribute shapes: `Bool` for a bare
+/// name (= `true`), `Str` for a quoted string with interpolation, `Expr` for
+/// an unquoted expression (SPEC §10.4 — never a coerced string).
+#[allow(dead_code)] // TEMPORARY: read later
+#[derive(Debug)]
+pub struct Arg {
+    pub name: String,
+    pub value: AttrValue,
+    pub line: usize,
+    pub col: usize,
+}
+
 #[derive(Debug)]
 pub enum Node {
     Element(Element),
@@ -88,6 +141,13 @@ pub enum Node {
     If(IfChain),
     /// `for … in …` with optional `empty` block (SPEC §10.2).
     For(ForLoop),
+    /// `+name(args)` component call (SPEC §10.4).
+    Call(Call),
+    /// `children` — emits the caller's block; only legal inside a `def`
+    /// body (SPEC §10.3), which the parser enforces.
+    Children {
+        line: usize,
+    },
 }
 
 #[derive(Debug)]
@@ -164,6 +224,18 @@ fn innermost(el: &mut Element) -> &mut Element {
     }
 }
 
+/// Finds the first template construct in a document, for the static-only
+/// `compile` path (SPEC §11). A `def` is a template construct: its body
+/// binds parameters at render time.
+pub fn first_template_use_doc(doc: &Document) -> Option<(usize, usize, String)> {
+    let def = doc.defs.first().map(|d| (d.line, 1, "`def`".to_string()));
+    let body = first_template_use(&doc.body);
+    match (def, body) {
+        (Some(d), Some(b)) => Some(if d.0 <= b.0 { d } else { b }),
+        (d, b) => d.or(b),
+    }
+}
+
 /// Finds the first template construct in the tree, for the static-only
 /// `compile` path and for error reporting. Returns (line, col, description).
 pub fn first_template_use(nodes: &[Node]) -> Option<(usize, usize, String)> {
@@ -171,6 +243,8 @@ pub fn first_template_use(nodes: &[Node]) -> Option<(usize, usize, String)> {
         match node {
             Node::If(c) => return Some((c.line, 1, "`if`".to_string())),
             Node::For(f) => return Some((f.line, 1, "`for`".to_string())),
+            Node::Call(c) => return Some((c.line, 1, format!("`+{}`", c.name))),
+            Node::Children { line } => return Some((*line, 1, "`children`".to_string())),
             Node::TextBlock(lines) => {
                 if let Some(t) = lines.iter().find_map(|parts| interp_in(parts)) {
                     return Some((t.line, t.col, "`{…}` interpolation".to_string()));
@@ -222,6 +296,58 @@ fn element_template_use(el: &Element) -> Option<(usize, usize, String)> {
     first_template_use(&el.children)
 }
 
+/// TEMPORARY gate: components parse,
+/// but the formatter and the JS backend land later —
+/// `fhtml fmt` and `--target=js` refuse files that use them. Deleted as
+/// those stages ship.
+pub fn first_p2_use(doc: &Document) -> Option<(usize, String)> {
+    if let Some(d) = doc.defs.first() {
+        return Some((d.line, "`def`".to_string()));
+    }
+    first_call_use(&doc.body)
+}
+
+fn first_call_use(nodes: &[Node]) -> Option<(usize, String)> {
+    for node in nodes {
+        match node {
+            Node::Call(c) => return Some((c.line, format!("`+{}`", c.name))),
+            Node::Children { line } => return Some((*line, "`children`".to_string())),
+            Node::Element(el) => {
+                let mut cur = el;
+                loop {
+                    if let Some(found) = first_call_use(&cur.children) {
+                        return Some(found);
+                    }
+                    match &cur.chain {
+                        Some(next) => cur = next,
+                        None => break,
+                    }
+                }
+            }
+            Node::If(chain) => {
+                for arm in &chain.arms {
+                    if let Some(found) = first_call_use(&arm.body) {
+                        return Some(found);
+                    }
+                }
+                if let Some(found) = chain.else_body.as_deref().and_then(first_call_use) {
+                    return Some(found);
+                }
+            }
+            Node::For(f) => {
+                if let Some(found) = first_call_use(&f.body) {
+                    return Some(found);
+                }
+                if let Some(found) = f.empty.as_deref().and_then(first_call_use) {
+                    return Some(found);
+                }
+            }
+            Node::TextBlock(_) | Node::Raw(_) | Node::Comment { .. } | Node::Doctype => {}
+        }
+    }
+    None
+}
+
 fn describe_indent(s: &str) -> String {
     if s.is_empty() {
         "none".to_string()
@@ -237,16 +363,23 @@ struct Line {
     num: usize,
 }
 
-/// Parses a source file into nodes plus non-fatal warnings (SPEC §2 rule 5).
-/// With `templates: false`, any template construct is an error (SPEC §9.2).
-pub fn parse(src: &str, templates: bool) -> Result<(Vec<Node>, Vec<String>)> {
+/// Parses a source file into a [`Document`] plus non-fatal warnings (SPEC §2
+/// rule 5). With `templates: false`, any template construct is an error
+/// (SPEC §9.2).
+pub fn parse(src: &str, templates: bool) -> Result<(Document, Vec<String>)> {
     let mut parser = Parser::new(src, templates);
-    let nodes = parser.parse_block(0)?;
+    let body = parser.parse_block(0)?;
     if parser.pos < parser.lines.len() {
         let l = &parser.lines[parser.pos];
         return err(l.num, 1, "unexpected dedent");
     }
-    Ok((nodes, parser.warnings))
+    Ok((
+        Document {
+            defs: parser.defs,
+            body,
+        },
+        parser.warnings,
+    ))
 }
 
 struct Parser {
@@ -261,6 +394,11 @@ struct Parser {
     /// `#!shorthand` seen: bare class tokens are decoded through the codebook
     /// (SPEC §3.x). Off until the directive appears.
     shorthand: bool,
+    /// Component definitions, in source order (top-level only, SPEC §10.3).
+    defs: Vec<Def>,
+    /// Inside a `def` body — the only place `children` is legal. A plain
+    /// bool suffices because `def`s cannot nest.
+    in_def: bool,
 }
 
 impl Parser {
@@ -293,6 +431,8 @@ impl Parser {
             warnings: Vec::new(),
             templates,
             shorthand: false,
+            defs: Vec::new(),
+            in_def: false,
         }
     }
 
@@ -409,7 +549,9 @@ impl Parser {
                 } else if RESERVED.contains(&first_tok)
                     || (first_tok.starts_with('+') && first_tok.len() > 1)
                 {
-                    nodes.push(self.parse_statement(depth, first_tok, num)?);
+                    if let Some(node) = self.parse_statement(depth, first_tok, num)? {
+                        nodes.push(node);
+                    }
                 } else {
                     let (logical, start) = self.join_continuations()?;
                     let mut cur = Cur::new(&logical, start);
@@ -425,7 +567,13 @@ impl Parser {
     }
 
     /// Dispatches a line whose first token is a statement keyword or `+call`.
-    fn parse_statement(&mut self, depth: usize, first_tok: &str, num: usize) -> Result<Node> {
+    /// Returns `None` for `def` — a definition emits nothing where it stands.
+    fn parse_statement(
+        &mut self,
+        depth: usize,
+        first_tok: &str,
+        num: usize,
+    ) -> Result<Option<Node>> {
         if !self.templates {
             return err(
                 num,
@@ -436,8 +584,13 @@ impl Parser {
             );
         }
         match first_tok {
-            "if" => self.parse_if_chain(depth),
-            "for" => self.parse_for(depth),
+            "if" => self.parse_if_chain(depth).map(Some),
+            "for" => self.parse_for(depth).map(Some),
+            "def" => {
+                self.parse_def(depth)?;
+                Ok(None)
+            }
+            "children" => self.parse_children().map(Some),
             "elif" => err(
                 num,
                 1,
@@ -453,19 +606,133 @@ impl Parser {
                 1,
                 "`empty` must directly follow a `for` block at the same indent",
             ),
-            kw if P2_RESERVED.contains(&kw) => err(
+            "include" => err(
                 num,
                 1,
-                format!("`{kw}` is part of the composition layer and is not implemented yet"),
+                "`include` is part of the composition layer and is not implemented yet (SPEC §10.5)",
             ),
-            call => err(
-                num,
-                1,
-                format!(
-                    "`{call}` component calls are part of the composition layer and are not implemented yet"
-                ),
-            ),
+            _ => self.parse_call(depth).map(Some),
         }
+    }
+
+    /// `def name(param param=default …)` + body (SPEC §10.3). Top level only;
+    /// the definition goes to `self.defs`, not the node tree.
+    fn parse_def(&mut self, depth: usize) -> Result<()> {
+        let (content, line) = self.join_continuations()?;
+        if depth != 0 {
+            return err(
+                line,
+                1,
+                "`def` is allowed only at top level — not nested in elements, statements, or other `def`s (SPEC §10.3)",
+            );
+        }
+        let mut cur = Cur::at(&content, 3, line);
+        cur.eat_ws();
+        let col = cur.col();
+        let Some(name) = read_name(&mut cur) else {
+            return err(line, col, "`def` needs a component name: `def card(title)`");
+        };
+        if RESERVED.contains(&name.as_str())
+            || matches!(name.as_str(), "ctx" | "true" | "false" | "null")
+        {
+            return err(
+                line,
+                col,
+                format!("`{name}` is a reserved word and cannot name a component"),
+            );
+        }
+        if let Some(prev) = self.defs.iter().find(|d| d.name == name) {
+            return err(
+                line,
+                col,
+                format!(
+                    "component `{name}` is already defined on line {} — component names share one namespace per file (SPEC §10.3)",
+                    prev.line
+                ),
+            );
+        }
+        let params = if cur.peek() == Some('(') {
+            parse_params(&mut cur)?
+        } else {
+            Vec::new()
+        };
+        cur.eat_ws();
+        if !cur.at_end() {
+            let tok = cur.read_token();
+            return err(
+                line,
+                col,
+                format!("unexpected `{tok}` after the parameter list — a `def` line is `def name(params)` alone, with the body indented (SPEC §10.3)"),
+            );
+        }
+        self.in_def = true;
+        let body = self.statement_body(depth, line, "def");
+        self.in_def = false;
+        self.defs.push(Def {
+            name,
+            params,
+            body: body?,
+            line,
+        });
+        Ok(())
+    }
+
+    /// `children`, alone on its line, inside a `def` body only (SPEC §10.3).
+    fn parse_children(&mut self) -> Result<Node> {
+        let (content, line) = self.join_continuations()?;
+        if !self.in_def {
+            return err(
+                line,
+                1,
+                "`children` is only allowed inside a `def` body — it emits the block the caller gave the component (SPEC §10.3)",
+            );
+        }
+        if content.trim() != "children" {
+            return err(
+                line,
+                1,
+                "`children` takes nothing — it emits the caller's block (SPEC §10.3)",
+            );
+        }
+        Ok(Node::Children { line })
+    }
+
+    /// `+name(args)` + optional indented block (the component's `children`,
+    /// SPEC §10.4). Whether `name` resolves is checked at render time.
+    fn parse_call(&mut self, depth: usize) -> Result<Node> {
+        let (content, line) = self.join_continuations()?;
+        let mut cur = Cur::new(&content, line);
+        cur.bump(); // +
+        let col = cur.col();
+        let Some(name) = read_name(&mut cur) else {
+            return err(
+                line,
+                col,
+                "`+` starts a component call and needs a name: `+card(title=\"…\")`",
+            );
+        };
+        let args = if cur.peek() == Some('(') {
+            parse_args(&mut cur, self.templates)?
+        } else {
+            Vec::new()
+        };
+        cur.eat_ws();
+        if !cur.at_end() {
+            let junk_col = cur.col();
+            let tok = cur.read_token();
+            return err(
+                line,
+                junk_col,
+                format!("unexpected `{tok}` after the component call — a call is `+{name}(args)` alone, with children on indented lines (SPEC §10.4)"),
+            );
+        }
+        let children = self.parse_block(depth + 1)?;
+        Ok(Node::Call(Call {
+            name,
+            args,
+            children,
+            line,
+        }))
     }
 
     /// `if expr` + block, then any directly-following `elif`/`else` siblings
@@ -714,6 +981,200 @@ fn loop_name(cur: &mut Cur, line: usize, what: &str) -> Result<String> {
     }
 }
 
+/// A parameter-list binding name (`def` params, SPEC §10.3): an identifier,
+/// not `ctx` (unshadowable, SPEC §9.4), not an expression literal. `hint`
+/// trails the unexpected-character error — the common mistake there is an
+/// unbraced spaced expression value, so callers point at their brace syntax.
+fn param_name(cur: &mut Cur, what: &str, hint: &str) -> Result<String> {
+    let line = cur.line;
+    let col = cur.col();
+    match read_name(cur) {
+        Some(name) => match name.as_str() {
+            "ctx" => err(
+                line,
+                col,
+                "`ctx` is the reserved context root and cannot be shadowed (SPEC §9.4)",
+            ),
+            "true" | "false" | "null" => err(
+                line,
+                col,
+                format!("`{name}` is an expression literal and cannot be {what}"),
+            ),
+            _ => Ok(name),
+        },
+        None => match cur.peek() {
+            Some(c) => err(
+                line,
+                col,
+                format!(
+                    "unexpected `{c}` — {what} is an identifier ([A-Za-z_][A-Za-z0-9_]*){hint}"
+                ),
+            ),
+            None => unreachable!("callers check for `)` and end of line first"),
+        },
+    }
+}
+
+/// Parses `(param param=default …)` of a `def` (SPEC §10.3). The cursor sits
+/// on `(`. Defaults are expressions, never strings; an unquoted default must
+/// be whitespace-free, `{…}` braces a spaced one.
+fn parse_params(cur: &mut Cur) -> Result<Vec<Param>> {
+    let line = cur.line;
+    cur.bump(); // (
+    let mut params: Vec<Param> = Vec::new();
+    loop {
+        cur.eat_ws();
+        match cur.peek() {
+            None => return err(line, cur.col(), "unclosed parameter list — missing `)`"),
+            Some(')') => {
+                cur.bump();
+                return Ok(params);
+            }
+            Some(_) => {
+                let col = cur.col();
+                let name = param_name(
+                    cur,
+                    "a parameter name",
+                    "; a default expression with spaces needs braces: `limit={ctx.pageSize - 1}` (SPEC §10.3)",
+                )?;
+                if params.iter().any(|p| p.name == name) {
+                    return err(line, col, format!("duplicate parameter `{name}`"));
+                }
+                match cur.peek() {
+                    None | Some(' ') | Some('\t') | Some(')') | Some('=') => {}
+                    Some(c) => {
+                        return err(
+                            line,
+                            cur.col(),
+                            format!("unexpected `{c}` in parameter name — parameters are identifiers ([A-Za-z_][A-Za-z0-9_]*)"),
+                        )
+                    }
+                }
+                let default = if cur.peek() == Some('=') {
+                    cur.bump();
+                    Some(expr_value(cur, "default", "a default")?)
+                } else {
+                    None
+                };
+                params.push(Param { name, default });
+            }
+        }
+    }
+}
+
+/// Parses `(name name=value …)` of a `+call` (SPEC §10.4). The cursor sits
+/// on `(`. Attribute *shape*, expression *values*: bare name = `true`,
+/// quoted = string with interpolation, unquoted = expression.
+fn parse_args(cur: &mut Cur, templates: bool) -> Result<Vec<Arg>> {
+    let line = cur.line;
+    cur.bump(); // (
+    let mut args: Vec<Arg> = Vec::new();
+    loop {
+        cur.eat_ws();
+        match cur.peek() {
+            None => return err(line, cur.col(), "unclosed argument list — missing `)`"),
+            Some(')') => {
+                cur.bump();
+                return Ok(args);
+            }
+            Some(_) => {
+                let col = cur.col();
+                let name = param_name(
+                    cur,
+                    "an argument name",
+                    "; an expression value with spaces needs braces: `n={a + b}` (SPEC §10.4)",
+                )?;
+                if args.iter().any(|a| a.name == name) {
+                    return err(line, col, format!("duplicate argument `{name}`"));
+                }
+                let value = match cur.peek() {
+                    None | Some(' ') | Some('\t') | Some(')') => AttrValue::Bool,
+                    Some('=') => {
+                        cur.bump();
+                        match cur.peek() {
+                            Some(q @ ('"' | '\'')) => {
+                                AttrValue::Str(parse_quoted(cur, q, false, templates)?)
+                            }
+                            _ => AttrValue::Expr(expr_value(cur, "value", "an argument")?),
+                        }
+                    }
+                    Some(c) => {
+                        return err(
+                            line,
+                            cur.col(),
+                            format!("unexpected `{c}` in argument name — argument names are identifiers matching the component's parameters (SPEC §10.4)"),
+                        )
+                    }
+                };
+                args.push(Arg {
+                    name,
+                    value,
+                    line,
+                    col,
+                });
+            }
+        }
+    }
+}
+
+/// An expression value after `=` in a parameter default or call argument:
+/// `{…}` braces a spaced expression, otherwise the value runs to the next
+/// whitespace or `)` and must parse as an expression (SPEC §10.3–§10.4).
+fn expr_value(cur: &mut Cur, missing: &str, what: &str) -> Result<TplExpr> {
+    let line = cur.line;
+    match cur.peek() {
+        Some('{') => {
+            let bcol = cur.col();
+            cur.bump(); // {
+            if cur.peek() == Some('!') {
+                return err(
+                    line,
+                    bcol,
+                    format!("raw interpolation `{{!…}}` makes no sense here — {what} value is passed, not output"),
+                );
+            }
+            let t = scan_expr(cur, bcol)?;
+            match cur.peek() {
+                None | Some(' ') | Some('\t') | Some(')') => Ok(t),
+                Some(_) => err(
+                    line,
+                    cur.col(),
+                    format!("a braced `{{expr}}` must be the entire {missing} — quote to mix text: name=\"…\""),
+                ),
+            }
+        }
+        None | Some(' ') | Some('\t') | Some(')') => {
+            err(line, cur.col(), format!("missing {missing} after `=`"))
+        }
+        Some(_) => {
+            let start = cur.i;
+            while let Some(c) = cur.peek() {
+                if c == ' ' || c == '\t' || c == ')' {
+                    break;
+                }
+                cur.bump();
+            }
+            let src = &cur.s[start..cur.i];
+            match expr::parse(src) {
+                Ok(e) => Ok(TplExpr {
+                    src: src.to_string(),
+                    expr: e,
+                    line,
+                    col: cur.col_at(start),
+                }),
+                Err(pe) => err(
+                    line,
+                    cur.col_at(start + pe.offset),
+                    format!(
+                        "{} — {what} value is an expression; quote a string (name=\"…\") or brace anything spaced (name={{a + b}})",
+                        pe.msg
+                    ),
+                ),
+            }
+        }
+    }
+}
+
 /// SPEC §7: void elements cannot have content. Children of chain elements were
 /// checked in their own parse pass; this checks the chain path itself.
 fn check_void_content(el: &Element) -> Result<()> {
@@ -941,6 +1402,13 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
             }
             name.to_string()
         }
+        Some('+') => {
+            return err(
+                line,
+                col,
+                "`+` starts a component call and needs a name butted to it: `+card(title=\"…\")` (SPEC §10.4)",
+            )
+        }
         Some(c) => return err(line, col, format!("unexpected `{c}` at start of element")),
     };
 
@@ -997,6 +1465,13 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
             cur.eat_ws();
             if cur.at_end() {
                 return err(line, cur.col(), "expected an element after `>`");
+            }
+            if cur.peek() == Some('+') {
+                return err(
+                    line,
+                    cur.col(),
+                    "a component call cannot be the target of a `>` chain — write the call as an indented child (SPEC §10.4)",
+                );
             }
             el.chain = Some(Box::new(parse_element(cur, templates, shorthand)?));
             break;

@@ -206,6 +206,20 @@ impl R<'_> {
                 }
             }
             Node::For(f) => self.for_loop(f, depth)?,
+            // stub: calls parse but
+            // component rendering is not implemented yet.
+            Node::Call(c) => {
+                return err(
+                    c.line,
+                    1,
+                    format!(
+                        "`+{}` parses, but component rendering is not implemented yet",
+                        c.name
+                    ),
+                )
+            }
+            // Only legal inside `def` bodies, which nothing renders yet.
+            Node::Children { .. } => unreachable!("`children` parses only inside `def` bodies"),
         }
         Ok(())
     }

@@ -83,6 +83,12 @@ class TransientAPIError(Exception):
 class FatalAPIError(Exception):
     """The API rejected us for a reason retrying can't fix (e.g. credits)."""
 
+
+class EmptyCompletionError(Exception):
+    """finish_reason=length with no content even after the budget was
+    escalated — a reasoning model spent everything thinking. Deterministic
+    at temperature 0, so this fails the CASE, not the run."""
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 H2F = os.path.join(ROOT, "target", "release", "html2fhtml")
 FHTML = os.path.join(ROOT, "target", "release", "fhtml")
@@ -203,10 +209,16 @@ def api_call(provider, model, system, messages, key, max_retries=3,
             "content-type": "application/json",
             "authorization": f"Bearer {key}",
         }
-    req = urllib.request.Request(
-        API[provider], data=json.dumps(body).encode(), headers=headers
-    )
+    # Reasoning models draw thinking tokens from the same completion budget;
+    # a big component can exhaust it before any content appears
+    # (finish_reason=length, empty message). Deterministic at temperature 0 —
+    # escalate the budget instead of blind-retrying, up to 4× the start.
+    budget = max_tokens
     for attempt in range(max_retries + 1):
+        body["max_tokens"] = budget
+        req = urllib.request.Request(
+            API[provider], data=json.dumps(body).encode(), headers=headers
+        )
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data = json.load(resp)
@@ -219,10 +231,24 @@ def api_call(provider, model, system, messages, key, max_retries=3,
             if "choices" not in data or not data["choices"]:
                 raise TransientAPIError(str(data.get("error", data))[:300])
             content = data["choices"][0].get("message", {}).get("content")
+            finish = data["choices"][0].get("finish_reason")
+            if finish == "length":
+                if budget < max_tokens * 4 and attempt < max_retries:
+                    budget *= 2
+                    print(f"[api] completion hit the {budget // 2}-token cap "
+                          f"(finish_reason=length) — retrying with {budget}",
+                          flush=True)
+                    continue
+                if not content:
+                    raise EmptyCompletionError(
+                        f"no completion within {budget} tokens "
+                        f"(finish_reason=length — the model spent the whole "
+                        f"budget reasoning)")
+                # Truncated but non-empty at the cap: grade what we got.
+                return content
             if not content:
                 raise TransientAPIError(
-                    f"empty completion (finish_reason="
-                    f"{data['choices'][0].get('finish_reason')})")
+                    f"empty completion (finish_reason={finish})")
             return content
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 529) and attempt < max_retries:
@@ -404,7 +430,9 @@ def main():
                          "(continue an interrupted run)")
     ap.add_argument("--max-tokens", type=int, default=8192,
                     help="completion budget per request (lower it if your "
-                         "key's credit limit rejects requests with 402)")
+                         "key's credit limit rejects requests with 402); "
+                         "escalated up to 4x when a reasoning model exhausts "
+                         "it (finish_reason=length)")
     args = ap.parse_args()
 
     key = os.environ.get("ANTHROPIC_API_KEY")
@@ -514,6 +542,19 @@ def main():
                     raw = api_call(provider, model, system, messages, key,
                                    verbose=args.verbose,
                                    max_tokens=args.max_tokens)
+                except EmptyCompletionError as e:
+                    # The model produced nothing for THIS case; the rest of
+                    # the sweep is unaffected — record the failure, move on.
+                    merged[case_key] = {
+                        "model": model, "target": target, "component": stem,
+                        "compile": False, "dom": False,
+                        "status": "compile-fail", "error": str(e),
+                    }
+                    save()
+                    print(f"{model} {target} {stem}: "
+                          f"{MARKS['compile-fail']}  (no completion: {e})",
+                          flush=True)
+                    continue
                 except (RuntimeError, FatalAPIError) as e:
                     sys.exit(
                         f"\n{e}\n\nAll graded cases are saved — rerun the "

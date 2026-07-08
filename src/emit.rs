@@ -174,6 +174,7 @@ fn visit<'a>(nodes: &'a [Node], f: &mut impl FnMut(&'a Node) -> Result<()>) -> R
             }
             Node::Call(c) => visit(&c.children, f)?,
             Node::Children { .. }
+            | Node::DefSite(_)
             | Node::TextBlock(_)
             | Node::Raw(_)
             | Node::Comment { .. }
@@ -381,6 +382,8 @@ impl<'a> R<'a> {
                 self.frames.push(frame);
                 result?;
             }
+            // A definition emits nothing where it stands (SPEC §10.3).
+            Node::DefSite(_) => {}
         }
         Ok(())
     }

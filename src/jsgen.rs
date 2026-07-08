@@ -351,7 +351,7 @@ impl G {
             Node::For(f) => self.for_loop(f, depth),
             // gate in `lib::compile_to_js`:
             // the JS backend for components is not implemented yet.
-            Node::Call(_) | Node::Children { .. } => {
+            Node::Call(_) | Node::Children { .. } | Node::DefSite(_) => {
                 unreachable!("components are gated out of `--target=js` until it is implemented")
             }
         }

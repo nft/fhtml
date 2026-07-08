@@ -4,14 +4,54 @@
 //! AST for this reason). Expressions are reprinted from their trimmed source
 //! text, never re-serialized from the AST — formatting must not change output.
 
-use crate::parser::{AttrValue, ClassItem, Element, IfChain, Node, TextPart};
+use crate::parser::{AttrValue, Call, ClassItem, Def, Document, Element, IfChain, Node, TextPart};
 
+pub fn format_document(doc: &Document) -> String {
+    let mut out = String::new();
+    for node in &doc.body {
+        match node {
+            // Definitions print where they sat in the source (SPEC §10.3).
+            Node::DefSite(i) => fmt_def(&mut out, &doc.defs[*i]),
+            _ => fmt_node(&mut out, node, 0),
+        }
+    }
+    out
+}
+
+/// Formats a plain node list — the converter's output. `DefSite` markers
+/// cannot occur here: they only arise from parsing `def` lines.
+#[cfg(feature = "convert")]
 pub fn format_nodes(nodes: &[Node]) -> String {
     let mut out = String::new();
     for node in nodes {
         fmt_node(&mut out, node, 0);
     }
     out
+}
+
+/// `def name(param param=default …)`, body indented one step. Empty parameter
+/// lists print bare (`def name`) — the parse is identical.
+fn fmt_def(out: &mut String, def: &Def) {
+    out.push_str("def ");
+    out.push_str(&def.name);
+    if !def.params.is_empty() {
+        out.push('(');
+        for (i, p) in def.params.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            out.push_str(&p.name);
+            if let Some(d) = &p.default {
+                out.push('=');
+                out.push_str(&expr_value(&d.src));
+            }
+        }
+        out.push(')');
+    }
+    out.push('\n');
+    for child in &def.body {
+        fmt_node(out, child, 1);
+    }
 }
 
 fn fmt_node(out: &mut String, node: &Node, depth: usize) {
@@ -59,11 +99,15 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
                 fmt_node(out, child, depth + 1);
             }
         }
-        // gate in `lib::format`:
-        // formatting components is not implemented yet.
-        Node::Call(_) | Node::Children { .. } => {
-            unreachable!("components are gated out of `format` until it is implemented")
+        Node::Call(c) => {
+            out.push_str(&format!("{ind}{}\n", call_line(c)));
+            for child in &c.children {
+                fmt_node(out, child, depth + 1);
+            }
         }
+        Node::Children { .. } => out.push_str(&format!("{ind}children\n")),
+        // Top level only (parser-enforced) — `format_document` handles it.
+        Node::DefSite(_) => unreachable!("`def` is top-level only (SPEC §10.3)"),
         Node::If(chain) => fmt_if(out, chain, depth),
         Node::For(f) => {
             match &f.index {
@@ -102,6 +146,59 @@ fn fmt_if(out: &mut String, chain: &IfChain, depth: usize) {
     }
 }
 
+/// `+name(arg arg=value …)`; empty argument lists print bare (`+name`).
+fn call_line(c: &Call) -> String {
+    let mut s = format!("+{}", c.name);
+    if !c.args.is_empty() {
+        s.push('(');
+        for (i, arg) in c.args.iter().enumerate() {
+            if i > 0 {
+                s.push(' ');
+            }
+            s.push_str(&arg.name);
+            match &arg.value {
+                AttrValue::Bool => {}
+                // Always quoted — printed bare, the value would reparse as
+                // an expression, not a string (SPEC §10.4).
+                AttrValue::Str(parts) => {
+                    s.push('=');
+                    s.push_str(&quoted_string(parts));
+                }
+                AttrValue::Expr(t) => {
+                    s.push('=');
+                    s.push_str(&expr_value(&t.src));
+                }
+            }
+        }
+        s.push(')');
+    }
+    s
+}
+
+/// An expression value after `=` in a parameter default or call argument
+/// (SPEC §10.3–§10.4). Bare when the reparse reads it back identically;
+/// braced when the source contains whitespace or `)` (the unquoted form
+/// stops there) or starts with a quote (which would reparse as a string
+/// argument).
+fn expr_value(src: &str) -> String {
+    if src.contains([' ', '\t', ')']) || src.starts_with(['"', '\'']) {
+        interp(src)
+    } else {
+        src.to_string()
+    }
+}
+
+/// A non-raw `{expr}`. A leading `!` would reparse as the raw sigil `{!…}`
+/// (rejected in attributes and classes, unescaped in text), so it keeps one
+/// space after the brace — `{ !expr}` trims back to the same expression.
+fn interp(src: &str) -> String {
+    if src.starts_with('!') {
+        format!("{{ {src}}}")
+    } else {
+        format!("{{{src}}}")
+    }
+}
+
 fn innermost(el: &Element) -> &Element {
     match &el.chain {
         Some(next) => innermost(next),
@@ -132,7 +229,7 @@ fn element_line(el: &Element) -> String {
                 .iter()
                 .map(|c| match c {
                     ClassItem::Lit(s) => escape_attr_lit(s),
-                    ClassItem::Interp(t) => format!("{{{}}}", t.src),
+                    ClassItem::Interp(t) => interp(&t.src),
                 })
                 .collect::<Vec<_>>()
                 .join(" "),
@@ -156,7 +253,8 @@ fn element_line(el: &Element) -> String {
                     s.push_str(&attr_value(parts));
                 }
                 AttrValue::Expr(t) => {
-                    s.push_str(&format!("={{{}}}", t.src));
+                    s.push('=');
+                    s.push_str(&interp(&t.src));
                 }
             }
         }
@@ -176,7 +274,7 @@ fn element_line(el: &Element) -> String {
             s.push(' ');
             match class {
                 ClassItem::Lit(c) => s.push_str(c),
-                ClassItem::Interp(t) => s.push_str(&format!("{{{}}}", t.src)),
+                ClassItem::Interp(t) => s.push_str(&interp(&t.src)),
             }
         }
     }
@@ -201,11 +299,19 @@ fn attr_value(parts: &[TextPart]) -> String {
             return v.to_string();
         }
     }
+    quoted_string(parts)
+}
+
+/// A string value in its always-quoted form: attribute values that need
+/// quoting, and call-argument strings (which may never print bare —
+/// SPEC §10.4 reads unquoted values as expressions). Raw `{!…}` cannot
+/// occur here (forbidden in attribute-shaped values, SPEC §9.1).
+fn quoted_string(parts: &[TextPart]) -> String {
     let mut s = String::from("\"");
     for part in parts {
         match part {
             TextPart::Lit(v) => s.push_str(&escape_attr_lit(v)),
-            TextPart::Interp { expr, .. } => s.push_str(&format!("{{{}}}", expr.src)),
+            TextPart::Interp { expr, .. } => s.push_str(&interp(&expr.src)),
         }
     }
     s.push('"');
@@ -241,8 +347,11 @@ fn quoted_text(parts: &[TextPart]) -> String {
                 }
             }
             TextPart::Interp { expr, raw } => {
-                let bang = if *raw { "!" } else { "" };
-                s.push_str(&format!("{{{bang}{}}}", expr.src));
+                if *raw {
+                    s.push_str(&format!("{{!{}}}", expr.src));
+                } else {
+                    s.push_str(&interp(&expr.src));
+                }
             }
         }
     }
@@ -257,8 +366,11 @@ fn block_text(parts: &[TextPart]) -> String {
         match part {
             TextPart::Lit(t) => s.push_str(&t.replace('{', "\\{")),
             TextPart::Interp { expr, raw } => {
-                let bang = if *raw { "!" } else { "" };
-                s.push_str(&format!("{{{bang}{}}}", expr.src));
+                if *raw {
+                    s.push_str(&format!("{{!{}}}", expr.src));
+                } else {
+                    s.push_str(&interp(&expr.src));
+                }
             }
         }
     }

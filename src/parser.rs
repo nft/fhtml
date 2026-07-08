@@ -142,6 +142,11 @@ pub enum Node {
     Children {
         line: usize,
     },
+    /// Where a `def` sat in the source — an index into [`Document::defs`].
+    /// Emits nothing; it exists so `fhtml fmt` reprints the definition in
+    /// place instead of hoisting it past comments and markup. Top level
+    /// only, like `def` itself.
+    DefSite(usize),
 }
 
 #[derive(Debug)]
@@ -249,6 +254,9 @@ pub fn first_template_use(nodes: &[Node]) -> Option<(usize, usize, String)> {
                     return Some(found);
                 }
             }
+            // Top-level only; `first_template_use_doc` reports defs from
+            // `Document::defs`, which carries their lines.
+            Node::DefSite(_) => {}
             Node::Raw(_) | Node::Comment { .. } | Node::Doctype => {}
         }
     }
@@ -290,10 +298,9 @@ fn element_template_use(el: &Element) -> Option<(usize, usize, String)> {
     first_template_use(&el.children)
 }
 
-/// TEMPORARY gate: components parse,
-/// but the formatter and the JS backend land later —
-/// `fhtml fmt` and `--target=js` refuse files that use them. Deleted as
-/// those stages ship.
+/// TEMPORARY gate: components parse
+/// and render, but the JS backend lands later —
+/// `--target=js` refuses files that use them. Deleted when it ships.
 pub fn first_p2_use(doc: &Document) -> Option<(usize, String)> {
     if let Some(d) = doc.defs.first() {
         return Some((d.line, "`def`".to_string()));
@@ -336,6 +343,9 @@ fn first_call_use(nodes: &[Node]) -> Option<(usize, String)> {
                     return Some(found);
                 }
             }
+            // A marker means `doc.defs` is non-empty, so `first_p2_use`
+            // already returned before walking here.
+            Node::DefSite(_) => {}
             Node::TextBlock(_) | Node::Raw(_) | Node::Comment { .. } | Node::Doctype => {}
         }
     }
@@ -543,9 +553,8 @@ impl Parser {
                 } else if RESERVED.contains(&first_tok)
                     || (first_tok.starts_with('+') && first_tok.len() > 1)
                 {
-                    if let Some(node) = self.parse_statement(depth, first_tok, num)? {
-                        nodes.push(node);
-                    }
+                    let node = self.parse_statement(depth, first_tok, num)?;
+                    nodes.push(node);
                 } else {
                     let (logical, start) = self.join_continuations()?;
                     let mut cur = Cur::new(&logical, start);
@@ -561,13 +570,9 @@ impl Parser {
     }
 
     /// Dispatches a line whose first token is a statement keyword or `+call`.
-    /// Returns `None` for `def` — a definition emits nothing where it stands.
-    fn parse_statement(
-        &mut self,
-        depth: usize,
-        first_tok: &str,
-        num: usize,
-    ) -> Result<Option<Node>> {
+    /// A `def` yields a [`Node::DefSite`] marker — the definition itself goes
+    /// to `self.defs`; the marker keeps its source position for `fhtml fmt`.
+    fn parse_statement(&mut self, depth: usize, first_tok: &str, num: usize) -> Result<Node> {
         if !self.templates {
             return err(
                 num,
@@ -578,13 +583,13 @@ impl Parser {
             );
         }
         match first_tok {
-            "if" => self.parse_if_chain(depth).map(Some),
-            "for" => self.parse_for(depth).map(Some),
+            "if" => self.parse_if_chain(depth),
+            "for" => self.parse_for(depth),
             "def" => {
                 self.parse_def(depth)?;
-                Ok(None)
+                Ok(Node::DefSite(self.defs.len() - 1))
             }
-            "children" => self.parse_children().map(Some),
+            "children" => self.parse_children(),
             "elif" => err(
                 num,
                 1,
@@ -605,7 +610,7 @@ impl Parser {
                 1,
                 "`include` is part of the composition layer and is not implemented yet (SPEC §10.5)",
             ),
-            _ => self.parse_call(depth).map(Some),
+            _ => self.parse_call(depth),
         }
     }
 

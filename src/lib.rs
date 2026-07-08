@@ -3,8 +3,8 @@
 //!
 //! Implements the static markup layer (SPEC §1–§8, §11), the canonical formatter,
 //! the template layer (SPEC §9 interpolation, §10.1–§10.2 statements),
-//! and components (§10.3–§10.4 `def`/`+call`/`children`) on the render path.
-//! Formatting and the JS backend for components land later. `include` (§10.5) is recognized and rejected
+//! and components (§10.3–§10.4 `def`/`+call`/`children`) on the render and
+//! `fmt` paths. The JS backend for components lands later. `include` (§10.5) is recognized and rejected
 //! with a clear "not implemented" error.
 
 #[cfg(feature = "convert")]
@@ -134,13 +134,5 @@ pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
 /// `compile(format(s)) == compile(s)` and `format(format(s)) == format(s)`.
 pub fn format(src: &str) -> Result<String, Error> {
     let (doc, _) = parser::parse(src, true)?;
-    // Gate: formatting components is not implemented yet.
-    if let Some((line, what)) = parser::first_p2_use(&doc) {
-        return error::err(
-            line,
-            1,
-            format!("{what} is not supported by `fhtml fmt` yet — components parse, but formatting them is not implemented"),
-        );
-    }
-    Ok(fmt::format_nodes(&doc.body))
+    Ok(fmt::format_document(&doc))
 }

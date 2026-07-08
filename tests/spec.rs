@@ -1127,6 +1127,78 @@ mod template_parse {
         let formatted = fhtml::format(src).unwrap();
         assert_eq!(formatted, src);
     }
+
+    #[test]
+    fn fmt_guards_interpolations_starting_with_bang() {
+        // `{ !a}` is Not-a; printed as `{!a}` it would reparse as *raw*
+        // interpolation of `a` (SPEC §9.1) — different output in text, a
+        // parse error in attributes and classes. fmt keeps one space.
+        let src = "p \"{  !a  }\"\np(hidden={  !a  }) x { !a }\n  | { !a }\n";
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(
+            formatted,
+            "p \"{ !a}\"\np(hidden={ !a}) x { !a}\n  | { !a}\n"
+        );
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+        let d = fhtml::json::parse(r#"{"a": false}"#).unwrap();
+        assert_eq!(
+            fhtml::render(&formatted, &d, Mode::Min).unwrap(),
+            fhtml::render(src, &d, Mode::Min).unwrap()
+        );
+    }
+
+    // ----------------------------------------- fmt on components §10.3–§10.4
+
+    #[test]
+    fn fmt_reprints_defs_calls_and_children() {
+        // Params and args normalize to single spaces; defaults and expression
+        // values print bare when the reparse is identical and braced when
+        // spaced; string arguments always stay quoted (bare would reparse as
+        // an expression, SPEC §10.4); bodies indent one step.
+        let src = "def card(  title   n={ i + 1 }  compact={1}  )\n    h3 \"{title}\"\n    children\n+card( title=\"Hi\"  n={2}   compact )\n      p \"body\"\n+card(title={ !x } n={a + b})\n+card\n";
+        let expected = "def card(title n={i + 1} compact=1)\n  h3 \"{title}\"\n  children\n+card(title=\"Hi\" n=2 compact)\n  p \"body\"\n+card(title=!x n={a + b})\n+card\n";
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(formatted, expected);
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    }
+
+    #[test]
+    fn fmt_keeps_defs_in_place() {
+        // A definition reprints where it sat — hoisting would detach the
+        // comment documenting it and reorder the file.
+        let src = "// intro\np \"before\"\n// the card\ndef card\n  p \"c\"\n+card\n";
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(formatted, src);
+    }
+
+    #[test]
+    fn fmt_component_file_render_is_unchanged() {
+        // The fmt invariant extends to components: formatting never changes
+        // rendered output, including through `children` and defaults.
+        let src = "def item(label done=false)\n  li \"{label}: {done}\"\n    children\nul\n  for t in tasks\n    +item(label=\"{t.name}\" done={ t.done })\n      em \"note\"\n";
+        let formatted = fhtml::format(src).unwrap();
+        let d = fhtml::json::parse(r#"{"tasks": [{"name": "a", "done": true}, {"name": "b"}]}"#)
+            .unwrap();
+        assert_eq!(
+            fhtml::render(&formatted, &d, Mode::Min).unwrap(),
+            fhtml::render(src, &d, Mode::Min).unwrap()
+        );
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    }
+
+    #[test]
+    fn fmt_blog_cards_def_corpus_is_stable() {
+        // The measured demo formats idempotently and still renders
+        // byte-identically to its fully expanded twin.
+        let src = include_str!("corpus/blog-cards-def.fhtml");
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+        use fhtml::Value;
+        assert_eq!(
+            fhtml::render(&formatted, &Value::Null, Mode::Min).unwrap(),
+            fhtml::render(src, &Value::Null, Mode::Min).unwrap()
+        );
+    }
 }
 
 // ------------------------------------------- rendering §9–§11 (render API)

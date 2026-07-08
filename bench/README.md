@@ -69,6 +69,16 @@ slightly from fhtml's, so a Pug completion can lose a contractual interior
 space that fhtml's `|`-idiom preserves — that counts against it, and is a
 real fidelity difference, not grader bias.
 
+The **`fhtml-def`** target answers the components question: same translation task, but the system prompt adds
+[cheatsheet-components.md](cheatsheet-components.md) and the few-shot adds a
+hand-written repetitive example (`tests/corpus/feature-list-def.fhtml`).
+Grading is unchanged — the compiler expands calls before `--dom-eq` — plus a
+third first-class metric, **compression**: the model's output tokens (o200k,
+needs `pip3 install tiktoken`) vs the plain-fhtml reference in `out/fhtml/`.
+Gate: ≥15% median compression on the repetitive half of the corpus (split at
+the median structural-repetition score of the references) with a DOM rate
+within 10 points of the plain `fhtml` target's.
+
 Not yet measured (needs a separate task design): free-form generation from a
 visual/text brief, and exact-match *edit* tasks on existing fhtml files.
 
@@ -94,5 +104,6 @@ harmless superset artifact (bare tag tokens that name a utility, e.g.
 - `generate.py` — LLM translation benchmark (needs `ANTHROPIC_API_KEY`)
 - `tailwind_scan.sh` — Tailwind `@source` coverage check (needs the npm install above)
 - `cheatsheet.md` — the fhtml syntax reference given to models
+- `cheatsheet-components.md` — the components section (`fhtml-def` target only)
 - `corpus/` — the 48-component corpus
 - `out/`, `.tools/` — generated artifacts and local npm installs (gitignored)

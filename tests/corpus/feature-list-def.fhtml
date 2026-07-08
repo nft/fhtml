@@ -1,0 +1,17 @@
+def feature(n title)
+  li flex gap-x-4
+    . flex size-8 flex-none items-center justify-center rounded-lg bg-indigo-600 text-sm font-semibold text-white "{n}"
+    .
+      h3 text-sm font-semibold text-gray-900 "{title}"
+      p mt-1 text-sm text-gray-600
+        children
+
+section mx-auto max-w-2xl px-6 py-16
+  h2 text-2xl font-bold tracking-tight text-gray-900 "Why teams switch"
+  ul mt-8 space-y-6
+    +feature(n=1 title="Set up in minutes")
+      | Connect your repository and get your first deploy before the coffee is done.
+    +feature(n=2 title="Preview every change")
+      | Each pull request gets its own URL — share it, click around, merge with confidence.
+    +feature(n=3 title="Scale without thinking")
+      | Traffic spikes are our problem, not yours. Autoscaling is on by default.

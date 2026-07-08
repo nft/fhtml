@@ -17,6 +17,17 @@ syntax. Targets:
              measure nothing); there is no compile step, so reliability shows
              up entirely in the DOM grade. fhtml-vs-html is the adoption
              question: what error rate does leaving HTML actually cost?
+  fhtml-def  fhtml with components (SPEC §10.3–§10.4): system prompt adds
+             `bench/cheatsheet-components.md`, the few-shot adds a hand-
+             written repetitive example (tests/corpus/feature-list-def).
+             Grading is unchanged (the compiler expands calls), plus a
+             third first-class metric: **compression** — the model's output
+             tokens (o200k, tiktoken required) vs the plain-fhtml reference
+             in bench/out/fhtml/. A model that never writes `def` scores
+             ≈0% compression: valid, but the feature bought nothing.
+             Gate: ≥15% median
+             compression on the repetitive half of the corpus with a DOM
+             rate within 10 points of plain fhtml.
 
 Grading is fully automatic:
 
@@ -43,7 +54,7 @@ Usage:
   python3 bench/run.py                        # populates bench/out/ first
   python3 bench/gen_legend.py                 # for --targets shorthand
   python3 bench/generate.py --models claude-haiku-4-5-20251001 \
-      --targets fhtml,pug,shorthand [--limit 10] [--verbose] [--resume]
+      --targets fhtml,pug,shorthand,fhtml-def [--limit 10] [--verbose] [--resume]
 
 results.json is rewritten after every graded case, so an interrupted run
 loses nothing; rerun with --resume to skip already-graded cases.
@@ -57,6 +68,7 @@ import json
 import os
 import re
 import socket
+import statistics
 import subprocess
 import sys
 import time
@@ -83,6 +95,10 @@ API = {
 }
 
 FEWSHOT = ["pricing-card"]  # from tests/corpus — never part of the eval set
+# fhtml-def adds a repetitive example (pricing-card has no repetition worth
+# factoring, so its plain translation doubles as the "leave it plain" shot;
+# feature-list's hand-written def translation teaches the factoring).
+FEWSHOT_DEF = ["pricing-card", "feature-list"]
 
 PROMPT = {
     "fhtml": (
@@ -107,6 +123,16 @@ PROMPT = {
         "Reply with ONLY the fhtml source (first line `#!shorthand`) — no "
         "code fences, no commentary."
     ),
+    # fhtml + the components layer (SPEC §10.3–§10.4). The plain-fhtml part
+    # of the prompt is byte-identical to the `fhtml` target's so the delta
+    # isolates the components section; the task instruction is also the same
+    # ("Translate to fhtml" — components are fhtml, not a dialect).
+    "fhtml-def": (
+        "You translate HTML into fhtml, a whitespace-based markup language "
+        "with components for repeated markup. Two references follow.\n\n"
+        "fhtml syntax:\n\n{cheatsheet}\n\n{components}\n\n"
+        "Reply with ONLY the fhtml source — no code fences, no commentary."
+    ),
     # Control: the same full-document rewrite, but in the syntax models know
     # best. Minification forces every byte to be re-emitted (a bare copy
     # would measure nothing) while the DOM-equivalence grading stays
@@ -125,11 +151,16 @@ PROMPT = {
 def task_of(target):
     """The user-message instruction. Existing targets keep their exact
     historical phrasing so results stay comparable across runs."""
-    return "Minify this HTML" if target == "html" else f"Translate to {target}"
+    if target == "html":
+        return "Minify this HTML"
+    if target == "fhtml-def":
+        return "Translate to fhtml"  # components ARE fhtml; the system
+        # prompt and few-shot carry the difference, not the instruction.
+    return f"Translate to {target}"
 
 # Targets compiled by the fhtml binary (the `#!shorthand` directive in-source
 # drives expansion for the shorthand target); everything else is Pug.
-FHTML_TARGETS = ("fhtml", "shorthand")
+FHTML_TARGETS = ("fhtml", "shorthand", "fhtml-def")
 
 
 def run(cmd, stdin=None):
@@ -294,13 +325,57 @@ def dom_eq_lenient(ref_html, html_b_text, workdir, stem):
     return ok
 
 
+def o200k_encoder():
+    """The compression metric counts o200k tokens (matches RESULTS.md)."""
+    try:
+        import tiktoken
+    except ImportError:
+        sys.exit("the fhtml-def compression metric needs tiktoken: "
+                 "pip3 install tiktoken")
+    return tiktoken.get_encoding("o200k_base")
+
+
+def repetition_score(fhtml_src):
+    """Fraction of a reference's structural lines that repeat. Quoted text,
+    paren contents, and `|` text-block content are blanked so only the markup
+    *shape* counts — repeated cards with different copy still register. The
+    The gate's corpus split ("the repetitive half") is the median of this score."""
+    lines = []
+    for ln in fhtml_src.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        if ln.startswith("|"):
+            ln = "|"
+        ln = re.sub(r'"[^"]*"', '""', ln)
+        ln = re.sub(r"\([^)]*\)", "()", ln)
+        lines.append(ln)
+    if not lines:
+        return 0.0
+    counts = {}
+    for ln in lines:
+        counts[ln] = counts.get(ln, 0) + 1
+    return sum(n for n in counts.values() if n > 1) / len(lines)
+
+
 def fewshot_messages(target, pretty_dir):
     msgs = []
-    for stem in FEWSHOT:
+    for stem in FEWSHOT_DEF if target == "fhtml-def" else FEWSHOT:
         html_path = os.path.join(ROOT, "tests", "corpus", stem + ".html")
         with open(html_path) as fh:
             html = fh.read()
-        if target == "fhtml":
+        if target == "fhtml-def":
+            # A hand-written def translation when one is checked in
+            # (feature-list); otherwise the plain conversion — showing that
+            # markup without repetition stays plain is part of the lesson.
+            def_path = os.path.join(ROOT, "tests", "corpus",
+                                    stem + "-def.fhtml")
+            if os.path.exists(def_path):
+                with open(def_path) as fh:
+                    out = fh.read()
+            else:
+                _, out, _ = run([H2F, html_path])
+        elif target == "fhtml":
             _, out, _ = run([H2F, html_path])
         elif target == "shorthand":
             _, out, _ = run([H2F, "--shorthand", html_path])
@@ -352,6 +427,8 @@ def main():
     if os.path.exists(legend_path):
         with open(legend_path) as fh:
             legend = fh.read()
+    with open(os.path.join(ROOT, "bench", "cheatsheet-components.md")) as fh:
+        components = fh.read()
 
     stems = sorted(
         os.path.splitext(f)[0].replace(".pretty", "")
@@ -364,6 +441,19 @@ def main():
     if "shorthand" in targets and not legend:
         sys.exit("bench/shorthand-legend.md missing — run "
                  "`python3 bench/gen_legend.py` first")
+
+    # fhtml-def: token counts of the plain-fhtml references (the compression
+    # denominator) and their repetition scores (the gate's corpus split).
+    comp_ref, rep_cut, enc = {}, 0.0, None
+    if "fhtml-def" in targets:
+        enc = o200k_encoder()
+        for stem in stems:
+            ref = os.path.join(OUT, "fhtml", stem + ".fhtml")
+            with open(ref) as fh:
+                ref_src = fh.read()
+            comp_ref[stem] = (len(enc.encode(ref_src)),
+                              repetition_score(ref_src))
+        rep_cut = statistics.median(r for _, r in comp_ref.values())
 
     os.makedirs(GEN, exist_ok=True)
     # results.json is the accumulator across runs and models; it is rewritten
@@ -394,7 +484,9 @@ def main():
 
     for model in models:
         for target in targets:
-            system = PROMPT[target].format(cheatsheet=cheatsheet, legend=legend)
+            system = PROMPT[target].format(cheatsheet=cheatsheet,
+                                           legend=legend,
+                                           components=components)
             shots = fewshot_messages(target, pretty_dir)
             if args.verbose:
                 vblock(f"system prompt · {model} / {target}", system)
@@ -446,6 +538,17 @@ def main():
                         status = "ws-only"
                     else:
                         status = "dom-fail"
+                # fhtml-def: compression is a first-class metric — a model
+                # that never writes `def` compresses ≈0%, valid but pointless.
+                extra, comp_note = {}, ""
+                if target == "fhtml-def":
+                    ref_tok, rep = comp_ref[stem]
+                    out_tok = len(enc.encode(source))
+                    compression = 1 - out_tok / ref_tok
+                    extra = {"tokens_out": out_tok, "tokens_ref": ref_tok,
+                             "compression": round(compression, 4),
+                             "repetition": round(rep, 4)}
+                    comp_note = f"  {compression:+.0%} vs plain fhtml"
                 merged[case_key] = {
                     "model": model, "target": target, "component": stem,
                     "compile": err is None, "dom": ok_dom, "status": status,
@@ -454,9 +557,11 @@ def main():
                     # line (auto-added so codes are still graded fairly).
                     **({"directive_missing": directive_missing}
                        if target == "shorthand" else {}),
+                    **extra,
                 }
                 save()
-                print(f"{model} {target} {stem}: {MARKS[status]}", flush=True)
+                print(f"{model} {target} {stem}: {MARKS[status]}{comp_note}",
+                      flush=True)
                 if args.verbose and not ok_dom:
                     kind = "compile error" if err else "DOM mismatch"
                     vblock(f"{kind} · {stem}", err or dom_err or "(no detail)")
@@ -471,6 +576,25 @@ def main():
             if target == "shorthand":
                 n_miss = sum(1 for r in recs if r.get("directive_missing"))
                 tail += f"; {n_miss}/{n} forgot the #!shorthand line"
+            if target == "fhtml-def":
+                # Compression only counts where the DOM is right (pass or
+                # ws-only) — shrinking output by dropping elements is not
+                # compression. Per-case numbers live in results.json.
+                valid = [r for r in recs
+                         if r.get("status") in ("pass", "ws-only")
+                         and r.get("compression") is not None]
+                if valid:
+                    med = statistics.median(
+                        r["compression"] for r in valid)
+                    hi = [r for r in valid
+                          if comp_ref[r["component"]][1] >= rep_cut]
+                    tail += (f"; median compression {med:+.1%} over "
+                             f"{len(valid)} DOM-valid cases")
+                    if hi:
+                        hi_med = statistics.median(
+                            r["compression"] for r in hi)
+                        tail += (f", repetitive half {hi_med:+.1%} "
+                                 f"({len(hi)} cases; gate ≥+15%)")
             print(
                 f"\n== {model} / {target}: compile {n_compile}/{n}, "
                 f"DOM-equivalent {n_dom}/{n} {tail}\n", flush=True,

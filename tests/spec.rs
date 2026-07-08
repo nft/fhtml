@@ -1017,6 +1017,22 @@ mod template_parse {
     }
 
     #[test]
+    fn error_kebab_case_names_suggest_underscores() {
+        // The top LLM-written mistake: names live in the expression grammar,
+        // where `-` is minus — the error suggests the underscore fix
+        // (§10.3/§10.4).
+        let e = error("def blog-post(x)\n  p \"{x}\"");
+        assert!(e.contains("1:5"), "got: {e}");
+        assert!(e.contains("`def blog_post(…)`"), "got: {e}");
+        let e = error("def card(img-src)\n  p \"x\"");
+        assert!(e.contains("`img_src`"), "got: {e}");
+        let e = error("+blog-post(x=1)");
+        assert!(e.contains("`+blog_post(…)`"), "got: {e}");
+        let e = error("def card(a)\n  p \"{a}\"\n+card(img-src=1)");
+        assert!(e.contains("`img_src`"), "got: {e}");
+    }
+
+    #[test]
     fn error_children_placement() {
         let e = error("children");
         assert!(e.contains("inside a `def` body"), "got: {e}");

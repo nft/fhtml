@@ -592,6 +592,14 @@ impl Parser {
                 format!("`{name}` is a reserved word and cannot name a component"),
             );
         }
+        if cur.peek() == Some('-') {
+            let fixed = kebab_fix(&mut cur, &name);
+            return err(
+                line,
+                col,
+                format!("component names cannot contain `-` (it reads as minus in expressions) — use underscores: `def {fixed}(…)` (SPEC §10.3)"),
+            );
+        }
         if let Some(prev) = self.defs.iter().find(|d| d.name == name) {
             return err(
                 line,
@@ -688,6 +696,14 @@ impl Parser {
                 "`+` starts a component call and needs a name: `+card(title=\"…\")`",
             );
         };
+        if cur.peek() == Some('-') {
+            let fixed = kebab_fix(&mut cur, &name);
+            return err(
+                line,
+                col,
+                format!("component names cannot contain `-` (it reads as minus in expressions) — use underscores: `+{fixed}(…)` (SPEC §10.4)"),
+            );
+        }
         let args = if cur.peek() == Some('(') {
             parse_args(&mut cur, self.templates)?
         } else {
@@ -1019,6 +1035,14 @@ fn parse_params(cur: &mut Cur) -> Result<Vec<Param>> {
                 }
                 match cur.peek() {
                     None | Some(' ') | Some('\t') | Some(')') | Some('=') => {}
+                    Some('-') => {
+                        let fixed = kebab_fix(cur, &name);
+                        return err(
+                            line,
+                            col,
+                            format!("parameter names cannot contain `-` (it reads as minus in expressions) — use underscores: `{fixed}` (SPEC §10.3)"),
+                        );
+                    }
                     Some(c) => {
                         return err(
                             line,
@@ -1074,6 +1098,14 @@ fn parse_args(cur: &mut Cur, templates: bool) -> Result<Vec<Arg>> {
                             }
                             _ => AttrValue::Expr(expr_value(cur, "value", "an argument")?),
                         }
+                    }
+                    Some('-') => {
+                        let fixed = kebab_fix(cur, &name);
+                        return err(
+                            line,
+                            col,
+                            format!("argument names cannot contain `-` (it reads as minus in expressions) — use underscores: `{fixed}` (SPEC §10.4)"),
+                        );
                     }
                     Some(c) => {
                         return err(
@@ -1240,6 +1272,20 @@ impl<'a> Cur<'a> {
         }
         &src[start..self.i]
     }
+}
+
+/// After `read_name` stopped at a `-`, consumes the rest of the kebab-case
+/// token and returns the whole name with `-` replaced by `_` — the fix the
+/// error message suggests. Kebab-case names are the top LLM-written error:
+/// component/parameter names live in the expression grammar, where `-` is
+/// minus.
+fn kebab_fix(cur: &mut Cur, name: &str) -> String {
+    let mut fixed = name.to_string();
+    while matches!(cur.peek(), Some(c) if c == '-' || c == '_' || c.is_ascii_alphanumeric()) {
+        let c = cur.bump().unwrap();
+        fixed.push(if c == '-' { '_' } else { c });
+    }
+    fixed
 }
 
 /// `[A-Za-z_][A-Za-z0-9_]*`, or `None` if the cursor doesn't start one.

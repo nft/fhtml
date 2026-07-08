@@ -4,23 +4,28 @@ When the same markup shape repeats with only the text or attribute values
 changing, factor it once with `def` and instantiate it with `+name(…)`:
 
 ```
-def card(title href badge=null)
+def feature_card(title href badge_text=null)
   li rounded-xl bg-white p-6 shadow
     h3 text-lg font-semibold > a(href={href}) "{title}"
-    if badge
-      span rounded-full bg-indigo-50 px-2 text-xs "{badge}"
+    if badge_text
+      span rounded-full bg-indigo-50 px-2 text-xs "{badge_text}"
     p mt-2 text-sm text-gray-600
       children
 
 ul grid grid-cols-3 gap-6
-  +card(title="Fast" href="/fast" badge="New")
+  +feature_card(title="Fast" href="/fast" badge_text="New")
     | Ships in milliseconds.
-  +card(title="Safe" href="/safe")
+  +feature_card(title="Safe" href="/safe")
     | Every change is previewed.
 ```
 
+- **Names use underscores, never hyphens.** Component and parameter names are
+  expression identifiers (letters, digits, `_`); `-` is minus. `def
+  blog-post(img-src)` is an ERROR — write `def blog_post(img_src)`.
 - **`def name(param param=default)`** — top level only. The body sees ONLY its
   parameters (interpolate them: `{title}`); it cannot see other variables.
+  Defaults follow call-argument quoting: `variant="emerald"`, not
+  `variant=emerald` (that's a variable reference, which is null).
 - **`+name(args)` instantiates.** Arguments are named-only. **Quoting differs
   from tag attributes — this is the one trap:** in a call, an unquoted value
   is an *expression*, not a string. `n=3` is the number 3, `wide=false` is a

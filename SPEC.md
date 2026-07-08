@@ -311,6 +311,13 @@ def name(param param=default …)
 
 - Defines a component; emits nothing at definition site. Component names share a namespace
   per file (plus includes); redefinition is an error.
+- `def` is allowed **only at top level** of a file (v0.1) — not nested in elements,
+  statements, or other `def`s. Rationale: one flat per-file namespace, no closure questions,
+  trivial formatting. Definition order doesn't matter: a call may reference a `def` that
+  appears later in the file.
+- Recursion (a component calling itself, directly or mutually) is legal — trees are a real
+  use case — bounded by a render-time **call-depth cap of 64**; exceeding it is a render
+  error carrying the call site's line/column.
 - **Defaults are expressions** (§9.3), not attribute-value strings: in
   `def alert(kind='info' compact=false max=3)`, `compact` is boolean and `max` is a number —
   never the strings `"false"`/`"3"`. An unquoted default must contain no whitespace; brace a
@@ -335,9 +342,15 @@ def name(param param=default …)
   are parsed with the expression grammar** (§9.3) — `count=3`, `show=false`,
   `user=member.profile` pass a number, a boolean, a value — never coerced strings. An
   unquoted argument must contain no whitespace; brace anything spaced: `n={a + b}`.
-- Arguments are **named-only**; unknown names are errors; parameters without defaults are
-  required.
+- Arguments are **named-only**; unknown names are errors; duplicate names are errors;
+  parameters without defaults are required. `+card` with no parens is legal when every
+  parameter has a default.
 - The indented block becomes the component's `children`, evaluated in the **caller's** scope.
+  Giving a block to a component whose body never uses `children` is an error (silently
+  dropping caller markup would hide real mistakes). A `children` statement when the caller
+  gave no block emits nothing.
+- A component call cannot be the target of a `>` chain (`li > +card` is an error — §4.6
+  chains single *elements*); write the call as an indented child instead.
 
 ### 10.5 `include`
 

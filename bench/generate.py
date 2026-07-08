@@ -12,6 +12,11 @@ syntax. Targets:
              codebook is *authorable*, not just machine-emittable. Pair with
              `bench/shorthand_economics.py` for the net-token (legend-cost)
              half of the gate.
+  html       the baseline — the same full-document rewrite in the syntax
+             models know best. The task is minification (a bare copy would
+             measure nothing); there is no compile step, so reliability shows
+             up entirely in the DOM grade. fhtml-vs-html is the adoption
+             question: what error rate does leaving HTML actually cost?
 
 Grading is fully automatic:
 
@@ -102,7 +107,25 @@ PROMPT = {
         "Reply with ONLY the fhtml source (first line `#!shorthand`) — no "
         "code fences, no commentary."
     ),
+    # Control: the same full-document rewrite, but in the syntax models know
+    # best. Minification forces every byte to be re-emitted (a bare copy
+    # would measure nothing) while the DOM-equivalence grading stays
+    # identical — so fhtml-vs-html deltas isolate syntax difficulty from
+    # transformation fidelity.
+    "html": (
+        "You minify HTML. Rewrite the given document as minified HTML: "
+        "remove the indentation and inter-tag whitespace that has no "
+        "rendering effect, and change nothing else — every element, "
+        "attribute, and piece of text must survive exactly. "
+        "Reply with ONLY the minified HTML — no code fences, no commentary."
+    ),
 }
+
+
+def task_of(target):
+    """The user-message instruction. Existing targets keep their exact
+    historical phrasing so results stay comparable across runs."""
+    return "Minify this HTML" if target == "html" else f"Translate to {target}"
 
 # Targets compiled by the fhtml binary (the `#!shorthand` directive in-source
 # drives expansion for the shorthand target); everything else is Pug.
@@ -231,6 +254,11 @@ def compile_output(target, source, workdir, stem):
     src_path = os.path.join(workdir, f"{stem}.{target}")
     with open(src_path, "w") as fh:
         fh.write(source)
+    if target == "html":
+        # The control target: the model's output IS the HTML. There is no
+        # compile step to fail — html5ever parses anything — so reliability
+        # shows up entirely in the DOM-equivalence grade.
+        return source, None
     if target in FHTML_TARGETS:
         code, html, err = run([FHTML, "--min", src_path])
         return (html, None) if code == 0 else (None, err.strip())
@@ -276,11 +304,17 @@ def fewshot_messages(target, pretty_dir):
             _, out, _ = run([H2F, html_path])
         elif target == "shorthand":
             _, out, _ = run([H2F, "--shorthand", html_path])
+        elif target == "html":
+            # --convert-svg so the example is fully single-line (raw-svg
+            # passthrough would keep the source file's own indentation).
+            _, fsrc, _ = run([H2F, "--convert-svg", html_path])
+            _, out, _ = run([FHTML, "--min"], stdin=fsrc)
         else:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             import pug_emit
             out = pug_emit.convert(html)
-        msgs.append({"role": "user", "content": f"Translate to {target}:\n\n{html}"})
+        msgs.append({"role": "user",
+                     "content": f"{task_of(target)}:\n\n{html}"})
         msgs.append({"role": "assistant", "content": out.rstrip()})
     return msgs
 
@@ -378,7 +412,7 @@ def main():
                     ref_html = fh.read()
                 messages = shots + [{
                     "role": "user",
-                    "content": f"Translate to {target}:\n\n{ref_html}",
+                    "content": f"{task_of(target)}:\n\n{ref_html}",
                 }]
                 if args.verbose:
                     vblock(f"input · {stem} ({len(ref_html)} bytes)", ref_html)

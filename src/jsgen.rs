@@ -482,6 +482,9 @@ impl<'a> G<'a> {
             // A definition emits nothing where it stands (SPEC §10.3);
             // `generate` compiled it to a function up front.
             Node::DefSite(_) => {}
+            Node::Include { .. } => {
+                unreachable!("includes are resolved before codegen (SPEC §10.5)")
+            }
         }
     }
 

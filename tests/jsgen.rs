@@ -310,3 +310,76 @@ fn js_component_checks_are_compile_errors() {
     let e = compile_to_js("def c(a)\n  p \"{a}\"\n+c\n", Mode::Min).unwrap_err();
     assert!(e.msg.contains("missing argument `a`"), "got: {}", e.msg);
 }
+
+#[test]
+fn js_includes_match_rust_renderer() {
+    if !node_available() {
+        eprintln!("skipping js include parity test: `node` not found on PATH");
+        return;
+    }
+    use fhtml::{compile_to_js_from, render_full_from};
+    let mut h = Harness::new("includes");
+
+    // Fixture tree: a def library + a markup partial, both included.
+    let files: &[(&str, &str)] = &[
+        (
+            "page.fhtml",
+            "include ./partials/card\ninclude ./partials/banner\nmain mx-auto\n  for item in items\n    +card(title={item.t})\n      p \"{item.body}\"\n",
+        ),
+        (
+            "partials/card.fhtml",
+            "def card(title kind='note')\n  . rounded p-4 {kind}\n    h3 \"{title}\"\n    children\n",
+        ),
+        (
+            "partials/banner.fhtml",
+            "p text-xs \"rendered {ctx.site || 'somewhere'}\"\n",
+        ),
+        // Error parity: evaluation inside included content — the position is
+        // remapped to the include site (SPEC §10.5) on BOTH backends.
+        ("boom.fhtml", "p \"ok\"\ninclude ./partials/bad\n"),
+        ("partials/bad.fhtml", "p \"{n / d}\"\n"),
+    ];
+    for (name, content) in files {
+        let p = h.dir.join(name);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, content).unwrap();
+    }
+
+    let cases: &[(&str, &str, &str)] = &[
+        (
+            "page.fhtml",
+            r#"{"items": [{"t": "A", "body": "first"}, {"t": "B", "body": "second"}]}"#,
+            r#"{"site": "fhtml.dev"}"#,
+        ),
+        ("boom.fhtml", r#"{"n": 1, "d": 0}"#, "{}"),
+    ];
+    for (root, data_json, ctx_json) in cases {
+        let path = h.dir.join(root);
+        let src = fs::read_to_string(&path).unwrap();
+        for mode in [Mode::Min, Mode::Pretty] {
+            h.counter += 1;
+            let module = compile_to_js_from(&src, Some(&path), mode).unwrap().html;
+            let mod_path = h.dir.join(format!("inc{}.mjs", h.counter));
+            fs::write(&mod_path, &module).unwrap();
+            let out = Command::new("node")
+                .arg(h.dir.join("runner.mjs"))
+                .arg(&mod_path)
+                .arg(data_json)
+                .arg(ctx_json)
+                .output()
+                .expect("node runs");
+            assert!(out.status.success(), "node failed for {root}");
+            let js_out = String::from_utf8(out.stdout).unwrap();
+            let data = json::parse(data_json).unwrap();
+            let ctx = json::parse(ctx_json).unwrap();
+            match render_full_from(&src, Some(&path), &data, &ctx, mode) {
+                Ok(rust_out) => assert_eq!(js_out, rust_out.html, "{root} mode {mode:?}"),
+                Err(e) => {
+                    let expected = format!("ERROR: {}:{}: error: {}", e.line, e.col, e.msg);
+                    assert_eq!(js_out, expected, "{root} error parity, mode {mode:?}");
+                    assert_eq!((e.line, e.col), (2, 1), "remap to the include site");
+                }
+            }
+        }
+    }
+}

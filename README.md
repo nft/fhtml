@@ -108,6 +108,10 @@ def card(title wide=false)
   p text-sm text-gray-600 "Revenue is up 12%."
 ```
 
+`include ./partials/head` splices another file — its `def`s join the namespace, its
+markup emits at the include site (SPEC §10.5). Paths are relative to the including file;
+cycles and `def` collisions are errors.
+
 ```sh
 fhtml page.fhtml --data data.json            # render with data
 fhtml page.fhtml --data d.json --ctx c.json  # + the read-only `ctx` root
@@ -156,7 +160,9 @@ let html = render("p \"Hi, {name}\"", &data, Mode::Min)?;
 
 `compile` is the static path (template constructs are an error there); `render`/`render_full`
 evaluate the template layer; `compile_to_js` emits the ES-module target; `format` reformats
-source to canonical form; the `_full` variants also return warnings.
+source to canonical form; the `_full` variants also return warnings. `render_full_from` and
+`compile_to_js_from` take the source's file path, which makes `include` resolvable — the
+string-only entry points reject it (no base path).
 
 ## Tailwind integration
 

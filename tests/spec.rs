@@ -241,10 +241,12 @@ fn error_components_are_not_static() {
 }
 
 #[test]
-fn error_include_is_not_implemented() {
+fn error_include_is_not_static() {
+    // SPEC §11: `include` is a template construct on the static path, like
+    // `def` — resolution lives on the render path (mod includes, §10.5).
     let e = error("include ./partials/head");
-    assert!(e.contains("composition layer"), "got: {e}");
-    assert!(e.contains("10.5"), "got: {e}");
+    assert!(e.contains("`include`"), "got: {e}");
+    assert!(e.contains("static"), "got: {e}");
 }
 
 #[test]
@@ -1673,5 +1675,303 @@ else
         let src = "def c(a)\n  p \"{a}\"\nif false\n  +c(wrong='x')\n";
         let e = render(src, &Value::Null, Mode::Min).unwrap_err();
         assert!(e.msg.contains("unknown argument"), "got: {}", e.msg);
+    }
+}
+
+// ------------------------------------------------------------ §10.5 include
+mod includes {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use fhtml::{compile, render, render_full, render_full_from, Error, Mode, Output, Value};
+
+    static N: AtomicUsize = AtomicUsize::new(0);
+
+    /// A throwaway directory of fixture files, removed on drop.
+    struct Fixture {
+        dir: PathBuf,
+    }
+
+    impl Fixture {
+        fn new(files: &[(&str, &str)]) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "fhtml-include-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            ));
+            for (name, content) in files {
+                let p = dir.join(name);
+                fs::create_dir_all(p.parent().unwrap()).unwrap();
+                fs::write(p, content).unwrap();
+            }
+            Fixture { dir }
+        }
+
+        fn render(&self, root: &str, mode: Mode) -> Result<Output, Error> {
+            let path = self.dir.join(root);
+            let src = fs::read_to_string(&path).unwrap();
+            render_full_from(&src, Some(&path), &Value::Null, &Value::Null, mode)
+        }
+
+        fn html(&self, root: &str) -> String {
+            self.render(root, Mode::Min).unwrap().html
+        }
+
+        fn err(&self, root: &str) -> Error {
+            self.render(root, Mode::Min).unwrap_err()
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn markup_splices_at_the_include_site() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "p \"before\"\ninclude ./part\np \"after\"\n"),
+            ("part.fhtml", "p \"mid\"\n"),
+        ]);
+        assert_eq!(f.html("main.fhtml"), "<p>before</p><p>mid</p><p>after</p>");
+    }
+
+    #[test]
+    fn defs_join_one_namespace_in_both_directions() {
+        // Root markup calls an included def; included markup calls a root def.
+        let f = Fixture::new(&[
+            (
+                "main.fhtml",
+                "def local(x)\n  em \"{x}\"\ninclude ./lib\n+card(title=\"T\")\n  p \"body\"\n",
+            ),
+            (
+                "lib.fhtml",
+                "def card(title)\n  h3 \"{title}\"\n  children\n+local(x=\"from lib\")\n",
+            ),
+        ]);
+        assert_eq!(
+            f.html("main.fhtml"),
+            "<em>from lib</em><h3>T</h3><p>body</p>"
+        );
+    }
+
+    #[test]
+    fn fhtml_extension_appended_iff_absent() {
+        let f = Fixture::new(&[
+            ("bare.fhtml", "include ./part\n"),
+            ("explicit.fhtml", "include ./part.fhtml\n"),
+            ("part.fhtml", "p \"here\"\n"),
+        ]);
+        assert_eq!(f.html("bare.fhtml"), "<p>here</p>");
+        assert_eq!(f.html("explicit.fhtml"), "<p>here</p>");
+    }
+
+    #[test]
+    fn nested_include_paths_are_relative_to_each_file() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./sub/a\n"),
+            ("sub/a.fhtml", "include ./b\np \"a\"\n"),
+            ("sub/b.fhtml", "p \"b\"\n"),
+        ]);
+        assert_eq!(f.html("main.fhtml"), "<p>b</p><p>a</p>");
+    }
+
+    #[test]
+    fn same_markup_file_may_be_included_twice() {
+        // Literal splice semantics: markup emits at every include site.
+        // (A def-carrying file included twice collides instead — below.)
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./part\ninclude ./part\n"),
+            ("part.fhtml", "p \"x\"\n"),
+        ]);
+        assert_eq!(f.html("main.fhtml"), "<p>x</p><p>x</p>");
+    }
+
+    #[test]
+    fn include_cycle_errors_listing_the_chain() {
+        let f = Fixture::new(&[("a.fhtml", "include ./b\n"), ("b.fhtml", "include ./a\n")]);
+        let e = f.err("a.fhtml");
+        assert!(e.msg.contains("include cycle"), "got: {}", e.msg);
+        // The chain names both files and closes on the repeated one.
+        let chain = e.msg.split("include cycle:").nth(1).unwrap();
+        assert!(chain.contains("b.fhtml"), "chain missing b: {}", e.msg);
+        assert_eq!(
+            chain.matches("a.fhtml").count(),
+            2,
+            "chain should open and close on a.fhtml: {}",
+            e.msg
+        );
+    }
+
+    #[test]
+    fn self_include_is_a_cycle() {
+        let f = Fixture::new(&[("a.fhtml", "include ./a\n")]);
+        let e = f.err("a.fhtml");
+        assert!(e.msg.contains("include cycle"), "got: {}", e.msg);
+        assert_eq!((e.line, e.col), (1, 1));
+    }
+
+    #[test]
+    fn def_collision_across_includes_is_an_error() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "def card(t)\n  p \"{t}\"\ninclude ./lib\n"),
+            ("lib.fhtml", "def card(t)\n  em \"{t}\"\n"),
+        ]);
+        let e = f.err("main.fhtml");
+        assert_eq!((e.line, e.col), (3, 1));
+        assert!(
+            e.msg.contains("component `card`") && e.msg.contains("already defined"),
+            "got: {}",
+            e.msg
+        );
+    }
+
+    #[test]
+    fn missing_file_errors_at_the_include_line() {
+        let f = Fixture::new(&[("main.fhtml", "p \"x\"\ninclude ./nope\n")]);
+        let e = f.err("main.fhtml");
+        assert_eq!((e.line, e.col), (2, 1));
+        assert!(
+            e.msg.contains("cannot include") && e.msg.contains("nope.fhtml"),
+            "got: {}",
+            e.msg
+        );
+    }
+
+    #[test]
+    fn parse_error_in_included_file_names_that_file() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./bad\n"),
+            ("bad.fhtml", "p \"unclosed\n"),
+        ]);
+        let e = f.err("main.fhtml");
+        assert_eq!((e.line, e.col), (1, 1));
+        assert!(
+            e.msg.contains("bad.fhtml") && e.msg.contains("1:"),
+            "expected inner path and position, got: {}",
+            e.msg
+        );
+    }
+
+    #[test]
+    fn render_errors_in_included_content_point_at_the_include_site() {
+        // Positions inside included content are remapped to the include
+        // line (SPEC §10.5) — coarse but always a real location in the
+        // root file, and identical in the compiled JS module.
+        let f = Fixture::new(&[
+            ("main.fhtml", "p \"x\"\ninclude ./part\n"),
+            ("part.fhtml", "p \"{1 / 0}\"\n"),
+        ]);
+        let e = f.err("main.fhtml");
+        assert_eq!((e.line, e.col), (2, 1));
+        assert!(e.msg.contains("division by zero"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn errors_in_included_def_bodies_point_at_the_include_site_too() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./lib\n+boom\n"),
+            ("lib.fhtml", "def boom\n  p \"{1 / 0}\"\n"),
+        ]);
+        let e = f.err("main.fhtml");
+        assert_eq!((e.line, e.col), (1, 1), "got: {e}");
+    }
+
+    #[test]
+    fn warnings_from_included_files_carry_the_path() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./part\n"),
+            ("part.fhtml", "div\n  p \"a\"\n   p \"b\"\n"),
+        ]);
+        let out = f.render("main.fhtml", Mode::Min).unwrap();
+        assert_eq!(out.warnings.len(), 1, "warnings: {:?}", out.warnings);
+        assert!(
+            out.warnings[0].contains("part.fhtml"),
+            "got: {}",
+            out.warnings[0]
+        );
+    }
+
+    #[test]
+    fn include_is_top_level_only() {
+        for src in [
+            "main\n  include ./x\n",
+            "if true\n  include ./x\n",
+            "def c\n  include ./x\n",
+        ] {
+            let e = render(src, &Value::Null, Mode::Min).unwrap_err();
+            assert!(
+                e.msg.contains("only at top level") && e.msg.contains("§10.5"),
+                "for {src:?} got: {}",
+                e.msg
+            );
+        }
+    }
+
+    #[test]
+    fn include_needs_a_path() {
+        let e = render("include\n", &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("needs a path"), "got: {}", e.msg);
+        let e = render("include   \n", &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("needs a path"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn include_takes_no_block() {
+        let e = render("include ./x\n  p \"y\"\n", &Value::Null, Mode::Min).unwrap_err();
+        assert!(e.msg.contains("cannot have children"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn stdin_mode_has_no_base_path() {
+        // The string-only entry points (`render`, `render_full`) have no
+        // file context — a clear error, not a guessed working directory.
+        let e = render_full(
+            "include ./partials/head\n",
+            &Value::Null,
+            &Value::Null,
+            Mode::Min,
+        )
+        .unwrap_err();
+        assert_eq!((e.line, e.col), (1, 1));
+        assert!(e.msg.contains("no file path"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn static_compile_rejects_include_as_template_construct() {
+        let e = compile("include ./x\n", Mode::Min).unwrap_err();
+        assert!(
+            e.msg.contains("`include`") && e.msg.contains("template construct"),
+            "got: {}",
+            e.msg
+        );
+    }
+
+    #[test]
+    fn no_templates_rejects_include_with_p0_wording() {
+        let e = fhtml::compile_opts(
+            "include ./x\n",
+            &fhtml::Options {
+                mode: Mode::Min,
+                templates: false,
+            },
+        )
+        .unwrap_err();
+        assert!(e.msg.contains("--no-templates"), "got: {}", e.msg);
+    }
+
+    #[test]
+    fn fmt_reprints_include_lines_in_place() {
+        // fmt never touches the filesystem: the line reprints as written,
+        // in position, and formatting is idempotent.
+        let src = "// head partial\ninclude ./partials/head\ndef c\n  p \"x\"\ninclude ./partials/foot\np   \"tail\"\n";
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(
+            formatted,
+            "// head partial\ninclude ./partials/head\ndef c\n  p \"x\"\ninclude ./partials/foot\np \"tail\"\n"
+        );
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
     }
 }

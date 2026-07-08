@@ -1,8 +1,9 @@
 //! Parser for the fhtml markup layer (SPEC §1–§8) and the template layer
-//! (SPEC §9 interpolation, §10.1–§10.2 statements, §10.3–§10.4 components).
+//! (SPEC §9 interpolation, §10.1–§10.5 statements, components, includes).
 //!
-//! `include` (SPEC §10.5) is recognized and rejected with a clear "not
-//! implemented" error so the syntax space stays reserved. Parsing with
+//! `include` parses to a [`Node::Include`] marker; loading and splicing the
+//! file is a separate pass (`src/resolve.rs`) so parsing stays IO-free and
+//! `fhtml fmt` can reprint the line untouched. Parsing with
 //! `templates: false` enforces static-only (SPEC §9.2): any template construct is an
 //! error.
 
@@ -147,6 +148,14 @@ pub enum Node {
     /// place instead of hoisting it past comments and markup. Top level
     /// only, like `def` itself.
     DefSite(usize),
+    /// `include <path>` (SPEC §10.5), top level only. The path is kept as
+    /// written — `fhtml fmt` reprints it verbatim; resolution (loading,
+    /// splicing, cycle detection) happens in `src/resolve.rs` before
+    /// rendering, so no `Include` survives into `emit`/`jsgen`.
+    Include {
+        path: String,
+        line: usize,
+    },
 }
 
 #[derive(Debug)]
@@ -244,6 +253,7 @@ pub fn first_template_use(nodes: &[Node]) -> Option<(usize, usize, String)> {
             Node::For(f) => return Some((f.line, 1, "`for`".to_string())),
             Node::Call(c) => return Some((c.line, 1, format!("`+{}`", c.name))),
             Node::Children { line } => return Some((*line, 1, "`children`".to_string())),
+            Node::Include { line, .. } => return Some((*line, 1, "`include`".to_string())),
             Node::TextBlock(lines) => {
                 if let Some(t) = lines.iter().find_map(|parts| interp_in(parts)) {
                     return Some((t.line, t.col, "`{…}` interpolation".to_string()));
@@ -551,11 +561,7 @@ impl Parser {
                 1,
                 "`empty` must directly follow a `for` block at the same indent",
             ),
-            "include" => err(
-                num,
-                1,
-                "`include` is part of the composition layer and is not implemented yet (SPEC §10.5)",
-            ),
+            "include" => self.parse_include(depth),
             _ => self.parse_call(depth),
         }
     }
@@ -620,6 +626,32 @@ impl Parser {
             line,
         });
         Ok(())
+    }
+
+    /// `include <path>` (SPEC §10.5). Top level only; the path is the rest
+    /// of the line, kept as written. Indented lines under it hit the
+    /// standard "cannot have children" error from `parse_block`.
+    fn parse_include(&mut self, depth: usize) -> Result<Node> {
+        let (content, line) = self.join_continuations()?;
+        if depth != 0 {
+            return err(
+                line,
+                1,
+                "`include` is allowed only at top level of a file — not nested in elements, statements, or `def`s (SPEC §10.5)",
+            );
+        }
+        let path = content["include".len()..].trim();
+        if path.is_empty() {
+            return err(
+                line,
+                1,
+                "`include` needs a path: `include ./partials/head` (SPEC §10.5)",
+            );
+        }
+        Ok(Node::Include {
+            path: path.to_string(),
+            line,
+        })
     }
 
     /// `children`, alone on its line, inside a `def` body only (SPEC §10.3).

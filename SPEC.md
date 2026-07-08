@@ -364,6 +364,23 @@ include ./partials/head
 - Path relative to the including file; `.fhtml` appended if absent. The included file's
   `def`s become available; its top-level markup is emitted at the include site.
 - Include cycles are an error. `include` is allowed only at top level of a file.
+- The path is the rest of the line, as written; `include` takes no indented block.
+- All included `def`s join the **one namespace** of the document (§10.3); a name collision
+  — with the including file's defs or another include's — is an error at the include line.
+  Markup-only files may be included any number of times (literal splice: the markup emits
+  at every include site); a def-carrying file included twice collides.
+- The include cycle error lists the chain (`a.fhtml -> b.fhtml -> a.fhtml`). Sources with
+  no file context (stdin, the string-only library entry points) cannot resolve includes —
+  that is a clear error, never a guessed working directory.
+- **Error attribution** (v0.1): everything caught while loading — a missing file, a parse
+  error inside the included file, a collision, a cycle — is reported at the `include` line
+  with the included file's own path and position in the message. Errors that surface later
+  (render-time evaluation inside included content) carry the include site's position
+  (line, column 1): every included position is remapped there, so reported positions
+  always exist in the root file and are byte-identical between the native renderer and
+  the compiled JS module. Coarse but honest — never a precise line in the wrong file.
+- `--target=js` inlines includes: one self-contained module out, regardless of how many
+  files went in. `fhtml fmt` never resolves includes — the line reprints as written.
 
 ---
 

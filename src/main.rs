@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{env, fs, io};
 
-use fhtml::{compile_opts, compile_to_js, format, render_full, Mode, Options, Value};
+use fhtml::{compile_opts, compile_to_js_from, format, render_full_from, Mode, Options, Value};
 
 const USAGE: &str = "\
 fhtml — compiler for Fluid HTML (see SPEC.md)
@@ -158,9 +158,15 @@ fn run() -> Result<(), String> {
                 fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?,
             ),
         };
+        let file = match input.as_deref() {
+            None | Some("-") => None,
+            Some(path) => Some(PathBuf::from(path)),
+        };
         // SPEC §11: pretty when writing files, min for pipelines/stdout.
         let mode = mode_for(pretty, out_path.is_some());
-        let output = job.run(&source, mode).map_err(|e| format!("{name}:{e}"))?;
+        let output = job
+            .run(&source, file.as_deref(), mode)
+            .map_err(|e| format!("{name}:{e}"))?;
         print_warnings(&name, &output.warnings);
         match out_path {
             Some(path) => {
@@ -184,11 +190,18 @@ struct Job {
 }
 
 impl Job {
-    fn run(&self, source: &str, mode: Mode) -> Result<fhtml::Output, fhtml::Error> {
+    /// `file` is the path the source was read from — the base for resolving
+    /// `include` (SPEC §10.5). `None` for stdin, where includes are an error.
+    fn run(
+        &self,
+        source: &str,
+        file: Option<&Path>,
+        mode: Mode,
+    ) -> Result<fhtml::Output, fhtml::Error> {
         if self.js_target {
-            compile_to_js(source, mode)
+            compile_to_js_from(source, file, mode)
         } else if self.templates {
-            render_full(source, &self.data, &self.ctx, mode)
+            render_full_from(source, file, &self.data, &self.ctx, mode)
         } else {
             compile_opts(
                 source,
@@ -279,7 +292,7 @@ fn mode_for(pretty: Option<bool>, writing_file: bool) -> Mode {
 fn build_file(src: &Path, out: &Path, pretty: Option<bool>, job: &Job) -> Result<(), String> {
     let source = fs::read_to_string(src).map_err(|e| format!("{}: {e}", src.display()))?;
     let output = job
-        .run(&source, mode_for(pretty, true))
+        .run(&source, Some(src), mode_for(pretty, true))
         .map_err(|e| format!("{}:{e}", src.display()))?;
     print_warnings(&src.display().to_string(), &output.warnings);
     if let Some(parent) = out.parent() {

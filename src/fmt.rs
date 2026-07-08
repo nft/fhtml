@@ -12,6 +12,13 @@ pub fn format_document(doc: &Document) -> String {
         match node {
             // Definitions print where they sat in the source (SPEC §10.3).
             Node::DefSite(i) => fmt_def(&mut out, &doc.defs[*i]),
+            // Reprinted as written (SPEC §10.5) — fmt never resolves
+            // includes; formatting must not need the filesystem.
+            Node::Include { path, .. } => {
+                out.push_str("include ");
+                out.push_str(path);
+                out.push('\n');
+            }
             _ => fmt_node(&mut out, node, 0),
         }
     }
@@ -106,8 +113,9 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
             }
         }
         Node::Children { .. } => out.push_str(&format!("{ind}children\n")),
-        // Top level only (parser-enforced) — `format_document` handles it.
+        // Top level only (parser-enforced) — `format_document` handles them.
         Node::DefSite(_) => unreachable!("`def` is top-level only (SPEC §10.3)"),
+        Node::Include { .. } => unreachable!("`include` is top-level only (SPEC §10.5)"),
         Node::If(chain) => fmt_if(out, chain, depth),
         Node::For(f) => {
             match &f.index {

@@ -3,9 +3,11 @@
 //!
 //! Implements the static markup layer (SPEC §1–§8, §11), the canonical formatter,
 //! the template layer (SPEC §9 interpolation, §10.1–§10.2 statements),
-//! and components (§10.3–§10.4 `def`/`+call`/`children`) across the whole
-//! toolchain — render, `fmt`, and `--target=js`. `include` (§10.5) is
-//! recognized and rejected with a clear "not implemented" error.
+//! and the composition layer (§10.3–§10.5 `def`/`+call`/`children` and
+//! `include`) across the whole toolchain — render, `fmt`, and `--target=js`.
+//! Includes need a file context: use the `_from` entry points (or the CLI,
+//! which passes the source path); the string-only entry points reject
+//! `include` since stdin has no base path.
 
 #[cfg(feature = "convert")]
 pub mod convert;
@@ -16,6 +18,7 @@ mod fmt;
 mod jsgen;
 pub mod json;
 mod parser;
+mod resolve;
 pub mod shorthand;
 
 pub use emit::Mode;
@@ -98,8 +101,27 @@ pub fn render(src: &str, data: &Value, mode: Mode) -> Result<String, Error> {
 /// bound to the reserved root name `ctx` in every scope (SPEC §9.4) — and
 /// returns warnings alongside. Render errors carry the file line/column of
 /// the offending interpolation or statement, like parse errors.
+///
+/// No file context: a source using `include` (SPEC §10.5) is an error here —
+/// use [`render_full_from`] with the source's path.
 pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<Output, Error> {
-    let (doc, warnings) = parser::parse(src, true)?;
+    render_full_from(src, None, data, ctx, mode)
+}
+
+/// [`render_full`] with the path the source was read from, which makes
+/// `include` (SPEC §10.5) resolvable: paths are relative to `file`, `.fhtml`
+/// is appended if absent, included `def`s join the document's namespace, and
+/// include cycles are errors listing the chain. `None` behaves exactly like
+/// [`render_full`].
+pub fn render_full_from(
+    src: &str,
+    file: Option<&std::path::Path>,
+    data: &Value,
+    ctx: &Value,
+    mode: Mode,
+) -> Result<Output, Error> {
+    let (doc, mut warnings) = parser::parse(src, true)?;
+    let doc = resolve::resolve_includes(doc, file, &mut warnings)?;
     Ok(Output {
         html: emit::render_document(&doc, mode, data, ctx)?,
         warnings,
@@ -110,9 +132,22 @@ pub fn render_full(src: &str, data: &Value, ctx: &Value, mode: Mode) -> Result<O
 /// `(data, ctx = {}) => string` with semantics identical to [`render`]
 /// (SPEC §11 `--target=js`). Static files compile to a constant function,
 /// for uniformity. The returned [`Output`]'s `html` field holds the module
-/// source text.
+/// source text. Like [`render_full`], sources using `include` need the
+/// `_from` variant.
 pub fn compile_to_js(src: &str, mode: Mode) -> Result<Output, Error> {
-    let (doc, warnings) = parser::parse(src, true)?;
+    compile_to_js_from(src, None, mode)
+}
+
+/// [`compile_to_js`] with the source's path: includes are inlined, so the
+/// emitted module stays self-contained — one module out regardless of how
+/// many files went in (SPEC §10.5).
+pub fn compile_to_js_from(
+    src: &str,
+    file: Option<&std::path::Path>,
+    mode: Mode,
+) -> Result<Output, Error> {
+    let (doc, mut warnings) = parser::parse(src, true)?;
+    let doc = resolve::resolve_includes(doc, file, &mut warnings)?;
     Ok(Output {
         html: jsgen::generate(&doc, mode)?,
         warnings,

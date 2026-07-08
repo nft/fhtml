@@ -182,6 +182,9 @@ fn visit<'a>(nodes: &'a [Node], f: &mut impl FnMut(&'a Node) -> Result<()>) -> R
             | Node::Raw(_)
             | Node::Comment { .. }
             | Node::Doctype => {}
+            Node::Include { .. } => {
+                unreachable!("includes are resolved before rendering (SPEC §10.5)")
+            }
         }
     }
     Ok(())
@@ -387,6 +390,9 @@ impl<'a> R<'a> {
             }
             // A definition emits nothing where it stands (SPEC §10.3).
             Node::DefSite(_) => {}
+            Node::Include { .. } => {
+                unreachable!("includes are resolved before rendering (SPEC §10.5)")
+            }
         }
         Ok(())
     }

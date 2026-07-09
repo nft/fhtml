@@ -70,3 +70,56 @@ Corpus: 48 components in `bench/corpus/`. All four columns render the identical 
 - `html2fhtml --check` (normalized-DOM equality): **48/48 pass**
 - converter warnings across the corpus: 0
 - emitted Pug validated with pug 3.x: all compiled
+
+## Generation reliability (models writing fhtml)
+
+Can models *write* fhtml correctly? `bench/generate.py`: each model translates the 48
+pretty-HTML components (temperature 0, one few-shot example, cheatsheet in the system
+prompt), output graded by compiling it and comparing normalized DOMs against the source.
+`ws-only` = DOM-equal except text whitespace. Run 2026-07-07 via OpenRouter.
+
+| model | target | compiles | strict DOM-eq | + ws-only | DOM-valid |
+|-------|--------|---------:|--------------:|----------:|----------:|
+| claude-haiku-4.5 | fhtml | **46/48** | 25 | 5 | **30/48** |
+| claude-haiku-4.5 | pug | 14/48 | 5 | 3 | 8/48 |
+| deepseek-v4-pro | fhtml | **42/48** | 20 | 14 | **34/48** |
+| deepseek-v4-pro | pug | 35/48 | 10 | 20 | 30/48 |
+| tencent/hy3 | fhtml | **47/48** | 23 | 14 | **37/48** |
+| tencent/hy3 | pug | 11/48 | 2 | 4 | 6/48 |
+
+Pooled: fhtml compiles **93.8%** vs Pug's 41.7%; strict DOM-equivalence **47.2%** vs
+11.8%. Pug's failures are dominated by its lexer rejecting Tailwind class syntax
+(`w-1/2`, `data-[state=open]:…`); fhtml's residual misses are mostly cosmetic whitespace
+plus one recurring real hazard — attributes written as bare tokens
+(`div aria-hidden=true …` becomes a class; 11 of haiku's 16 DOM misses), which the
+compiler now flags with a warning. The html-minification control (same grading, the
+syntax models already know) is wired but unswept.
+
+## Components in generation (`fhtml-def`)
+
+Does the hand-written −46% (blog-cards with `def`) survive real generation? Same
+translation task with the components cheatsheet; **compression** = token reduction vs the
+same model-agnostic plain-fhtml reference (o200k). The gate: on the repetitive half of
+the corpus (24/48, split at median structural-repetition), ≥15% median compression with a
+DOM-valid rate within 10 points of the model's plain-fhtml run. Compression counts only
+DOM-valid output — shrinking by dropping elements is not compression. Run 2026-07-09.
+
+| model | compiles | DOM-valid | vs plain fhtml | median compression (DOM-valid) | repetitive half | gate |
+|-------|---------:|----------:|---------------:|-------------------------------:|----------------:|------|
+| tencent/hy3 (reasoning) | 45/48 | **33/48 (69%)** | −8.3 pts | +11.3% (33 cases) | **+25.4%** (15 cases) | **PASS** |
+| claude-haiku-4.5 | 28/48 | 10/48 (21%) | −41.7 pts | +13.7% (10 cases) | +29.3% (4 cases) | FAIL (DOM) |
+| nemotron-3-ultra | 19/48 | 10/48 (21%) | no baseline | −2.2% (10 cases) | +20.5% (2 cases) | n/a |
+
+hy3's DOM-valid repetitive-half output totals **24.1% fewer tokens** than plain fhtml
+(15,648 vs 20,621), with per-component wins up to +48% (product-grid) and +43%
+(pricing-tiers) — at essentially no reliability cost (45/48 vs 47/48 compiles, DOM gap
+within the gate).
+
+The split is by model class, not by syntax. When any model's def output is DOM-valid, the
+compression is there (haiku's median on its valid cases: +29.3%). But under the
+components prompt haiku regresses on *base* syntax — Pug mixin habits resurface (`h2#id`,
+`.flex-auto`, `details.open`) and per-item differences get flattened when factoring
+(`checked`, `aria-label`s, the selected item's classes). A reasoning model plans the
+factoring and keeps the differences. Verdict: **components hold for reasoning-class
+models and stay a human/review feature for fast non-reasoning models**; plain fhtml
+remains the reliable agent floor for the latter (haiku: 30/48 DOM-valid).

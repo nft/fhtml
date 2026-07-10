@@ -349,21 +349,13 @@ impl Conv<'_> {
         self.warnings.push(msg.into());
     }
 
-    /// Contracts one class token for the shorthand output. Returns the code
-    /// when it round-trips, an `=`-escaped literal when the class would itself
-    /// decode as a code (keeping it verbatim), else the class unchanged. The
-    /// result always decodes back to `class`.
+    /// Contracts one class token for the shorthand output; the result always
+    /// reads back as `class` under `#!shorthand` (codes where they round-trip, `=`-escapes where the class would decode).
     fn contract_class(&self, class: &str) -> String {
         if !self.opts.shorthand {
             return class.to_string();
         }
-        if let Some(code) = crate::shorthand::encode(class) {
-            code
-        } else if crate::shorthand::decode(class).is_some() {
-            format!("={class}")
-        } else {
-            class.to_string()
-        }
+        crate::shorthand::contract(class)
     }
 
     fn convert_item(&mut self, item: &Item, out: &mut Vec<Node>) {

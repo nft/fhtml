@@ -2255,4 +2255,103 @@ mod shorthand_directive {
     fn fmt_leaves_directive_free_files_alone() {
         assert_eq!(fhtml::format("div fx ti4\n").unwrap(), ". fx ti4\n");
     }
+
+    // ------------------------------------------ quoted class="…" attributes
+
+    #[test]
+    fn class_attr_tokens_decode_like_bare_tokens() {
+        // Decoding applies to every class token, quoted-attr or bare
+        // (SPEC §3.2) — the two forms merge into one class list, so they
+        // must mean the same thing or `fmt`'s merge would change output.
+        assert_eq!(
+            min("#!shorthand\ndiv(class=\"fx =p4 custom\") p4\n"),
+            "<div class=\"flex p4 custom p-4\"></div>"
+        );
+    }
+
+    #[test]
+    fn class_attr_stays_verbatim_without_directive() {
+        assert_eq!(
+            min("div(class=\"fx =p4\")\n"),
+            "<div class=\"fx =p4\"></div>"
+        );
+    }
+
+    #[test]
+    fn fmt_of_a_class_attr_under_the_directive_is_output_preserving() {
+        // Regression: the attr form used to stay verbatim while the bare
+        // form decoded, so fmt's bare reprint changed the compiled output.
+        let src = "#!shorthand\ndiv(class=\"fx\") p4\n";
+        assert_eq!(min(&fhtml::format(src).unwrap()), min(src));
+    }
+
+    // -------------------------------------------- fmt --contract / --expand
+
+    use fhtml::{format_shorthand, FmtShorthand};
+
+    fn contract(src: &str) -> String {
+        format_shorthand(src, FmtShorthand::Contract).unwrap()
+    }
+
+    fn expand(src: &str) -> String {
+        format_shorthand(src, FmtShorthand::Expand).unwrap()
+    }
+
+    #[test]
+    fn contract_rewrites_to_codes_and_adds_the_directive() {
+        // Codes where they round-trip, `=`-escapes where the class would
+        // read as something else (`p4` decodes; a leading `=` doubles),
+        // verbatim otherwise.
+        let src = "div flex items-center p-4 hover:bg-blue-500 custom p4 =foo\n";
+        let got = contract(src);
+        assert_eq!(got, "#!shorthand\n. fx ic p4 hover:bb5 custom =p4 ==foo\n");
+        assert_eq!(min(&got), min(src));
+        assert_eq!(contract(&got), got); // idempotent
+    }
+
+    #[test]
+    fn contract_normalizes_a_file_already_in_shorthand_form() {
+        // Verbatim classes in a directive file contract too; authored
+        // escapes and codes are already canonical and stay put.
+        assert_eq!(
+            contract("#!shorthand\ndiv flex =p4 fx\n"),
+            "#!shorthand\n. fx =p4 fx\n"
+        );
+    }
+
+    #[test]
+    fn contract_leaves_interpolation_alone() {
+        assert_eq!(contract("div flex {cls}\n"), "#!shorthand\n. fx {cls}\n");
+    }
+
+    #[test]
+    fn expand_decodes_and_drops_the_directive() {
+        let src = "#!shorthand\ndiv fx ti4 =ti4 custom\n";
+        let got = expand(src);
+        assert_eq!(got, ". flex text-indigo-400 ti4 custom\n");
+        assert_eq!(min(&got), min(src));
+        assert_eq!(expand(&got), got); // idempotent
+    }
+
+    #[test]
+    fn expand_of_a_directive_free_file_is_plain_fmt() {
+        // Without the directive `fx` is a literal class — nothing to expand.
+        assert_eq!(expand("div fx =ti4\n"), ". fx =ti4\n");
+    }
+
+    #[test]
+    fn expand_moves_a_hostile_meaning_into_the_attr_form() {
+        // `=#foo` under the directive means the literal class `#foo`, which
+        // printed bare would reparse as an id — it must ride in class="…".
+        let src = "#!shorthand\ndiv =#foo\n";
+        let got = expand(src);
+        assert_eq!(got, ".(class=\"#foo\")\n");
+        assert_eq!(min(&got), min(src));
+    }
+
+    #[test]
+    fn contract_then_expand_is_canonical_plain_fmt() {
+        let src = "div flex items-center p-4 custom p4 =foo\n  p text-lg \"hi\"\n";
+        assert_eq!(expand(&contract(src)), fhtml::format(src).unwrap());
+    }
 }

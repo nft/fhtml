@@ -262,6 +262,22 @@ fn decode_shade(s: &str) -> Option<u16> {
     }
 }
 
+/// Contracts one literal class into the token that reads back as exactly that
+/// class under `#!shorthand`: the code when one round-trips; an `=`-escape when
+/// the class would itself read as something else (it decodes as a code, or its
+/// own leading `=` would be eaten as the escape sigil); the class verbatim
+/// otherwise. This is the one shared emitter for shorthand-form output
+/// (`fmt --contract`, `html2fhtml --shorthand`).
+pub fn contract(class: &str) -> String {
+    if let Some(code) = encode(class) {
+        code
+    } else if class.starts_with('=') || decode(class).is_some() {
+        format!("={class}")
+    } else {
+        class.to_string()
+    }
+}
+
 /// Contracts one full class to its shortest shorthand, but only when the result
 /// round-trips. Returns `None` for anything not compressible (unknown class,
 /// a variant with `:`, or a code that would decode to something else).
@@ -372,6 +388,27 @@ mod tests {
             assert!(classes.insert(*full), "duplicate table class {full}");
             assert_eq!(decode(code).as_deref(), Some(*full));
             assert_eq!(encode(full).as_deref(), Some(*code), "class {full}");
+        }
+    }
+
+    /// `contract` always emits a token that reads back as the input class
+    /// under `#!shorthand`: codes, `=`-escapes for collisions and literal
+    /// leading `=`, verbatim for everything else.
+    #[test]
+    fn contract_reads_back_as_the_input() {
+        assert_eq!(contract("flex"), "fx");
+        assert_eq!(contract("hover:bg-blue-500"), "hover:bb5");
+        assert_eq!(contract("custom-thing"), "custom-thing"); // unknown: verbatim
+        assert_eq!(contract("p4"), "=p4"); // would decode as a code
+        assert_eq!(contract("hover:fx"), "=hover:fx"); // variant collision
+        assert_eq!(contract("=p4"), "==p4"); // leading `=` would read as the escape
+        for class in ["flex", "hover:bg-blue-500", "custom-thing", "p4", "=p4"] {
+            let tok = contract(class);
+            let read = match tok.strip_prefix('=') {
+                Some(lit) => lit.to_string(),
+                None => decode(&tok).unwrap_or_else(|| tok.clone()),
+            };
+            assert_eq!(read, class, "token {tok}");
         }
     }
 

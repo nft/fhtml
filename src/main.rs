@@ -4,8 +4,8 @@ use std::process::exit;
 use std::{env, fs, io};
 
 use fhtml::{
-    compile_opts, compile_to_js_opts_from, format, render_opts_from, Mode, Options,
-    ShorthandPolicy, Value,
+    compile_opts, compile_to_js_opts_from, format_shorthand, render_opts_from, FmtShorthand, Mode,
+    Options, ShorthandPolicy, Value,
 };
 
 const USAGE: &str = "\
@@ -36,6 +36,10 @@ OPTIONS:
                  or not
   --no-shorthand never decode class shorthand, even under a `#!shorthand`
                  directive (`=` escapes stay literal too)
+  --contract     with `fmt`: rewrite classes into shorthand form — codes where
+                 they round-trip, `#!shorthand` directive added (SPEC §3.2)
+  --expand       with `fmt`: rewrite shorthand back to full classes and drop
+                 the directive; compiled output is unchanged either way
   -h, --help     show this help
   -V, --version  print version
 ";
@@ -57,6 +61,7 @@ fn run() -> Result<(), String> {
     let mut fmt = false;
     let mut templates = true;
     let mut shorthand: Option<ShorthandPolicy> = None;
+    let mut fmt_shorthand: Option<FmtShorthand> = None;
     let mut js_target = false;
     let mut data_path: Option<PathBuf> = None;
     let mut ctx_path: Option<PathBuf> = None;
@@ -81,6 +86,17 @@ fn run() -> Result<(), String> {
                     );
                 }
                 shorthand = Some(p);
+            }
+            s @ ("--contract" | "--expand") => {
+                let m = if s == "--contract" {
+                    FmtShorthand::Contract
+                } else {
+                    FmtShorthand::Expand
+                };
+                if fmt_shorthand.is_some_and(|prev| prev != m) {
+                    return Err("`--contract` and `--expand` are mutually exclusive".to_string());
+                }
+                fmt_shorthand = Some(m);
             }
             "--target=js" => js_target = true,
             "--target=html" => js_target = false,
@@ -148,7 +164,14 @@ fn run() -> Result<(), String> {
     if fmt && shorthand.is_some() {
         return Err(
             "`fmt` always preserves the authored form — `--shorthand`/`--no-shorthand` do not \
-             apply (SPEC §3.2)"
+             apply; `fmt --contract`/`--expand` rewrite between the forms (SPEC §3.2)"
+                .to_string(),
+        );
+    }
+    if !fmt && fmt_shorthand.is_some() {
+        return Err(
+            "`--contract`/`--expand` only apply to `fmt`; compiling takes \
+             `--shorthand`/`--no-shorthand` (SPEC §3.2)"
                 .to_string(),
         );
     }
@@ -178,7 +201,11 @@ fn run() -> Result<(), String> {
             build_file(&src, &out, pretty, &job)
         }
     } else if fmt {
-        run_fmt(input.as_deref(), out_path)
+        run_fmt(
+            input.as_deref(),
+            out_path,
+            fmt_shorthand.unwrap_or_default(),
+        )
     } else {
         let (name, source) = match input.as_deref() {
             None | Some("-") => ("<stdin>".to_string(), read_stdin()?),
@@ -267,10 +294,15 @@ fn print_warnings(name: &str, warnings: &[String]) {
     }
 }
 
-fn run_fmt(input: Option<&str>, out_path: Option<PathBuf>) -> Result<(), String> {
+fn run_fmt(
+    input: Option<&str>,
+    out_path: Option<PathBuf>,
+    shorthand: FmtShorthand,
+) -> Result<(), String> {
     match input {
         None | Some("-") => {
-            let formatted = format(&read_stdin()?).map_err(|e| format!("<stdin>:{e}"))?;
+            let formatted =
+                format_shorthand(&read_stdin()?, shorthand).map_err(|e| format!("<stdin>:{e}"))?;
             print!("{formatted}");
             Ok(())
         }
@@ -285,7 +317,7 @@ fn run_fmt(input: Option<&str>, out_path: Option<PathBuf>) -> Result<(), String>
                 files.sort();
                 let mut changed = 0usize;
                 for file in &files {
-                    if fmt_file(file, file)? {
+                    if fmt_file(file, file, shorthand)? {
                         changed += 1;
                     }
                 }
@@ -293,7 +325,7 @@ fn run_fmt(input: Option<&str>, out_path: Option<PathBuf>) -> Result<(), String>
                 Ok(())
             } else {
                 let out = out_path.unwrap_or_else(|| path.clone());
-                fmt_file(&path, &out)?;
+                fmt_file(&path, &out, shorthand)?;
                 Ok(())
             }
         }
@@ -301,9 +333,10 @@ fn run_fmt(input: Option<&str>, out_path: Option<PathBuf>) -> Result<(), String>
 }
 
 /// Returns whether the file's contents changed.
-fn fmt_file(src: &Path, out: &Path) -> Result<bool, String> {
+fn fmt_file(src: &Path, out: &Path, shorthand: FmtShorthand) -> Result<bool, String> {
     let source = fs::read_to_string(src).map_err(|e| format!("{}: {e}", src.display()))?;
-    let formatted = format(&source).map_err(|e| format!("{}:{e}", src.display()))?;
+    let formatted =
+        format_shorthand(&source, shorthand).map_err(|e| format!("{}:{e}", src.display()))?;
     if src == out && formatted == source {
         return Ok(false);
     }

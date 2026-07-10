@@ -1513,7 +1513,7 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
     let mut el = Element::new(&tag, line);
 
     if cur.peek() == Some('(') {
-        parse_attrs(cur, &mut el, templates)?;
+        parse_attrs(cur, &mut el, templates, shorthand)?;
         match cur.peek() {
             None | Some(' ') | Some('\t') => {}
             Some(c) => {
@@ -1614,8 +1614,9 @@ fn class_token_looks_like_attr(tok: &str) -> bool {
 /// Resolves a bare class token to its literal class name. In `#!shorthand`
 /// mode a recognized code is decoded (`ti4` → `text-indigo-400`); a leading
 /// `=` escapes a token to stay verbatim (`=ti4` → `ti4`); anything else is
-/// left untouched.
-fn class_token(tok: &str, shorthand: bool) -> String {
+/// left untouched. `pub(crate)`: the formatter's
+/// Expand/Contract modes reuse it to compute what an authored token means.
+pub(crate) fn class_token(tok: &str, shorthand: bool) -> String {
     if !shorthand {
         return tok.to_string();
     }
@@ -1653,7 +1654,7 @@ fn parse_class_interp(cur: &mut Cur, templates: bool) -> Result<TplExpr> {
 }
 
 /// Parses `(name name=value …)` (SPEC §4.3). The cursor sits on `(`.
-fn parse_attrs(cur: &mut Cur, el: &mut Element, templates: bool) -> Result<()> {
+fn parse_attrs(cur: &mut Cur, el: &mut Element, templates: bool, shorthand: bool) -> Result<()> {
     let src = cur.s;
     let line = cur.line;
     cur.bump(); // (
@@ -1731,7 +1732,7 @@ fn parse_attrs(cur: &mut Cur, el: &mut Element, templates: bool) -> Result<()> {
 
                 if name == "class" {
                     match value {
-                        AttrValue::Str(parts) => merge_class_attr(el, parts)?,
+                        AttrValue::Str(parts) => merge_class_attr(el, parts, shorthand)?,
                         AttrValue::Expr(t) => el.classes.push(ClassItem::Interp(t)),
                         AttrValue::Bool => {
                             return err(line, col, "`class` attribute requires a value")
@@ -1751,8 +1752,10 @@ fn parse_attrs(cur: &mut Cur, el: &mut Element, templates: bool) -> Result<()> {
 /// Merges a quoted `class="…"` value into the class list: literal runs split
 /// on whitespace; an interpolation becomes one class item and must stand
 /// whitespace-separated (glued fragments are invisible to Tailwind's scanner
-/// and are rejected, the footgun rule).
-fn merge_class_attr(el: &mut Element, parts: Vec<TextPart>) -> Result<()> {
+/// and are rejected, the footgun rule). Each split token goes through
+/// [`class_token`] — shorthand decoding applies to every class token, bare or
+/// quoted, or `fmt`'s merge of the two forms would change output (SPEC §3.2).
+fn merge_class_attr(el: &mut Element, parts: Vec<TextPart>, shorthand: bool) -> Result<()> {
     let mut boundary = true; // at value start / after whitespace
     for part in parts {
         match part {
@@ -1764,8 +1767,10 @@ fn merge_class_attr(el: &mut Element, parts: Vec<TextPart>) -> Result<()> {
                     };
                     return err(t.line, t.col, GLUED_CLASS_ATTR);
                 }
-                el.classes
-                    .extend(s.split_whitespace().map(|c| ClassItem::Lit(c.to_string())));
+                el.classes.extend(
+                    s.split_whitespace()
+                        .map(|c| ClassItem::Lit(class_token(c, shorthand))),
+                );
                 boundary = s.ends_with([' ', '\t']);
             }
             TextPart::Interp { expr, .. } => {

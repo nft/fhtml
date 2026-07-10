@@ -74,9 +74,11 @@ Indented lines under a comment belong to the comment (silent for `//`, included 
 The `#!` line prefix is reserved for file-level directives. One exists: `#!shorthand`
 opts the file into the Tailwind class-shorthand codebook — bare class tokens that match a code decode to their full class
 (`ti4` → `text-indigo-400`, `hover:bb5` → `hover:bg-blue-500`). This is the single,
-opt-in exception to §4.2's verbatim-class rule, and it applies **only** to bare class
-tokens: `{expr}` interpolation (§9) and raw `<…>` passthrough (§8) are never decoded,
-and a leading `=` escapes one token to stay verbatim (`=ti4` → the literal class `ti4`).
+opt-in exception to §4.2's verbatim-class rule, and it applies to every **class token**
+— bare, or whitespace-split inside a quoted `class="…"` attribute (§4.3), which merges
+into the same class list. Nothing else decodes: `{expr}` interpolation (§9), raw `<…>`
+passthrough (§8), and non-class attribute values are never touched, and a leading `=`
+escapes one token to stay verbatim (`=ti4` → the literal class `ti4`).
 
 Rules (each violation is a compile error, never a silent no-op):
 
@@ -94,7 +96,12 @@ Rules (each violation is a compile error, never a silent no-op):
   under every policy. The flags are rejected with `fmt`, which always preserves.
 - **Formatting.** `fhtml fmt` preserves the authored form: the directive line, the
   codes, and `=` escapes reprint as written (§11's `compile(format(s)) == compile(s)`
-  invariant holds byte-for-byte on the output).
+  invariant holds byte-for-byte on the output). `fmt --contract` and `fmt --expand`
+  rewrite between the two forms under the same invariant: `--contract` emits the code
+  wherever one round-trips, `=`-escapes any class that would read as something else
+  (`p4` → `=p4`, a literal leading `=` doubles), and opens the file with `#!shorthand`;
+  `--expand` replaces every token with the literal class it means and drops the
+  directive. Both are idempotent and total — they accept files in either form.
 - **Orthogonality.** Independent of `--no-templates` (§9.2) — decoding is a class-token
   transform, not a template construct.
 

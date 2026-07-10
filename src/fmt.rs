@@ -5,19 +5,59 @@
 //! text, never re-serialized from the AST — formatting must not change output.
 
 use crate::parser::{AttrValue, Call, ClassItem, Def, Document, Element, IfChain, Node, TextPart};
+use crate::FmtShorthand;
 
-pub fn format_document(doc: &Document) -> String {
+/// How literal class tokens reprint (SPEC §3.2). `Preserve` is the identity;
+/// the rewrite modes first resolve what the authored token *means* under the
+/// document's own directive state, then re-emit that meaning in the target
+/// form — so both directions are output-preserving on any input file.
+#[derive(Clone, Copy)]
+struct Classes {
+    /// The document opened with `#!shorthand`, so authored tokens carry
+    /// decoded meanings (`fx` is `flex`, `=fx` is the literal `fx`).
+    decoded: bool,
+    mode: FmtShorthand,
+}
+
+impl Classes {
+    fn apply(&self, tok: &str) -> String {
+        if self.mode == FmtShorthand::Preserve {
+            return tok.to_string();
+        }
+        let meaning = crate::parser::class_token(tok, self.decoded);
+        match self.mode {
+            FmtShorthand::Preserve => unreachable!(),
+            // Verbatim form: without a directive every token is literal.
+            FmtShorthand::Expand => meaning,
+            // Shorthand form: codes where they round-trip, `=`-escapes where
+            // the class would read as something else.
+            FmtShorthand::Contract => crate::shorthand::contract(&meaning),
+        }
+    }
+}
+
+pub fn format_document(doc: &Document, shorthand: FmtShorthand) -> String {
     let mut out = String::new();
-    // The authored `#!shorthand` opt-in survives formatting (SPEC §3.2);
+    // The authored `#!shorthand` opt-in survives `Preserve` (SPEC §3.2);
     // `format()` parses with decoding off, so class tokens are still the
-    // authored codes and the pair round-trips byte-identically.
-    if doc.shorthand {
+    // authored codes and the pair round-trips byte-identically. The rewrite
+    // modes set the directive to match the form they emit.
+    let directive = match shorthand {
+        FmtShorthand::Preserve => doc.shorthand,
+        FmtShorthand::Expand => false,
+        FmtShorthand::Contract => true,
+    };
+    if directive {
         out.push_str("#!shorthand\n");
     }
+    let classes = Classes {
+        decoded: doc.shorthand,
+        mode: shorthand,
+    };
     for node in &doc.body {
         match node {
             // Definitions print where they sat in the source (SPEC §10.3).
-            Node::DefSite(i) => fmt_def(&mut out, &doc.defs[*i]),
+            Node::DefSite(i) => fmt_def(&mut out, &doc.defs[*i], classes),
             // Reprinted as written (SPEC §10.5) — fmt never resolves
             // includes; formatting must not need the filesystem.
             Node::Include { path, .. } => {
@@ -25,7 +65,7 @@ pub fn format_document(doc: &Document) -> String {
                 out.push_str(path);
                 out.push('\n');
             }
-            _ => fmt_node(&mut out, node, 0),
+            _ => fmt_node(&mut out, node, 0, classes),
         }
     }
     out
@@ -36,15 +76,19 @@ pub fn format_document(doc: &Document) -> String {
 #[cfg(feature = "convert")]
 pub fn format_nodes(nodes: &[Node]) -> String {
     let mut out = String::new();
+    let classes = Classes {
+        decoded: false,
+        mode: FmtShorthand::Preserve,
+    };
     for node in nodes {
-        fmt_node(&mut out, node, 0);
+        fmt_node(&mut out, node, 0, classes);
     }
     out
 }
 
 /// `def name(param param=default …)`, body indented one step. Empty parameter
 /// lists print bare (`def name`) — the parse is identical.
-fn fmt_def(out: &mut String, def: &Def) {
+fn fmt_def(out: &mut String, def: &Def, classes: Classes) {
     out.push_str("def ");
     out.push_str(&def.name);
     if !def.params.is_empty() {
@@ -63,11 +107,11 @@ fn fmt_def(out: &mut String, def: &Def) {
     }
     out.push('\n');
     for child in &def.body {
-        fmt_node(out, child, 1);
+        fmt_node(out, child, 1, classes);
     }
 }
 
-fn fmt_node(out: &mut String, node: &Node, depth: usize) {
+fn fmt_node(out: &mut String, node: &Node, depth: usize, classes: Classes) {
     let ind = "  ".repeat(depth);
     match node {
         Node::Doctype => out.push_str(&format!("{ind}doctype\n")),
@@ -107,22 +151,22 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
             }
         }
         Node::Element(el) => {
-            out.push_str(&format!("{ind}{}\n", element_line(el)));
+            out.push_str(&format!("{ind}{}\n", element_line(el, classes)));
             for child in &innermost(el).children {
-                fmt_node(out, child, depth + 1);
+                fmt_node(out, child, depth + 1, classes);
             }
         }
         Node::Call(c) => {
             out.push_str(&format!("{ind}{}\n", call_line(c)));
             for child in &c.children {
-                fmt_node(out, child, depth + 1);
+                fmt_node(out, child, depth + 1, classes);
             }
         }
         Node::Children { .. } => out.push_str(&format!("{ind}children\n")),
         // Top level only (parser-enforced) — `format_document` handles them.
         Node::DefSite(_) => unreachable!("`def` is top-level only (SPEC §10.3)"),
         Node::Include { .. } => unreachable!("`include` is top-level only (SPEC §10.5)"),
-        Node::If(chain) => fmt_if(out, chain, depth),
+        Node::If(chain) => fmt_if(out, chain, depth, classes),
         Node::For(f) => {
             match &f.index {
                 Some(idx) => {
@@ -131,31 +175,31 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize) {
                 None => out.push_str(&format!("{ind}for {} in {}\n", f.var, f.iter.src)),
             }
             for child in &f.body {
-                fmt_node(out, child, depth + 1);
+                fmt_node(out, child, depth + 1, classes);
             }
             if let Some(empty) = &f.empty {
                 out.push_str(&format!("{ind}empty\n"));
                 for child in empty {
-                    fmt_node(out, child, depth + 1);
+                    fmt_node(out, child, depth + 1, classes);
                 }
             }
         }
     }
 }
 
-fn fmt_if(out: &mut String, chain: &IfChain, depth: usize) {
+fn fmt_if(out: &mut String, chain: &IfChain, depth: usize, classes: Classes) {
     let ind = "  ".repeat(depth);
     for (i, arm) in chain.arms.iter().enumerate() {
         let kw = if i == 0 { "if" } else { "elif" };
         out.push_str(&format!("{ind}{kw} {}\n", arm.cond.src));
         for child in &arm.body {
-            fmt_node(out, child, depth + 1);
+            fmt_node(out, child, depth + 1, classes);
         }
     }
     if let Some(else_body) = &chain.else_body {
         out.push_str(&format!("{ind}else\n"));
         for child in else_body {
-            fmt_node(out, child, depth + 1);
+            fmt_node(out, child, depth + 1, classes);
         }
     }
 }
@@ -227,19 +271,29 @@ fn hostile_class(c: &str) -> bool {
     c.starts_with('"') || c.starts_with('{') || c.starts_with('#') || c == ">"
 }
 
-fn element_line(el: &Element) -> String {
+fn element_line(el: &Element, cm: Classes) -> String {
     let mut s = String::new();
     s.push_str(if el.tag == "div" { "." } else { &el.tag });
+    // The shorthand rewrite happens before the hostility check: Expand can
+    // *create* a hostile token (`=#foo` under the directive means the literal
+    // class `#foo`, which only survives inside a quoted class attr).
+    let classes: Vec<ClassItem> = el
+        .classes
+        .iter()
+        .map(|c| match c {
+            ClassItem::Lit(s) => ClassItem::Lit(cm.apply(s)),
+            interp @ ClassItem::Interp(_) => interp.clone(),
+        })
+        .collect();
     // If any literal class can't survive as a bare token, the whole list rides
     // in a quoted class attr (the parser merges it back losslessly, in order;
     // interpolations print as whitespace-separated `{expr}` inside it).
-    let hostile = el
-        .classes
+    let hostile = classes
         .iter()
         .any(|c| matches!(c, ClassItem::Lit(s) if hostile_class(s)));
     let class_attr = if hostile {
         Some(
-            el.classes
+            classes
                 .iter()
                 .map(|c| match c {
                     ClassItem::Lit(s) => escape_attr_lit(s),
@@ -284,7 +338,7 @@ fn element_line(el: &Element) -> String {
         s.push_str(&format!(" #{id}"));
     }
     if class_attr.is_none() {
-        for class in &el.classes {
+        for class in &classes {
             s.push(' ');
             match class {
                 ClassItem::Lit(c) => s.push_str(c),
@@ -298,7 +352,7 @@ fn element_line(el: &Element) -> String {
     }
     if let Some(chain) = &el.chain {
         s.push_str(" > ");
-        s.push_str(&element_line(chain));
+        s.push_str(&element_line(chain, cm));
     }
     s
 }

@@ -165,6 +165,12 @@ directive; `=ti4` escapes one token to stay literal; `fhtml fmt` preserves the a
 codes and the directive. Without the directive nothing changes — every class token is
 verbatim, exactly as before.
 
+`fhtml fmt --contract` rewrites a file into this form (adding the directive and
+escaping collisions), and `fmt --expand` rewrites it back out; compiled output is
+identical in both directions. Shorthand is a write-time compression for tooling —
+benchmarks show models should never be asked to *emit* codes, so the intended flow
+is: generate plain classes, then `fmt --contract` to store.
+
 ### As a library
 
 ```rust

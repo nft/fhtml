@@ -40,6 +40,24 @@ pub enum ShorthandPolicy {
     Off,
 }
 
+/// How [`format_shorthand`] treats shorthand class tokens (SPEC §3.2). Both
+/// rewrites preserve `compile(format(s)) == compile(s)`: they change how each
+/// class is *written*, never what it means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FmtShorthand {
+    /// Reprint the authored form: codes stay codes, verbatim stays verbatim,
+    /// the directive line survives. What [`format`] does.
+    #[default]
+    Preserve,
+    /// Decode every code to its full class, resolve `=` escapes, and drop the
+    /// `#!shorthand` directive — the file leaves shorthand form entirely.
+    Expand,
+    /// Contract every class to its code where one round-trips, `=`-escape
+    /// classes that would decode as something else, and open the file with
+    /// `#!shorthand`.
+    Contract,
+}
+
 /// Compile options beyond the output [`Mode`].
 #[derive(Debug)]
 pub struct Options {
@@ -219,10 +237,19 @@ pub fn compile_to_js_opts_from(
 /// expressions are reprinted from source text. Invariants:
 /// `compile(format(s)) == compile(s)` and `format(format(s)) == format(s)`.
 pub fn format(src: &str) -> Result<String, Error> {
+    format_shorthand(src, FmtShorthand::Preserve)
+}
+
+/// [`format`] with an explicit shorthand mode: [`FmtShorthand::Expand`] and
+/// [`FmtShorthand::Contract`] rewrite between the verbatim and shorthand
+/// forms of the class list (SPEC §3.2) — output-preserving in both
+/// directions, on files with or without the directive.
+pub fn format_shorthand(src: &str, shorthand: FmtShorthand) -> Result<String, Error> {
     // `Off` preserves the authored form: no decode, `=` escapes untouched
     // (lexical-off), the `#!shorthand` directive recorded on the Document and
     // re-emitted by the formatter. fmt never emits HTML, so it never needs
-    // the decoded classes (SPEC §3.2).
+    // the decoded classes (SPEC §3.2) — Expand/Contract rewrite the authored
+    // tokens themselves at print time.
     let (doc, _) = parser::parse(src, true, ShorthandPolicy::Off)?;
-    Ok(fmt::format_document(&doc))
+    Ok(fmt::format_document(&doc, shorthand))
 }

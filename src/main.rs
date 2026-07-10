@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{env, fs, io};
 
-use fhtml::{compile_opts, compile_to_js_from, format, render_full_from, Mode, Options, Value};
+use fhtml::{
+    compile_opts, compile_to_js_opts_from, format, render_opts_from, Mode, Options,
+    ShorthandPolicy, Value,
+};
 
 const USAGE: &str = "\
 fhtml — compiler for Fluid HTML (see SPEC.md)
@@ -29,6 +32,10 @@ OPTIONS:
                  constant function, for uniformity
   --no-templates enforce static markup (SPEC §9.2): any template construct —
                  statements, `{…}` interpolation, unescaped `{` — is an error
+  --shorthand    decode class shorthand (SPEC §3.2) in every file, directive
+                 or not
+  --no-shorthand never decode class shorthand, even under a `#!shorthand`
+                 directive (`=` escapes stay literal too)
   -h, --help     show this help
   -V, --version  print version
 ";
@@ -49,6 +56,7 @@ fn run() -> Result<(), String> {
     let mut build = false;
     let mut fmt = false;
     let mut templates = true;
+    let mut shorthand: Option<ShorthandPolicy> = None;
     let mut js_target = false;
     let mut data_path: Option<PathBuf> = None;
     let mut ctx_path: Option<PathBuf> = None;
@@ -61,6 +69,19 @@ fn run() -> Result<(), String> {
             "--pretty" => pretty = Some(true),
             "--min" => pretty = Some(false),
             "--no-templates" => templates = false,
+            s @ ("--shorthand" | "--no-shorthand") => {
+                let p = if s == "--shorthand" {
+                    ShorthandPolicy::On
+                } else {
+                    ShorthandPolicy::Off
+                };
+                if shorthand.is_some_and(|prev| prev != p) {
+                    return Err(
+                        "`--shorthand` and `--no-shorthand` are mutually exclusive".to_string()
+                    );
+                }
+                shorthand = Some(p);
+            }
             "--target=js" => js_target = true,
             "--target=html" => js_target = false,
             "--target" => {
@@ -124,10 +145,18 @@ fn run() -> Result<(), String> {
                 .to_string(),
         );
     }
+    if fmt && shorthand.is_some() {
+        return Err(
+            "`fmt` always preserves the authored form — `--shorthand`/`--no-shorthand` do not \
+             apply (SPEC §3.2)"
+                .to_string(),
+        );
+    }
     let data = load_json(data_path.as_deref())?;
     let ctx = load_json(ctx_path.as_deref())?;
     let job = Job {
         templates,
+        shorthand: shorthand.unwrap_or_default(),
         js_target,
         data,
         ctx,
@@ -184,6 +213,7 @@ fn run() -> Result<(), String> {
 /// JS module with `--target=js`, or static-enforce with `--no-templates`.
 struct Job {
     templates: bool,
+    shorthand: ShorthandPolicy,
     js_target: bool,
     data: Value,
     ctx: Value,
@@ -198,18 +228,17 @@ impl Job {
         file: Option<&Path>,
         mode: Mode,
     ) -> Result<fhtml::Output, fhtml::Error> {
+        let opts = Options {
+            mode,
+            templates: self.templates,
+            shorthand: self.shorthand,
+        };
         if self.js_target {
-            compile_to_js_from(source, file, mode)
+            compile_to_js_opts_from(source, file, &opts)
         } else if self.templates {
-            render_full_from(source, file, &self.data, &self.ctx, mode)
+            render_opts_from(source, file, &self.data, &self.ctx, &opts)
         } else {
-            compile_opts(
-                source,
-                &Options {
-                    mode,
-                    templates: false,
-                },
-            )
+            compile_opts(source, &opts)
         }
     }
 }

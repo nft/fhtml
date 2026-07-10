@@ -25,6 +25,21 @@ pub use emit::Mode;
 pub use error::Error;
 pub use expr::Value;
 
+/// Whether bare class tokens decode through the shorthand codebook
+/// (SPEC §3.2, [`shorthand`]). `Auto` lets each file's `#!shorthand`
+/// directive decide; `On`/`Off` force it for every file in the compilation,
+/// includes included. `Off` is *lexical*-off — the file parses as if no
+/// directive were present, so the `=` escape is inert too (`=ti4` stays the
+/// literal class `=ti4`). Directive placement is validated under every
+/// policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShorthandPolicy {
+    #[default]
+    Auto,
+    On,
+    Off,
+}
+
 /// Compile options beyond the output [`Mode`].
 #[derive(Debug)]
 pub struct Options {
@@ -32,6 +47,9 @@ pub struct Options {
     /// `false` enforces static-only (SPEC §9.2): any template construct — statements,
     /// `{…}` interpolation, unescaped `{` in text — is a parse error.
     pub templates: bool,
+    /// Class-shorthand decoding (SPEC §3.2); `Auto` honors each file's
+    /// `#!shorthand` directive.
+    pub shorthand: ShorthandPolicy,
 }
 
 impl Default for Options {
@@ -39,6 +57,7 @@ impl Default for Options {
         Options {
             mode: Mode::Min,
             templates: true,
+            shorthand: ShorthandPolicy::Auto,
         }
     }
 }
@@ -65,7 +84,7 @@ pub fn compile_full(src: &str, mode: Mode) -> Result<Output, Error> {
         src,
         &Options {
             mode,
-            templates: true,
+            ..Options::default()
         },
     )
 }
@@ -75,7 +94,7 @@ pub fn compile_full(src: &str, mode: Mode) -> Result<Output, Error> {
 /// at parse time with static-path wording (SPEC §9.2) and requires `\{` for literal
 /// braces in text.
 pub fn compile_opts(src: &str, opts: &Options) -> Result<Output, Error> {
-    let (doc, warnings) = parser::parse(src, opts.templates)?;
+    let (doc, warnings) = parser::parse(src, opts.templates, opts.shorthand)?;
     if let Some((line, col, what)) = parser::first_template_use_doc(&doc) {
         return error::err(
             line,
@@ -120,10 +139,33 @@ pub fn render_full_from(
     ctx: &Value,
     mode: Mode,
 ) -> Result<Output, Error> {
-    let (doc, mut warnings) = parser::parse(src, true)?;
-    let doc = resolve::resolve_includes(doc, file, &mut warnings)?;
+    render_opts_from(
+        src,
+        file,
+        data,
+        ctx,
+        &Options {
+            mode,
+            ..Options::default()
+        },
+    )
+}
+
+/// [`render_full_from`] with explicit [`Options`] — the render path takes
+/// `opts.mode` and `opts.shorthand` from here (the policy reaches included
+/// files too, SPEC §3.2). `opts.templates` is ignored: rendering *is* the
+/// template path; use [`compile_opts`] for static-only enforcement.
+pub fn render_opts_from(
+    src: &str,
+    file: Option<&std::path::Path>,
+    data: &Value,
+    ctx: &Value,
+    opts: &Options,
+) -> Result<Output, Error> {
+    let (doc, mut warnings) = parser::parse(src, true, opts.shorthand)?;
+    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings)?;
     Ok(Output {
-        html: emit::render_document(&doc, mode, data, ctx)?,
+        html: emit::render_document(&doc, opts.mode, data, ctx)?,
         warnings,
     })
 }
@@ -146,10 +188,28 @@ pub fn compile_to_js_from(
     file: Option<&std::path::Path>,
     mode: Mode,
 ) -> Result<Output, Error> {
-    let (doc, mut warnings) = parser::parse(src, true)?;
-    let doc = resolve::resolve_includes(doc, file, &mut warnings)?;
+    compile_to_js_opts_from(
+        src,
+        file,
+        &Options {
+            mode,
+            ..Options::default()
+        },
+    )
+}
+
+/// [`compile_to_js_from`] with explicit [`Options`] — `opts.shorthand`
+/// reaches included files too (SPEC §3.2). `opts.templates` is ignored: the
+/// emitted module is the template path by construction.
+pub fn compile_to_js_opts_from(
+    src: &str,
+    file: Option<&std::path::Path>,
+    opts: &Options,
+) -> Result<Output, Error> {
+    let (doc, mut warnings) = parser::parse(src, true, opts.shorthand)?;
+    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings)?;
     Ok(Output {
-        html: jsgen::generate(&doc, mode)?,
+        html: jsgen::generate(&doc, opts.mode)?,
         warnings,
     })
 }
@@ -159,6 +219,10 @@ pub fn compile_to_js_from(
 /// expressions are reprinted from source text. Invariants:
 /// `compile(format(s)) == compile(s)` and `format(format(s)) == format(s)`.
 pub fn format(src: &str) -> Result<String, Error> {
-    let (doc, _) = parser::parse(src, true)?;
+    // `Off` preserves the authored form: no decode, `=` escapes untouched
+    // (lexical-off), the `#!shorthand` directive recorded on the Document and
+    // re-emitted by the formatter. fmt never emits HTML, so it never needs
+    // the decoded classes (SPEC §3.2).
+    let (doc, _) = parser::parse(src, true, ShorthandPolicy::Off)?;
     Ok(fmt::format_document(&doc))
 }

@@ -1,0 +1,14 @@
+// SYNTAX TEST "source.fhtml" "directives (SPEC §3.2)"
+
+#!shorthand
+// <- keyword.control.directive.shorthand.fhtml
+
+#!shorthand on
+// <- invalid.illegal.directive.fhtml
+
+#!strict
+// <- invalid.illegal.directive.fhtml
+
+div fx ti4
+// <- entity.name.tag.fhtml
+//  ^^ entity.other.attribute-name.class.fhtml

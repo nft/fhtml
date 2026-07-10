@@ -55,6 +55,7 @@ Classified by the logical line's first token:
 | `//!` | emitted comment → `<!-- … -->` | §3.1 |
 | `<` | raw HTML passthrough | §8 |
 | `\|` | text block line | §6.2 |
+| `#!` | directive — only `#!shorthand` exists | §3.2 |
 | `doctype` | `<!DOCTYPE html>` | §7 |
 | `if` `elif` `else` `for` `empty` `def` `children` `include` | statement (template layer) | §10 |
 | `+name` | component call (template layer) | §10.4 |
@@ -67,6 +68,35 @@ Reserved words are reserved **only in first-token position**. An element literal
 
 `// text` — compiler-only, produces no output. `//! text` — emits `<!-- text -->`.
 Indented lines under a comment belong to the comment (silent for `//`, included for `//!`).
+
+### 3.2 Directives: `#!shorthand`
+
+The `#!` line prefix is reserved for file-level directives. One exists: `#!shorthand`
+opts the file into the Tailwind class-shorthand codebook — bare class tokens that match a code decode to their full class
+(`ti4` → `text-indigo-400`, `hover:bb5` → `hover:bg-blue-500`). This is the single,
+opt-in exception to §4.2's verbatim-class rule, and it applies **only** to bare class
+tokens: `{expr}` interpolation (§9) and raw `<…>` passthrough (§8) are never decoded,
+and a leading `=` escapes one token to stay verbatim (`=ti4` → the literal class `ti4`).
+
+Rules (each violation is a compile error, never a silent no-op):
+
+- **Placement.** `#!shorthand` must be the first non-blank line and start at column 1.
+  Anywhere else — after content or a comment, indented, duplicated — is an error quoting
+  exactly that sentence. `#!shorthand` takes nothing after it on the line; any other
+  `#!` token is `unknown directive`.
+- **Scope.** The whole file, and only the file: the directive never crosses an
+  `include` boundary (§10.5) in either direction. An included file decodes iff *it*
+  opens with the directive.
+- **Override.** `--shorthand` / `--no-shorthand` (CLI) or `Options::shorthand` (API)
+  force decoding on or off for **every** file in the compilation, includes included.
+  Off is *lexical*-off: the file parses as if no directive were present, so the `=`
+  escape is inert too (`=ti4` stays the literal class `=ti4`). Placement is validated
+  under every policy. The flags are rejected with `fmt`, which always preserves.
+- **Formatting.** `fhtml fmt` preserves the authored form: the directive line, the
+  codes, and `=` escapes reprint as written (§11's `compile(format(s)) == compile(s)`
+  invariant holds byte-for-byte on the output).
+- **Orthogonality.** Independent of `--no-templates` (§9.2) — decoding is a class-token
+  transform, not a template construct.
 
 ## 4. Element lines
 

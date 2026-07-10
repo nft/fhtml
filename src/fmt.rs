@@ -8,6 +8,12 @@ use crate::parser::{AttrValue, Call, ClassItem, Def, Document, Element, IfChain,
 
 pub fn format_document(doc: &Document) -> String {
     let mut out = String::new();
+    // The authored `#!shorthand` opt-in survives formatting (SPEC §3.2);
+    // `format()` parses with decoding off, so class tokens are still the
+    // authored codes and the pair round-trips byte-identically.
+    if doc.shorthand {
+        out.push_str("#!shorthand\n");
+    }
     for node in &doc.body {
         match node {
             // Definitions print where they sat in the source (SPEC §10.3).

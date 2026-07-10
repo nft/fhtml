@@ -789,6 +789,7 @@ mod template_parse {
             &Options {
                 mode: Mode::Min,
                 templates: false,
+                ..Default::default()
             },
         )
         .unwrap_err()
@@ -1153,6 +1154,7 @@ mod template_parse {
             &Options {
                 mode: Mode::Min,
                 templates: false,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -2005,6 +2007,7 @@ mod includes {
             &fhtml::Options {
                 mode: Mode::Min,
                 templates: false,
+                ..Default::default()
             },
         )
         .unwrap_err();
@@ -2022,5 +2025,234 @@ mod includes {
             "// head partial\ninclude ./partials/head\ndef c\n  p \"x\"\ninclude ./partials/foot\np \"tail\"\n"
         );
         assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    }
+
+    // ------------------------------------------ #!shorthand scope (SPEC §3.2)
+
+    #[test]
+    fn shorthand_directive_does_not_leak_into_included_files() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "#!shorthand\ndiv fx\ninclude ./part\n"),
+            ("part.fhtml", "p ti4\n"),
+        ]);
+        assert_eq!(
+            f.html("main.fhtml"),
+            "<div class=\"flex\"></div><p class=\"ti4\"></p>"
+        );
+    }
+
+    #[test]
+    fn included_directive_does_not_leak_into_the_includer() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./part\np ti4\n"),
+            ("part.fhtml", "#!shorthand\nspan fx\n"),
+        ]);
+        assert_eq!(
+            f.html("main.fhtml"),
+            "<span class=\"flex\"></span><p class=\"ti4\"></p>"
+        );
+    }
+
+    #[test]
+    fn forced_policy_reaches_included_files() {
+        use fhtml::{render_opts_from, Options, ShorthandPolicy};
+        let f = Fixture::new(&[
+            ("on.fhtml", "include ./plain\n"),
+            ("plain.fhtml", "p ti4\n"),
+            ("off.fhtml", "include ./short\n"),
+            ("short.fhtml", "#!shorthand\np ti4\n"),
+        ]);
+        let html = |root: &str, shorthand| {
+            let path = f.dir.join(root);
+            let src = fs::read_to_string(&path).unwrap();
+            render_opts_from(
+                &src,
+                Some(&path),
+                &Value::Null,
+                &Value::Null,
+                &Options {
+                    shorthand,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .html
+        };
+        // Force-on decodes in an included file that never opted in…
+        assert_eq!(
+            html("on.fhtml", ShorthandPolicy::On),
+            "<p class=\"text-indigo-400\"></p>"
+        );
+        // …and force-off suppresses an included file's own directive.
+        assert_eq!(
+            html("off.fhtml", ShorthandPolicy::Off),
+            "<p class=\"ti4\"></p>"
+        );
+    }
+}
+
+// ---------------------------------------------------- #!shorthand (SPEC §3.2)
+
+mod shorthand_directive {
+    use fhtml::{compile, compile_opts, compile_to_js, Mode, Options, ShorthandPolicy};
+
+    /// Every placement violation quotes this exact message (SPEC §3.2).
+    const PLACEMENT: &str = "`#!shorthand` must be the first non-blank line and start at column 1";
+
+    fn min(src: &str) -> String {
+        compile(src, Mode::Min).unwrap()
+    }
+
+    fn error(src: &str) -> String {
+        compile(src, Mode::Min).unwrap_err().to_string()
+    }
+
+    fn with_policy(src: &str, shorthand: ShorthandPolicy) -> Result<String, String> {
+        compile_opts(
+            src,
+            &Options {
+                mode: Mode::Min,
+                shorthand,
+                ..Default::default()
+            },
+        )
+        .map(|o| o.html)
+        .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn directive_decodes_codes_variants_and_escapes() {
+        assert_eq!(
+            min("#!shorthand\ndiv fx ti4 hover:bb5 =ti4 not-a-code\n"),
+            "<div class=\"flex text-indigo-400 hover:bg-blue-500 ti4 not-a-code\"></div>"
+        );
+    }
+
+    #[test]
+    fn without_directive_tokens_stay_literal() {
+        assert_eq!(min("div fx ti4\n"), "<div class=\"fx ti4\"></div>");
+    }
+
+    #[test]
+    fn leading_blank_lines_before_directive_are_fine() {
+        assert_eq!(
+            min("\n\n#!shorthand\ndiv fx\n"),
+            "<div class=\"flex\"></div>"
+        );
+    }
+
+    #[test]
+    fn comment_before_directive_is_rejected() {
+        let e = error("// prelude\n#!shorthand\ndiv fx\n");
+        assert!(e.contains(PLACEMENT), "got: {e}");
+        assert!(e.starts_with("2:1"), "got: {e}");
+    }
+
+    #[test]
+    fn indented_first_directive_is_rejected_at_column_1() {
+        let e = error("  #!shorthand\ndiv fx\n");
+        assert!(e.contains(PLACEMENT), "got: {e}");
+        assert!(e.starts_with("1:1"), "got: {e}");
+    }
+
+    #[test]
+    fn nested_directive_is_rejected_and_cannot_leak() {
+        // The original hazard: a mid-file directive silently rewrote every
+        // later class in the file. It is now a hard error.
+        let e = error("div\n  #!shorthand\n  span fx\np ti4\n");
+        assert!(e.contains(PLACEMENT), "got: {e}");
+        assert!(e.starts_with("2:1"), "got: {e}");
+    }
+
+    #[test]
+    fn duplicate_directive_is_rejected() {
+        let e = error("#!shorthand\n#!shorthand\ndiv fx\n");
+        assert!(e.contains(PLACEMENT), "got: {e}");
+        assert!(e.starts_with("2:1"), "got: {e}");
+    }
+
+    #[test]
+    fn directive_takes_no_arguments() {
+        let e = error("#!shorthand on\ndiv\n");
+        assert!(e.contains("takes nothing after it"), "got: {e}");
+    }
+
+    #[test]
+    fn unknown_directive_is_named() {
+        let e = error("#!strict\ndiv\n");
+        assert!(e.contains("unknown directive `#!strict`"), "got: {e}");
+    }
+
+    #[test]
+    fn force_on_expands_without_a_directive() {
+        assert_eq!(
+            with_policy("div fx ti4\n", ShorthandPolicy::On).unwrap(),
+            "<div class=\"flex text-indigo-400\"></div>"
+        );
+    }
+
+    #[test]
+    fn force_on_with_directive_is_redundant_not_an_error() {
+        let src = "#!shorthand\ndiv fx\n";
+        assert_eq!(
+            with_policy(src, ShorthandPolicy::On).unwrap(),
+            with_policy(src, ShorthandPolicy::Auto).unwrap()
+        );
+    }
+
+    #[test]
+    fn force_off_is_lexical_codes_and_escapes_both_inert() {
+        // Lexical-off (SPEC §3.2): the file parses as if no directive were
+        // present, so `=` is not shorthand syntax either.
+        assert_eq!(
+            with_policy("#!shorthand\ndiv ti4 =ti4\n", ShorthandPolicy::Off).unwrap(),
+            "<div class=\"ti4 =ti4\"></div>"
+        );
+    }
+
+    #[test]
+    fn force_off_still_validates_placement() {
+        let e = with_policy("div\n  #!shorthand\n", ShorthandPolicy::Off).unwrap_err();
+        assert!(e.contains(PLACEMENT), "got: {e}");
+    }
+
+    #[test]
+    fn escape_needs_the_directive_to_mean_anything() {
+        // No directive, Auto: `=ti4` is just a (weird) literal class.
+        assert_eq!(min("div =ti4\n"), "<div class=\"=ti4\"></div>");
+    }
+
+    #[test]
+    fn js_target_sees_expanded_classes() {
+        let js = compile_to_js("#!shorthand\ndiv fx ti4\n", Mode::Min)
+            .unwrap()
+            .html;
+        assert!(js.contains("text-indigo-400"), "module:\n{js}");
+        assert!(!js.contains("ti4\""), "module leaked a code:\n{js}");
+    }
+
+    // ------------------------------------------------------------- fmt
+
+    #[test]
+    fn fmt_preserves_directive_and_authored_codes() {
+        let src = "#!shorthand\ndiv fx ti4 =ti4\n";
+        let formatted = fhtml::format(src).unwrap();
+        assert_eq!(formatted, "#!shorthand\n. fx ti4 =ti4\n");
+        // Idempotent, and compile-equivalent to the original (SPEC §11).
+        assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+        assert_eq!(min(&formatted), min(src));
+    }
+
+    #[test]
+    fn fmt_normalizes_blank_lines_ahead_of_the_directive() {
+        assert_eq!(
+            fhtml::format("\n#!shorthand\ndiv fx\n").unwrap(),
+            "#!shorthand\n. fx\n"
+        );
+    }
+
+    #[test]
+    fn fmt_leaves_directive_free_files_alone() {
+        assert_eq!(fhtml::format("div fx ti4\n").unwrap(), ". fx ti4\n");
     }
 }

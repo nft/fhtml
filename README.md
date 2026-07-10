@@ -147,6 +147,24 @@ Output is always canonical (`fhtml fmt` on it is a no-op). Anything fhtml can't 
 natively (exotic attribute names, `<svg>` by default) falls back to raw HTML lines, with a
 warning on stderr; `--convert-svg` converts SVG subtrees instead.
 
+### Class shorthand
+
+An opt-in codebook (SPEC §3.2) contracts common Tailwind utilities to short codes —
+measured at −9% total tokens across the benchmark corpus. A file opens with `#!shorthand`
+as its first line and bare class tokens decode on compile:
+
+```
+#!shorthand
+div fx ic g4
+  p ti4 "Hello"     // → <p class="text-indigo-400">Hello</p>
+```
+
+`html2fhtml --shorthand` emits this form (only for codes that provably round-trip);
+`fhtml --shorthand` / `--no-shorthand` force decoding on or off regardless of the
+directive; `=ti4` escapes one token to stay literal; `fhtml fmt` preserves the authored
+codes and the directive. Without the directive nothing changes — every class token is
+verbatim, exactly as before.
+
 ### As a library
 
 ```rust
@@ -162,7 +180,8 @@ let html = render("p \"Hi, {name}\"", &data, Mode::Min)?;
 evaluate the template layer; `compile_to_js` emits the ES-module target; `format` reformats
 source to canonical form; the `_full` variants also return warnings. `render_full_from` and
 `compile_to_js_from` take the source's file path, which makes `include` resolvable — the
-string-only entry points reject it (no base path).
+string-only entry points reject it (no base path). The `_opts_from` variants take
+`Options` for the shorthand policy (SPEC §3.2) and output mode.
 
 ## Tailwind integration
 

@@ -31,6 +31,7 @@ use crate::parser::{
 pub(crate) fn resolve_includes(
     doc: Document,
     file: Option<&Path>,
+    policy: crate::ShorthandPolicy,
     warnings: &mut Vec<String>,
 ) -> Result<Document> {
     let Some((line, path)) = first_include(&doc.body) else {
@@ -46,7 +47,7 @@ pub(crate) fn resolve_includes(
         );
     };
     let mut stack = vec![(canon(file), file.display().to_string())];
-    expand(doc, file, &mut stack, warnings)
+    expand(doc, file, policy, &mut stack, warnings)
 }
 
 fn first_include(nodes: &[Node]) -> Option<(usize, &str)> {
@@ -77,10 +78,14 @@ fn at_include(line: usize, display: &str, e: Error) -> Error {
 fn expand(
     doc: Document,
     file: &Path,
+    policy: crate::ShorthandPolicy,
     stack: &mut Vec<(PathBuf, String)>,
     warnings: &mut Vec<String>,
 ) -> Result<Document> {
     let mut defs = doc.defs;
+    // This document's own directive: an included file's flag is consumed by
+    // its own parse (above) and never overwrites the includer's (SPEC §3.2).
+    let shorthand = doc.shorthand;
     let mut body = Vec::with_capacity(doc.body.len());
     for node in doc.body {
         let Node::Include { path, line } = node else {
@@ -116,13 +121,17 @@ fn expand(
                 format!("include cycle: {} (SPEC §10.5)", chain.join(" -> ")),
             );
         }
+        // Always the template path: includes only exist behind render/js
+        // compilation (`--no-templates` rejects `include` before resolution
+        // runs). `policy` is the same global override for every file; each
+        // file's own `#!shorthand` fills the `Auto` case (SPEC §3.2).
         let (idoc, iwarnings) =
-            parser::parse(&src, true).map_err(|e| at_include(line, &display, e))?;
+            parser::parse(&src, true, policy).map_err(|e| at_include(line, &display, e))?;
         for w in iwarnings {
             warnings.push(format!("`{display}`:{w}"));
         }
         stack.push((id, display.clone()));
-        let mut idoc = expand(idoc, &target, stack, warnings).map_err(|e| {
+        let mut idoc = expand(idoc, &target, policy, stack, warnings).map_err(|e| {
             // A nested failure already names its own file; re-anchor its
             // position (a line in `target`) to this include site.
             at_include(line, &display, e)
@@ -152,7 +161,11 @@ fn expand(
             body.push(n);
         }
     }
-    Ok(Document { defs, body })
+    Ok(Document {
+        defs,
+        body,
+        shorthand,
+    })
 }
 
 // ---- position remap ------------------------------------------------------

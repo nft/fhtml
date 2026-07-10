@@ -72,6 +72,12 @@ pub enum ClassItem {
 pub struct Document {
     pub defs: Vec<Def>,
     pub body: Vec<Node>,
+    /// This file opened with the `#!shorthand` directive (SPEC §3.2). Set
+    /// per parse — after include resolution the root file's value survives
+    /// (an included file's directive governs only its own classes). `fmt`
+    /// re-emits the directive from this; it records the *authored* opt-in,
+    /// independent of whether a `ShorthandPolicy` override was in force.
+    pub shorthand: bool,
 }
 
 /// One `def name(param param=default …)` component (SPEC §10.3). Definition
@@ -323,11 +329,27 @@ struct Line {
     num: usize,
 }
 
+/// One message for every `#!shorthand` placement violation — contract,
+/// diagnostic, and tests all quote it verbatim (SPEC §3.2).
+const DIRECTIVE_PLACEMENT: &str =
+    "`#!shorthand` must be the first non-blank line and start at column 1 (SPEC §3.2)";
+
 /// Parses a source file into a [`Document`] plus non-fatal warnings (SPEC §2
 /// rule 5). With `templates: false`, any template construct is an error
-/// (SPEC §9.2).
-pub fn parse(src: &str, templates: bool) -> Result<(Document, Vec<String>)> {
+/// (SPEC §9.2). `policy` overrides the file's `#!shorthand` opt-in in either
+/// direction (SPEC §3.2); the directive's placement is validated regardless.
+pub fn parse(
+    src: &str,
+    templates: bool,
+    policy: crate::ShorthandPolicy,
+) -> Result<(Document, Vec<String>)> {
     let mut parser = Parser::new(src, templates);
+    let directive = parser.take_directive()?;
+    parser.shorthand = match policy {
+        crate::ShorthandPolicy::On => true,
+        crate::ShorthandPolicy::Off => false,
+        crate::ShorthandPolicy::Auto => directive,
+    };
     let body = parser.parse_block(0)?;
     if parser.pos < parser.lines.len() {
         let l = &parser.lines[parser.pos];
@@ -337,6 +359,7 @@ pub fn parse(src: &str, templates: bool) -> Result<(Document, Vec<String>)> {
         Document {
             defs: parser.defs,
             body,
+            shorthand: directive,
         },
         parser.warnings,
     ))
@@ -351,8 +374,8 @@ struct Parser {
     step: Option<usize>,
     warnings: Vec<String>,
     templates: bool,
-    /// `#!shorthand` seen: bare class tokens are decoded through the codebook
-    /// (SPEC §3.x). Off until the directive appears.
+    /// Decode bare class tokens through the shorthand codebook (SPEC §3.2). The *effective* switch: the file's
+    /// `#!shorthand` directive resolved against the caller's policy.
     shorthand: bool,
     /// Component definitions, in source order (top-level only, SPEC §10.3).
     defs: Vec<Def>,
@@ -394,6 +417,25 @@ impl Parser {
             defs: Vec::new(),
             in_def: false,
         }
+    }
+
+    /// Consumes a leading `#!shorthand` directive, which is legal only as
+    /// the first non-blank line, at column 1 (SPEC §3.2). The matched line is
+    /// blanked — `parse_block` skips blank lines, keeping numbering intact.
+    /// An indented first directive is an error here; every other misplaced
+    /// `#!` line gets its error in `parse_block`.
+    fn take_directive(&mut self) -> Result<bool> {
+        let Some(first) = self.lines.iter_mut().find(|l| !l.content.is_empty()) else {
+            return Ok(false);
+        };
+        if first.content != "#!shorthand" {
+            return Ok(false);
+        }
+        if !first.indent.is_empty() {
+            return err(first.num, 1, DIRECTIVE_PLACEMENT);
+        }
+        first.content = String::new();
+        Ok(true)
     }
 
     /// Level of the line at `idx` under the Python-style indent-stack rule
@@ -490,11 +532,21 @@ impl Parser {
                 nodes.push(Node::TextBlock(self.parse_text_block(depth)?));
             } else {
                 let first_tok = content.split_whitespace().next().unwrap();
-                if content == "#!shorthand" {
-                    // File-level directive: enable class shorthand for the rest
-                    // of the file. Emits no node.
-                    self.shorthand = true;
-                    self.pos += 1;
+                if content.starts_with("#!") {
+                    // `#!` is the directive namespace (SPEC §3.2). The one
+                    // legal `#!shorthand` was consumed by the pre-scan
+                    // (`take_directive`), so any `#!` line reaching block
+                    // parsing is misplaced, malformed, or unknown.
+                    let msg = if content == "#!shorthand" {
+                        DIRECTIVE_PLACEMENT.to_string()
+                    } else if first_tok == "#!shorthand" {
+                        "`#!shorthand` takes nothing after it (SPEC §3.2)".to_string()
+                    } else {
+                        format!(
+                            "unknown directive `{first_tok}` — only `#!shorthand` exists (SPEC §3.2)"
+                        )
+                    };
+                    return err(num, 1, msg);
                 } else if first_tok == "doctype" {
                     let rest = content["doctype".len()..].trim();
                     if !(rest.is_empty() || rest == "html") {

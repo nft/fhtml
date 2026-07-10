@@ -76,7 +76,8 @@ Corpus: 48 components in `bench/corpus/`. All four columns render the identical 
 Can models *write* fhtml correctly? `bench/generate.py`: each model translates the 48
 pretty-HTML components (temperature 0, one few-shot example, cheatsheet in the system
 prompt), output graded by compiling it and comparing normalized DOMs against the source.
-`ws-only` = DOM-equal except text whitespace. Run 2026-07-07 via OpenRouter.
+`ws-only` = DOM-equal except text whitespace. Run 2026-07-07 via OpenRouter
+(nemotron added 2026-07-10).
 
 | model | target | compiles | strict DOM-eq | + ws-only | DOM-valid |
 |-------|--------|---------:|--------------:|----------:|----------:|
@@ -86,9 +87,13 @@ prompt), output graded by compiling it and comparing normalized DOMs against the
 | deepseek-v4-pro | pug | 35/48 | 10 | 20 | 30/48 |
 | tencent/hy3 | fhtml | **47/48** | 23 | 14 | **37/48** |
 | tencent/hy3 | pug | 11/48 | 2 | 4 | 6/48 |
+| nemotron-3-ultra | fhtml | **39/48** | 19 | 5 | **24/48** |
+| nemotron-3-ultra | pug | 25/48 | 8 | 12 | 20/48 |
 
-Pooled: fhtml compiles **93.8%** vs Pug's 41.7%; strict DOM-equivalence **47.2%** vs
-11.8%. Pug's failures are dominated by its lexer rejecting Tailwind class syntax
+Pooled over the four models: fhtml compiles **90.6%** vs Pug's 44.3%; strict
+DOM-equivalence **45.3%** vs 13.0%; DOM-valid 65.1% vs 33.3%. fhtml wins every model on
+every metric, though nemotron is where Pug comes closest (24 vs 20 DOM-valid).
+Pug's failures are dominated by its lexer rejecting Tailwind class syntax
 (`w-1/2`, `data-[state=open]:…`); fhtml's residual misses are mostly cosmetic whitespace
 plus one recurring real hazard — attributes written as bare tokens
 (`div aria-hidden=true …` becomes a class; 11 of haiku's 16 DOM misses), which the
@@ -108,7 +113,7 @@ DOM-valid output — shrinking by dropping elements is not compression. Run 2026
 |-------|---------:|----------:|---------------:|-------------------------------:|----------------:|------|
 | tencent/hy3 (reasoning) | 45/48 | **33/48 (69%)** | −8.3 pts | +11.3% (33 cases) | **+25.4%** (15 cases) | **PASS** |
 | claude-haiku-4.5 | 28/48 | 10/48 (21%) | −41.7 pts | +13.7% (10 cases) | +29.3% (4 cases) | FAIL (DOM) |
-| nemotron-3-ultra | 19/48 | 10/48 (21%) | no baseline | −2.2% (10 cases) | +20.5% (2 cases) | n/a |
+| nemotron-3-ultra | 19/48 | 10/48 (21%) | −29.2 pts | −2.2% (10 cases) | +20.5% (2 cases) | FAIL (DOM) |
 
 hy3's DOM-valid repetitive-half output totals **24.1% fewer tokens** than plain fhtml
 (15,648 vs 20,621), with per-component wins up to +48% (product-grid) and +43%
@@ -123,3 +128,40 @@ components prompt haiku regresses on *base* syntax — Pug mixin habits resurfac
 factoring and keeps the differences. Verdict: **components hold for reasoning-class
 models and stay a human/review feature for fast non-reasoning models**; plain fhtml
 remains the reliable agent floor for the latter (haiku: 30/48 DOM-valid).
+
+## Class shorthand in generation (`shorthand`)
+
+Can models *emit* the class shorthand?
+Same translation task with the legend appended to the system prompt; the model writes
+`#!shorthand` files. The deterministic economics are settled separately
+(`bench/shorthand_economics.py`: legend costs 1,021 tokens, saves ~133/component,
+break-even ≈ 8 components) — this sweep asks only whether models apply the legend
+*correctly*. Run 2026-07-10.
+
+| model | compiles | strict DOM-eq | + ws-only | DOM-valid | (plain fhtml) | forgot `#!shorthand` |
+|-------|---------:|--------------:|----------:|----------:|--------------:|---------------------:|
+| tencent/hy3 (reasoning) | **48/48** | 10 | 1 | 11/48 | 37/48 | 0 |
+| claude-haiku-4.5 | 42/48 | 1 | 0 | 1/48 | 30/48 | 0 |
+| nemotron-3-ultra | 39/48 | 3 | 2 | 5/48 | 24/48 | 2 |
+
+**Verdict: fails, decisively and deceptively.** Compile rate is fine (pooled 89.6%,
+essentially plain-fhtml's; hy3's 48/48 is the only perfect compile run in the whole
+benchmark) and the directive is remembered — but DOM validity collapses to **11.8%
+pooled vs 63.2%** on plain fhtml, and the failure is *silent*. 97 of the 112 DOM
+failures first mismatch on a `class` attribute, in two modes:
+
+- **Invented codes.** Despite the legend's "never guess a code", models coin codes that
+  don't exist — `rxl` for `rounded-xl` (the code is `rx`), `r3x` for `rounded-3xl` (no
+  code exists), `te6` for `text-emerald-600` (it's `tem6`). Bare tokens are
+  classes-verbatim (SPEC §3), so an unknown code compiles cleanly into a garbage class.
+  At the first mismatch alone, ≥35 of the 112 failures show a surviving unknown code —
+  a lower bound, since only the first diff is recorded.
+- **Confused decodes.** Near-collisions in the table get crossed: `gy`(gray) vs
+  `gn`(green) produced `text-green-900` where the source has `text-gray-900`.
+
+This is the mirror image of the components result: there, compile failures were loud
+and DOM-valid output kept its compression; here, every error is invisible until
+rendered. Even the reasoning model that passes the components gate manages 11/48. The
+shorthand stays what the economics script already priced it as: a **deterministic
+write-time compression** — tooling can apply it mechanically at zero risk (0/48
+regressions when applied by script), but models must not be asked to emit it.

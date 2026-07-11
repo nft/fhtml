@@ -1,0 +1,6 @@
+{
+  "parts": {
+    "feature": "<li class=\"flex gap-x-4\"><div class=\"flex size-8 flex-none items-center justify-center rounded-lg bg-indigo-600 text-sm font-semibold text-white\">{{n}}</div><div><h3 class=\"text-sm font-semibold text-gray-900\">{{title}}</h3><p class=\"mt-1 text-sm text-gray-600\">{{body}}</p></div></li>"
+  },
+  "body": "<section class=\"mx-auto max-w-2xl px-6 py-16\"><h2 class=\"text-2xl font-bold tracking-tight text-gray-900\">Why teams switch</h2><ul class=\"mt-8 space-y-6\">{{feature n=\"1\" title=\"Set up in minutes\" body=\"Connect your repository and get your first deploy before the coffee is done.\"}}{{feature n=\"2\" title=\"Preview every change\" body=\"Each pull request gets its own URL — share it, click around, merge with confidence.\"}}{{feature n=\"3\" title=\"Scale without thinking\" body=\"Traffic spikes are our problem, not yours. Autoscaling is on by default.\"}}</ul></section>"
+}

@@ -40,6 +40,13 @@ syntax. Targets:
              "any prompt change". Missing or empty SOURCE: section is a
              compile-fail — the protocol is part of the task — and the raw
              completion is saved unmodified alongside the split.
+  microparts the H2 control: the "keep everything
+             in JSON" competing format — {"body": html, "parts": {…}} with
+             {{name key="value"}} calls and {{slot}} slots. The completion
+             is assembled by bench/microparts_assemble.py (the grammar; a structured assembler error is the compile-fail
+             analog) and DOM-graded as usual. tokens_out counts the WHOLE
+             JSON completion — the envelope is the format. No gate: the H2
+             verdict rule (two pinned populations) lives in the plan doc.
 
 Grading is fully automatic:
 
@@ -66,7 +73,8 @@ Usage:
   python3 bench/run.py                        # populates bench/out/ first
   python3 bench/gen_legend.py                 # for --targets shorthand
   python3 bench/generate.py --models claude-haiku-4-5-20251001 \
-      --targets fhtml,pug,shorthand,fhtml-def [--limit 10] [--verbose] [--resume]
+      --targets fhtml,pug,shorthand,fhtml-def,fhtml-def-plan,microparts \
+      [--limit 10] [--verbose] [--resume]
 
 results.json is rewritten after every graded case, so an interrupted run
 loses nothing; rerun with --resume to skip already-graded cases.
@@ -86,6 +94,9 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import microparts_assemble  # noqa: E402  (bench/, stdlib-only)
 
 
 class TransientAPIError(Exception):
@@ -180,6 +191,16 @@ PROMPT = {
         "Reply with the PLAN: section, then the SOURCE: section — nothing "
         "else, no code fences."
     ),
+    # H2 control: the "just JSON"
+    # competing format. Deliberately no fhtml cheatsheet — the format under
+    # test is JSON + HTML + the {{…}} scheme, and cheatsheet-microparts.md
+    # is its entire context price (reported in the write-up).
+    "microparts": (
+        "You rewrite HTML as a micro-parts JSON document: markup that "
+        "repeats is factored into reusable parts, called from the body. "
+        "The complete scheme reference:\n\n{microparts}\n\n"
+        "Reply with ONLY the JSON document — no code fences, no commentary."
+    ),
     # Control: the same full-document rewrite, but in the syntax models know
     # best. Minification forces every byte to be re-emitted (a bare copy
     # would measure nothing) while the DOM-equivalence grading stays
@@ -200,6 +221,8 @@ def task_of(target):
     historical phrasing so results stay comparable across runs."""
     if target == "html":
         return "Minify this HTML"
+    if target == "microparts":
+        return "Rewrite as micro-parts JSON"
     if target in DEF_TARGETS:
         return "Translate to fhtml"  # components ARE fhtml; the system
         # prompt and few-shot carry the difference, not the instruction.
@@ -208,9 +231,12 @@ def task_of(target):
 # Targets compiled by the fhtml binary (the `#!shorthand` directive in-source
 # drives expansion for the shorthand target); everything else is Pug.
 FHTML_TARGETS = ("fhtml", "shorthand", "fhtml-def", "fhtml-def-plan")
-# Targets measured with the compression metric against bench/out/fhtml/
-# references (tiktoken required, o200k).
+# The def-emitting fhtml targets.
 DEF_TARGETS = ("fhtml-def", "fhtml-def-plan")
+# Targets measured with the compression metric against bench/out/fhtml/
+# references (tiktoken required, o200k). They also share the two-example
+# few-shot: the factoring lesson needs the repetitive example.
+COMP_TARGETS = DEF_TARGETS + ("microparts",)
 
 
 def run(cmd, stdin=None):
@@ -410,6 +436,14 @@ def compile_output(target, source, workdir, stem):
         # compile step to fail — html5ever parses anything — so reliability
         # shows up entirely in the DOM-equivalence grade.
         return source, None
+    if target == "microparts":
+        # The H2 control's "compiler" is the assembler; a
+        # structured error ("bad-template: …", "unbound-slot: …") is the
+        # compile-fail analog. strip_fences was already applied — the one
+        # leniency every target gets; no brace-hunting, no commentary
+        # repair (grading symmetry).
+        html, mp_err = microparts_assemble.assemble(source)
+        return (html, None) if mp_err is None else (None, mp_err)
     if target in FHTML_TARGETS:
         code, html, err = run([FHTML, "--min", src_path])
         return (html, None) if code == 0 else (None, err.strip())
@@ -480,7 +514,7 @@ def repetition_score(fhtml_src):
 
 def fewshot_messages(target, pretty_dir):
     msgs = []
-    for stem in FEWSHOT_DEF if target in DEF_TARGETS else FEWSHOT:
+    for stem in FEWSHOT_DEF if target in COMP_TARGETS else FEWSHOT:
         html_path = os.path.join(ROOT, "tests", "corpus", stem + ".html")
         with open(html_path) as fh:
             html = fh.read()
@@ -504,6 +538,15 @@ def fewshot_messages(target, pretty_dir):
                     plan = fh.read()
                 out = (f"PLAN:\n{plan.rstrip()}\n\n"
                        f"SOURCE:\n{out.rstrip()}\n")
+        elif target == "microparts":
+            # Hand-written documents: pricing-card is body-only (the
+            # "leave it plain" shot), feature-list has one part with 3
+            # calls. Both are assembler- and DOM-validated by
+            # bench/test_microparts.py.
+            mp_path = os.path.join(ROOT, "tests", "corpus",
+                                   stem + ".microparts.json")
+            with open(mp_path) as fh:
+                out = fh.read()
         elif target == "fhtml":
             _, out, _ = run([H2F, html_path])
         elif target == "shorthand":
@@ -560,6 +603,9 @@ def main():
             legend = fh.read()
     with open(os.path.join(ROOT, "bench", "cheatsheet-components.md")) as fh:
         components = fh.read()
+    with open(os.path.join(ROOT, "bench",
+                           "cheatsheet-microparts.md")) as fh:
+        microparts_doc = fh.read()
 
     stems = sorted(
         os.path.splitext(f)[0].replace(".pretty", "")
@@ -573,11 +619,11 @@ def main():
         sys.exit("bench/shorthand-legend.md missing — run "
                  "`python3 bench/gen_legend.py` first")
 
-    # def targets: token counts of the plain-fhtml references (the
-    # compression denominator) and their repetition scores (the gate's
-    # corpus split).
+    # Compression-measured targets: token counts of the plain-fhtml
+    # references (the shared denominator) and their repetition
+    # scores (the gate's corpus split).
     comp_ref, rep_cut, enc = {}, 0.0, None
-    if any(t in DEF_TARGETS for t in targets):
+    if any(t in COMP_TARGETS for t in targets):
         enc = o200k_encoder()
         for stem in stems:
             ref = os.path.join(OUT, "fhtml", stem + ".fhtml")
@@ -618,14 +664,15 @@ def main():
         for target in targets:
             system = PROMPT[target].format(cheatsheet=cheatsheet,
                                            legend=legend,
-                                           components=components)
+                                           components=components,
+                                           microparts=microparts_doc)
             shots = fewshot_messages(target, pretty_dir)
             # Attributable silence: a slow endpoint can sit minutes inside
             # one request; without this line that looks like a hang.
             print(f"-- {model} / {target} ({len(stems)} cases)", flush=True)
             if args.verbose:
                 vblock(f"system prompt · {model} / {target}", system)
-                shot_stems = (FEWSHOT_DEF if target in DEF_TARGETS
+                shot_stems = (FEWSHOT_DEF if target in COMP_TARGETS
                               else FEWSHOT)
                 print(f"[gen] few-shot examples: {len(shots) // 2} "
                       f"({', '.join(shot_stems)}), components: {len(stems)}",
@@ -680,12 +727,13 @@ def main():
                 case_dir = os.path.join(GEN, model, target)
                 os.makedirs(case_dir, exist_ok=True)
                 plan_extra, plan = {}, None
-                if target == "fhtml-def-plan":
-                    # Decision 1: the raw completion is saved unmodified so
-                    # protocol failures stay auditable; only SOURCE compiles.
+                if target in ("fhtml-def-plan", "microparts"):
+                    # The raw completion is saved unmodified so protocol
+                    # failures stay auditable.
                     with open(os.path.join(case_dir,
                                            stem + ".raw.txt"), "w") as fh:
                         fh.write(raw)
+                if target == "fhtml-def-plan":
                     plan, source, split_err, decorated = \
                         split_plan_completion(raw)
                     plan_extra = plan_adherence(plan, source or "")
@@ -719,10 +767,12 @@ def main():
                         status = "ws-only"
                     else:
                         status = "dom-fail"
-                # def targets: compression is a first-class metric — a model
-                # that never writes `def` compresses ≈0%, valid but pointless.
+                # Compression is a first-class metric for the factoring
+                # targets — a model that never factors compresses ≈0%,
+                # valid but pointless. For microparts, `source` is the whole
+                # JSON document: the envelope is the format.
                 extra, comp_note = {}, ""
-                if target in DEF_TARGETS:
+                if target in COMP_TARGETS:
                     ref_tok, rep = comp_ref[stem]
                     out_tok = len(enc.encode(source))
                     compression = 1 - out_tok / ref_tok
@@ -765,7 +815,7 @@ def main():
             if target == "shorthand":
                 n_miss = sum(1 for r in recs if r.get("directive_missing"))
                 tail += f"; {n_miss}/{n} forgot the #!shorthand line"
-            if target in DEF_TARGETS:
+            if target in COMP_TARGETS:
                 # Compression only counts where the DOM is right (pass or
                 # ws-only) — shrinking output by dropping elements is not
                 # compression. Per-case numbers live in results.json.
@@ -782,8 +832,12 @@ def main():
                     if hi:
                         hi_med = statistics.median(
                             r["compression"] for r in hi)
+                        # microparts is a control with no gate — its H2
+                        # verdict rule lives in the benchmark notes.
+                        gate = ("; gate ≥+15%" if target in DEF_TARGETS
+                                else "")
                         tail += (f", repetitive half {hi_med:+.1%} "
-                                 f"({len(hi)} cases; gate ≥+15%)")
+                                 f"({len(hi)} cases{gate})")
                     if target == "fhtml-def-plan" and hi:
                         thi = statistics.median(
                             r["total_compression"] for r in hi)

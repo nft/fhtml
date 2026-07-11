@@ -1,0 +1,3 @@
+Skeleton: card div > name + badge row > tagline > price line > 2-item feature list > CTA button.
+No repetition worth factoring — no defs.
+Stays plain: the two checkmark list items — only 2 instances, and each is dominated by a raw <svg> block that must stay byte-identical, so a def buys nothing.

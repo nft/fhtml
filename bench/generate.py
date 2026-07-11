@@ -28,6 +28,18 @@ syntax. Targets:
              Gate: ≥15% median
              compression on the repetitive half of the corpus with a DOM
              rate within 10 points of plain fhtml.
+  fhtml-def-plan
+             fhtml-def behind a plan-first protocol: the completion is a `PLAN:` section (skeleton line, def
+             signatures with a per-instance differences ledger, stays-plain
+             list) then a `SOURCE:` section (the fhtml). Only SOURCE
+             compiles; the plan's o200k cost is recorded per case
+             (tokens_plan) and total_compression prices plan+source
+             together (gate: source ≥15%, total ≥10%, repetitive half).
+             Decision-2 adherence fields (plan_present, defs_match_plan, …)
+             make an improvement attributable to the ledger rather than to
+             "any prompt change". Missing or empty SOURCE: section is a
+             compile-fail — the protocol is part of the task — and the raw
+             completion is saved unmodified alongside the split.
 
 Grading is fully automatic:
 
@@ -104,6 +116,10 @@ FEWSHOT = ["pricing-card"]  # from tests/corpus — never part of the eval set
 # fhtml-def adds a repetitive example (pricing-card has no repetition worth
 # factoring, so its plain translation doubles as the "leave it plain" shot;
 # feature-list's hand-written def translation teaches the factoring).
+# fhtml-def-plan reuses the same pair, each assistant message re-authored in
+# PLAN:/SOURCE: form with hand-written plans (tests/corpus/<stem>.plan.txt) —
+# pricing-card's plan teaching "the correct plan can be NO factoring" is half
+# the lesson.
 FEWSHOT_DEF = ["pricing-card", "feature-list"]
 
 PROMPT = {
@@ -139,6 +155,31 @@ PROMPT = {
         "fhtml syntax:\n\n{cheatsheet}\n\n{components}\n\n"
         "Reply with ONLY the fhtml source — no code fences, no commentary."
     ),
+    # fhtml-def behind the plan-first protocol. The cheatsheet + components inclusions are
+    # byte-identical to fhtml-def's; the reply directive is REPLACED, not
+    # appended to (fhtml-def's "ONLY the fhtml source" flatly contradicts
+    # asking for a PLAN: section). The prompt delta is therefore the
+    # protocol itself — which is the treatment under test.
+    "fhtml-def-plan": (
+        "You translate HTML into fhtml, a whitespace-based markup language "
+        "with components for repeated markup. Two references follow.\n\n"
+        "fhtml syntax:\n\n{cheatsheet}\n\n{components}\n\n"
+        "Before writing any source, write a short plan under a `PLAN:` "
+        "header line:\n"
+        "- Skeleton: one line sketching the page top-to-bottom.\n"
+        "- One block per repeated structure worth a `def`: its signature "
+        "(`def name(param …)`), the instance count, and a differences "
+        "ledger — one `- param: what varies` line per thing that varies "
+        "across instances. Every difference you list must map to a "
+        "parameter (or `children`). If instances differ structurally (an "
+        "extra badge, a different wrapper), do not factor them.\n"
+        "- Stays plain: name the near-repeats you are deliberately NOT "
+        "factoring.\n"
+        "Then write the complete fhtml source under a `SOURCE:` header "
+        "line.\n\n"
+        "Reply with the PLAN: section, then the SOURCE: section — nothing "
+        "else, no code fences."
+    ),
     # Control: the same full-document rewrite, but in the syntax models know
     # best. Minification forces every byte to be re-emitted (a bare copy
     # would measure nothing) while the DOM-equivalence grading stays
@@ -159,14 +200,17 @@ def task_of(target):
     historical phrasing so results stay comparable across runs."""
     if target == "html":
         return "Minify this HTML"
-    if target == "fhtml-def":
+    if target in DEF_TARGETS:
         return "Translate to fhtml"  # components ARE fhtml; the system
         # prompt and few-shot carry the difference, not the instruction.
     return f"Translate to {target}"
 
 # Targets compiled by the fhtml binary (the `#!shorthand` directive in-source
 # drives expansion for the shorthand target); everything else is Pug.
-FHTML_TARGETS = ("fhtml", "shorthand", "fhtml-def")
+FHTML_TARGETS = ("fhtml", "shorthand", "fhtml-def", "fhtml-def-plan")
+# Targets measured with the compression metric against bench/out/fhtml/
+# references (tiktoken required, o200k).
+DEF_TARGETS = ("fhtml-def", "fhtml-def-plan")
 
 
 def run(cmd, stdin=None):
@@ -185,6 +229,10 @@ def vblock(title, text):
 
 def api_call(provider, model, system, messages, key, max_retries=3,
              verbose=False, max_tokens=8192):
+    """Returns (completion_text, meta). meta carries the RESPONSE's model /
+    provider strings: OpenRouter routes
+    aliases across providers, so the requested id alone is not
+    reproducible."""
     if provider == "anthropic":
         body = {
             "model": model,
@@ -225,11 +273,13 @@ def api_call(provider, model, system, messages, key, max_retries=3,
             if provider == "anthropic":
                 return "".join(
                     b["text"] for b in data["content"] if b["type"] == "text"
-                )
+                ), {"api_model": data.get("model")}
             # OpenRouter can 200 with an error payload, an empty choice, or
             # `content: null` (upstream provider hiccup) — all retryable.
             if "choices" not in data or not data["choices"]:
                 raise TransientAPIError(str(data.get("error", data))[:300])
+            meta = {"api_model": data.get("model"),
+                    "api_provider": data.get("provider")}
             content = data["choices"][0].get("message", {}).get("content")
             finish = data["choices"][0].get("finish_reason")
             if finish == "length":
@@ -245,11 +295,11 @@ def api_call(provider, model, system, messages, key, max_retries=3,
                         f"(finish_reason=length — the model spent the whole "
                         f"budget reasoning)")
                 # Truncated but non-empty at the cap: grade what we got.
-                return content
+                return content, meta
             if not content:
                 raise TransientAPIError(
                     f"empty completion (finish_reason={finish})")
-            return content
+            return content, meta
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 529) and attempt < max_retries:
                 delay = 5 * (attempt + 1)
@@ -290,6 +340,52 @@ def strip_fences(text):
             lines = lines[1:]
         text = "\n".join(lines)
     return text + "\n"
+
+
+def split_plan_completion(raw):
+    """fhtml-def-plan: split a completion into (plan, source, error,
+    marker_decorated). The marker is
+    the FIRST line equal to `SOURCE:` once surrounding whitespace and
+    markdown decoration (#, *, backticks) are stripped — case-sensitive,
+    exact: anything looser false-splits on plan prose ("Source: the
+    reference table…"). Later occurrences are content. No marker or an
+    empty tail is an error (graded compile-fail): emitting the marker is
+    part of following the protocol, and unlike a forgotten `#!shorthand`
+    there is no safe mechanical repair."""
+    text = strip_fences(raw)
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        if ln.strip("#*` \t") == "SOURCE:":
+            plan = "\n".join(lines[:i])
+            source = strip_fences("\n".join(lines[i + 1:]))
+            decorated = ln.strip() != "SOURCE:"
+            if not source.strip():
+                return plan, None, "empty SOURCE section", decorated
+            return plan, source, None, decorated
+    return text, None, "missing SOURCE: section", False
+
+
+PLAN_SIG_RE = re.compile(r"def\s+[a-z_][a-z0-9_]*\([^)]*\)")
+DEF_NAME_RE = re.compile(r"^def\s+([a-z_][a-z0-9_]*)\s*\(", re.M)
+
+
+def plan_adherence(plan, source):
+    """Decision-2 adherence fields — measured, never gated on (the DOM grade
+    is the judge). They exist so an H1 improvement is attributable to the
+    ledger and not merely to "any prompt change": if the gate passes while
+    these are low, the write-up must say so."""
+    stripped = [ln.strip("#*` \t") for ln in plan.splitlines()]
+    plan_defs = PLAN_SIG_RE.findall(plan)
+    plan_names = {sig.split("(")[0].split()[-1] for sig in plan_defs}
+    return {
+        "plan_present": "PLAN:" in stripped,
+        "skeleton_present": any(ln.startswith("Skeleton:")
+                                for ln in stripped),
+        "stays_plain_present": any(ln.startswith("Stays plain:")
+                                   for ln in stripped),
+        "plan_defs": plan_defs,
+        "defs_match_plan": plan_names == set(DEF_NAME_RE.findall(source)),
+    }
 
 
 def ensure_directive(source):
@@ -384,11 +480,11 @@ def repetition_score(fhtml_src):
 
 def fewshot_messages(target, pretty_dir):
     msgs = []
-    for stem in FEWSHOT_DEF if target == "fhtml-def" else FEWSHOT:
+    for stem in FEWSHOT_DEF if target in DEF_TARGETS else FEWSHOT:
         html_path = os.path.join(ROOT, "tests", "corpus", stem + ".html")
         with open(html_path) as fh:
             html = fh.read()
-        if target == "fhtml-def":
+        if target in DEF_TARGETS:
             # A hand-written def translation when one is checked in
             # (feature-list); otherwise the plain conversion — showing that
             # markup without repetition stays plain is part of the lesson.
@@ -399,6 +495,15 @@ def fewshot_messages(target, pretty_dir):
                     out = fh.read()
             else:
                 _, out, _ = run([H2F, html_path])
+            if target == "fhtml-def-plan":
+                # Same source, re-authored in two-section form with the
+                # hand-written plan (tests/corpus/<stem>.plan.txt).
+                plan_path = os.path.join(ROOT, "tests", "corpus",
+                                         stem + ".plan.txt")
+                with open(plan_path) as fh:
+                    plan = fh.read()
+                out = (f"PLAN:\n{plan.rstrip()}\n\n"
+                       f"SOURCE:\n{out.rstrip()}\n")
         elif target == "fhtml":
             _, out, _ = run([H2F, html_path])
         elif target == "shorthand":
@@ -468,10 +573,11 @@ def main():
         sys.exit("bench/shorthand-legend.md missing — run "
                  "`python3 bench/gen_legend.py` first")
 
-    # fhtml-def: token counts of the plain-fhtml references (the compression
-    # denominator) and their repetition scores (the gate's corpus split).
+    # def targets: token counts of the plain-fhtml references (the
+    # compression denominator) and their repetition scores (the gate's
+    # corpus split).
     comp_ref, rep_cut, enc = {}, 0.0, None
-    if "fhtml-def" in targets:
+    if any(t in DEF_TARGETS for t in targets):
         enc = o200k_encoder()
         for stem in stems:
             ref = os.path.join(OUT, "fhtml", stem + ".fhtml")
@@ -519,8 +625,10 @@ def main():
             print(f"-- {model} / {target} ({len(stems)} cases)", flush=True)
             if args.verbose:
                 vblock(f"system prompt · {model} / {target}", system)
+                shot_stems = (FEWSHOT_DEF if target in DEF_TARGETS
+                              else FEWSHOT)
                 print(f"[gen] few-shot examples: {len(shots) // 2} "
-                      f"({', '.join(FEWSHOT)}), components: {len(stems)}",
+                      f"({', '.join(shot_stems)}), components: {len(stems)}",
                       flush=True)
             for stem in stems:
                 case_key = (model, target, stem)
@@ -539,9 +647,10 @@ def main():
                     vblock(f"input · {stem} ({len(ref_html)} bytes)", ref_html)
                 t0 = time.time()
                 try:
-                    raw = api_call(provider, model, system, messages, key,
-                                   verbose=args.verbose,
-                                   max_tokens=args.max_tokens)
+                    raw, api_meta = api_call(provider, model, system,
+                                             messages, key,
+                                             verbose=args.verbose,
+                                             max_tokens=args.max_tokens)
                 except EmptyCompletionError as e:
                     # The model produced nothing for THIS case; the rest of
                     # the sweep is unaffected — record the failure, move on.
@@ -549,6 +658,7 @@ def main():
                         "model": model, "target": target, "component": stem,
                         "compile": False, "dom": False,
                         "status": "compile-fail", "error": str(e),
+                        "date": time.strftime("%Y-%m-%d"),
                     }
                     save()
                     print(f"{model} {target} {stem}: "
@@ -560,15 +670,44 @@ def main():
                         f"\n{e}\n\nAll graded cases are saved — rerun the "
                         f"same command with --resume to continue from "
                         f"`{stem}`.")
-                source = strip_fences(raw)
-                directive_missing = False
-                if target == "shorthand":
-                    source, directive_missing = ensure_directive(source)
+                # Provenance on every new record: run date plus
+                # the response's model/provider strings.
+                stamp = {"date": time.strftime("%Y-%m-%d"),
+                         **{k: v for k, v in api_meta.items() if v}}
                 if args.verbose:
                     vblock(f"completion · {model} / {target} / {stem} "
                            f"({time.time() - t0:.1f}s, {len(raw)} bytes)", raw)
                 case_dir = os.path.join(GEN, model, target)
                 os.makedirs(case_dir, exist_ok=True)
+                plan_extra, plan = {}, None
+                if target == "fhtml-def-plan":
+                    # Decision 1: the raw completion is saved unmodified so
+                    # protocol failures stay auditable; only SOURCE compiles.
+                    with open(os.path.join(case_dir,
+                                           stem + ".raw.txt"), "w") as fh:
+                        fh.write(raw)
+                    plan, source, split_err, decorated = \
+                        split_plan_completion(raw)
+                    plan_extra = plan_adherence(plan, source or "")
+                    plan_extra["marker_decorated"] = decorated
+                    plan_extra["tokens_plan"] = len(enc.encode(plan))
+                    if split_err:
+                        merged[case_key] = {
+                            "model": model, "target": target,
+                            "component": stem, "compile": False,
+                            "dom": False, "status": "compile-fail",
+                            "error": split_err, **plan_extra, **stamp,
+                        }
+                        save()
+                        print(f"{model} {target} {stem}: "
+                              f"{MARKS['compile-fail']}  ({split_err})",
+                              flush=True)
+                        continue
+                else:
+                    source = strip_fences(raw)
+                directive_missing = False
+                if target == "shorthand":
+                    source, directive_missing = ensure_directive(source)
                 html, err = compile_output(target, source, case_dir, stem)
                 ok_dom, dom_err = (False, "did not compile")
                 status = "compile-fail"
@@ -580,10 +719,10 @@ def main():
                         status = "ws-only"
                     else:
                         status = "dom-fail"
-                # fhtml-def: compression is a first-class metric — a model
+                # def targets: compression is a first-class metric — a model
                 # that never writes `def` compresses ≈0%, valid but pointless.
                 extra, comp_note = {}, ""
-                if target == "fhtml-def":
+                if target in DEF_TARGETS:
                     ref_tok, rep = comp_ref[stem]
                     out_tok = len(enc.encode(source))
                     compression = 1 - out_tok / ref_tok
@@ -591,6 +730,14 @@ def main():
                              "compression": round(compression, 4),
                              "repetition": round(rep, 4)}
                     comp_note = f"  {compression:+.0%} vs plain fhtml"
+                    if target == "fhtml-def-plan":
+                        # tokens_out is SOURCE only (comparable to fhtml-def);
+                        # total_compression prices plan + source — the plan
+                        # text is real emitted output.
+                        total = 1 - (plan_extra["tokens_plan"]
+                                     + out_tok) / ref_tok
+                        extra["total_compression"] = round(total, 4)
+                        comp_note += f" ({total:+.0%} incl. plan)"
                 merged[case_key] = {
                     "model": model, "target": target, "component": stem,
                     "compile": err is None, "dom": ok_dom, "status": status,
@@ -599,7 +746,7 @@ def main():
                     # line (auto-added so codes are still graded fairly).
                     **({"directive_missing": directive_missing}
                        if target == "shorthand" else {}),
-                    **extra,
+                    **plan_extra, **extra, **stamp,
                 }
                 save()
                 print(f"{model} {target} {stem}: {MARKS[status]}{comp_note}",
@@ -618,7 +765,7 @@ def main():
             if target == "shorthand":
                 n_miss = sum(1 for r in recs if r.get("directive_missing"))
                 tail += f"; {n_miss}/{n} forgot the #!shorthand line"
-            if target == "fhtml-def":
+            if target in DEF_TARGETS:
                 # Compression only counts where the DOM is right (pass or
                 # ws-only) — shrinking output by dropping elements is not
                 # compression. Per-case numbers live in results.json.
@@ -637,6 +784,16 @@ def main():
                             r["compression"] for r in hi)
                         tail += (f", repetitive half {hi_med:+.1%} "
                                  f"({len(hi)} cases; gate ≥+15%)")
+                    if target == "fhtml-def-plan" and hi:
+                        thi = statistics.median(
+                            r["total_compression"] for r in hi)
+                        tail += (f"; total incl. plan, repetitive half "
+                                 f"{thi:+.1%} (gate ≥+10%)")
+                if target == "fhtml-def-plan":
+                    n_pl = sum(1 for r in recs if r.get("plan_present"))
+                    n_dm = sum(1 for r in recs if r.get("defs_match_plan"))
+                    tail += (f"; plan present {n_pl}/{n}, "
+                             f"defs match plan {n_dm}/{n}")
             print(
                 f"\n== {model} / {target}: compile {n_compile}/{n}, "
                 f"DOM-equivalent {n_dom}/{n} {tail}\n", flush=True,

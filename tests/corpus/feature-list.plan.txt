@@ -1,0 +1,6 @@
+Skeleton: section > heading > ul of 3 feature items.
+def feature(n title) — 3 instances; the body paragraph text becomes children.
+- n: the step number (1, 2, 3)
+- title: the heading text
+- children: the body paragraph text
+Stays plain: the section wrapper and heading — they appear once.

@@ -79,6 +79,22 @@ Gate: ≥15% median compression on the repetitive half of the corpus (split at
 the median structural-repetition score of the references) with a DOM rate
 within 10 points of the plain `fhtml` target's.
 
+Two further targets test scaffolding ideas:
+**`fhtml-def-plan`** is `fhtml-def` behind a two-section protocol — the model
+writes a `PLAN:` (skeleton line, def signatures with a per-instance
+differences ledger, stays-plain list) and then the `SOURCE:`; only the source
+compiles, the plan's tokens are priced separately (`tokens_plan`,
+`total_compression`), and mechanical adherence fields (`plan_present`,
+`defs_match_plan`, …) make any improvement attributable to the ledger.
+**`microparts`** is a competing-format control — the whole completion is one
+JSON document (`{"body": …, "parts": {…}}` with `{{part key="value"}}` calls
+and `{{slot}}` slots) assembled by `microparts_assemble.py`
+([cheatsheet-microparts.md](cheatsheet-microparts.md) is the scheme spec;
+`test_microparts.py` pins the grammar). A structured assembler error is the
+compile-fail analog; `tokens_out` counts the whole JSON. No target gets any
+repair beyond fence-stripping — grading symmetry. All new records carry the
+run date and the response's `api_model`/`api_provider` strings.
+
 Not yet measured (needs a separate task design): free-form generation from a
 visual/text brief, and exact-match *edit* tasks on existing fhtml files.
 
@@ -104,6 +120,9 @@ harmless superset artifact (bare tag tokens that name a utility, e.g.
 - `generate.py` — LLM translation benchmark (needs `ANTHROPIC_API_KEY`)
 - `tailwind_scan.sh` — Tailwind `@source` coverage check (needs the npm install above)
 - `cheatsheet.md` — the fhtml syntax reference given to models
-- `cheatsheet-components.md` — the components section (`fhtml-def` target only)
+- `cheatsheet-components.md` — the components section (`fhtml-def` + `fhtml-def-plan`)
+- `cheatsheet-microparts.md` — the micro-parts scheme spec (`microparts` target)
+- `microparts_assemble.py` — the micro-parts grammar/assembler (the control's grader)
+- `test_microparts.py` — assembler unit tests (48 checks; run before trusting a sweep)
 - `corpus/` — the 48-component corpus
 - `out/`, `.tools/` — generated artifacts and local npm installs (gitignored)

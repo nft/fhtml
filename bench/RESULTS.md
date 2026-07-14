@@ -129,6 +129,116 @@ factoring and keeps the differences. Verdict: **components hold for reasoning-cl
 models and stay a human/review feature for fast non-reasoning models**; plain fhtml
 remains the reliable agent floor for the latter (haiku: 30/48 DOM-valid).
 
+*Addendum (2026-07-14):* the micro-parts sweep (next section) added two models to this
+gate: **qwen/qwen3.7-max PASS** — 38/48 DOM-valid, −6.2 pts vs its plain run,
+repetitive-half +18.3% (21 cases) — the second model to clear it; xiaomi/mimo-v2.5-pro
+FAIL on DOM (28/48, −12.5 pts, despite +21.9% on its repetitive half).
+
+## Plan-first scaffold vs the micro-parts JSON control (`fhtml-def-plan`, `microparts`)
+
+Two hypotheses, one sweep
+(2026-07-11 → 07-14, 3 models × 4 targets × 48). **H1**: does forcing a plan — def
+signatures plus a per-instance *differences ledger*, written before the source —
+recover the factoring that non-reasoning models flatten? **H2**: is "keep everything in
+JSON" (`{"body": …, "parts": {…}}` with `{{part key="value"}}` calls and `{{slot}}`
+slots, assembled by `bench/microparts_assemble.py`) competitive with fhtml? Models:
+qwen/qwen3.7-max, xiaomi/mimo-v2.5-pro, tencent/hy3:free (hy3 replaced the pinned
+kimi-k2.7-code mid-sweep; its plain/def baselines are its recorded 2026-07-09 runs —
+the one cross-date comparison here). No model hit a completion-budget exhaustion, so
+the reasoning-class split is not observable from the records; verdicts are per model.
+
+| model | target | compiles | strict DOM-eq | + ws-only | DOM-valid | median compression (DOM-valid) | repetitive half |
+|-------|--------|---------:|--------------:|----------:|----------:|-------------------------------:|----------------:|
+| qwen3.7-max | fhtml | 46/48 | 24 | 17 | **41/48** | — | — |
+| qwen3.7-max | fhtml-def | 42/48 | 21 | 17 | 38/48 | +7.7% (38) | +18.3% (21) |
+| qwen3.7-max | fhtml-def-plan | 43/48 | 15 | 18 | 33/48 | +7.7% (33) | +27.9% (15) |
+| qwen3.7-max | microparts | 47/48 | 31 | 14 | **45/48** | +0.4% (45) | +14.7% (23) |
+| mimo-v2.5-pro | fhtml | 41/48 | 20 | 14 | 34/48 | — | — |
+| mimo-v2.5-pro | fhtml-def | 41/48 | 14 | 14 | 28/48 | +10.7% (28) | +21.9% (15) |
+| mimo-v2.5-pro | fhtml-def-plan | 42/48 | 21 | 10 | 31/48 | +8.0% (31) | +16.9% (15) |
+| mimo-v2.5-pro | microparts | 47/48 | 31 | 10 | **41/48** | +2.8% (41) | +13.0% (20) |
+| tencent/hy3 | fhtml | 47/48 | 23 | 14 | 37/48 | — | — |
+| tencent/hy3 | fhtml-def | 45/48 | 23 | 10 | 33/48 | +11.3% (33) | +25.4% (15) |
+| tencent/hy3 | fhtml-def-plan | 44/48 | 15 | 17 | 32/48 | +7.7% (32) | +23.2% (15) |
+| tencent/hy3 | microparts | 43/48 | 23 | 17 | **40/48** | +11.2% (40) | +20.4% (21) |
+
+Compression is vs the plain-fhtml reference (o200k), DOM-valid cases only. For
+`fhtml-def-plan` it counts the SOURCE section; the plan's own tokens (median 100–128
+per case) are priced separately in `total_compression`. For `microparts` it counts the
+whole JSON — the envelope is the format.
+
+### H1: the plan-first scaffold fails the gate — for all three models
+
+Gate per model: DOM-valid within 10 points of its plain-fhtml run, ≥15% median source
+compression and ≥10% median total (plan + source) compression on the repetitive half.
+
+| model | DOM gap vs plain | src rep-half (≥15%) | total rep-half (≥10%) | Δ DOM-valid vs fhtml-def | gate |
+|-------|-----------------:|--------------------:|----------------------:|-------------------------:|------|
+| qwen3.7-max | −16.7 pts | +27.9% | +12.7% | **−5** | FAIL (DOM) |
+| mimo-v2.5-pro | −6.2 pts | +16.9% | +3.1% | **+3** | FAIL (total) |
+| tencent/hy3 | −10.4 pts | +23.2% | +9.4% | −1 | FAIL (both, marginal) |
+
+The instructive part is *why* it fails. Protocol adherence was essentially perfect —
+144/144 completions produced a `PLAN:` header and a clean `SOURCE:` split (zero
+extraction failures, zero decorated markers), 144/144 wrote the skeleton line, 142/144
+the stays-plain list, and in 143/144 the def names in the plan exactly matched the defs
+in the source. The models do everything the scaffold asks — **and it doesn't help.**
+qwen, which passes the plain components gate on its own, got *worse* under the
+scaffold (38 → 33 DOM-valid, violating the ≤3 non-regression tolerance); its
+compile failures are the same Pug habits as ever (`input#…`), unmoved by planning.
+mimo moved in the hypothesized direction (+3 DOM-valid over `fhtml-def`) but pays more
+in plan tokens than the economic floor allows (+3.1% total vs the ≥10% gate). hy3 was
+flat (−1, within its non-regression tolerance). Per the plan's attribution rule
+(decision 2): the failure is not non-adherence — writing a correct-looking differences
+ledger does not make a model honor it while writing source. **Verdict: the single-call
+plan-first scaffold is not a components rescue; the components verdict above stands
+unamended.** The deferred two-call variant remains the only untested follow-up, and the
+transcripts qualify for it (the models demonstrably state plans they then under-execute).
+
+### H2: micro-parts is the most *reliable* format in the benchmark — and loses on tokens to fhtml-def where fhtml-def works
+
+Two pinned populations: reliability over all 48, and total output tokens
+on the pairwise DOM-valid intersection with the model's better def target.
+
+| model | DOM-valid, all 48 (plain fhtml) | comparison target | intersection tokens: microparts vs target | competitive? |
+|-------|--------------------------------:|-------------------|------------------------------------------:|--------------|
+| qwen3.7-max | **45/48** (41/48) | fhtml-def | 43,987 vs 43,125 (+2.0%, n=36) | no — more tokens |
+| mimo-v2.5-pro | **41/48** (34/48) | fhtml-def-plan | 33,504 vs 37,080 (−9.6%, n=28) | **yes** |
+| tencent/hy3 | **40/48** (37/48) | fhtml-def | 32,899 vs 30,240 (+8.8%, n=29) | no — more tokens |
+
+By the pinned rule (≥1 model within 10 points of plain fhtml *and* fewer intersection
+tokens) the formal verdict is **competitive** — mimo satisfies both. The honest reading
+is narrower and more interesting:
+
+- **Reliability is the real result.** Micro-parts beat *plain fhtml* on DOM-validity
+  for all three models (45/41/40 vs 41/34/37) — the highest rates in the whole
+  generation benchmark. Models factored willingly (41–45 of 48 completions define
+  parts) and executed the scheme's semantics almost flawlessly. The likely mechanism
+  is unflattering to the scheme, though: the output is ~95% verbatim HTML — the syntax
+  models know best — and this benchmark's `html`-minification control (the direct
+  "just let them write HTML" baseline) is **still unswept**, so "the parts scheme
+  helps" and "HTML is easy" cannot yet be separated. That control is now the most
+  important missing number in the table.
+- **Tokens favor fhtml.** Micro-parts' whole-document output lands at par with the
+  plain-fhtml reference (median +0.4% / +2.8% / +11.2%) — JSON-escaping plus dedup
+  roughly cancels fhtml's syntax savings — and on the intersections it emits *more*
+  tokens than `fhtml-def` for the two models where fhtml-def works well.
+- **Failures skew silent.** Of the 18 micro-parts failures with a graded cause, 7 were
+  caught loud by the assembler (`bad-template` ×4, `unused-arg` ×2, `bad-json` ×1) and
+  11 assembled cleanly into a wrong DOM — the shorthand lesson in miniature, minus the
+  scale. fhtml's failures stay predominantly compile-loud.
+- **Finding #0** (recorded before the sweep): making the "just JSON" idea gradeable at
+  all required inventing a template micro-language — grammar, resolution rules, depth
+  and cycle semantics, eleven error codes. The simplicity is the pitch, not the spec.
+
+**Verdict: dominated as a format** — it never beats fhtml-def on tokens where
+fhtml-def is healthy, its failures are quieter, and it smuggles in an unspecified
+compiler — **but its reliability numbers are a finding fhtml has to answer**: staying
+close to raw HTML bought 4–11 DOM-valid cases per model over plain fhtml. Whether that
+premium comes from the JSON scaffold or just from HTML familiarity is exactly what the
+unswept `html` control measures; run it next (`--targets html`, same three models,
+144 calls).
+
 ## Class shorthand in generation (`shorthand`)
 
 Can models *emit* the class shorthand?

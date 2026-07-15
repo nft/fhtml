@@ -114,6 +114,11 @@ html(lang=en)
               dt order-2 mt-2 text-sm font-medium text-slate-600 "dependencies in the compiler"
               dd order-1 bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-5xl font-bold tracking-tight text-transparent "0"
               dd order-3 mt-3 text-xs text-slate-400 "one Rust binary · cargo install"
+          p mt-8 text-center text-sm text-slate-500
+            | And when models write it: across four LLMs on the same corpus, 90.6% of fhtml
+            | completions compile vs 44.3% for Pug.
+            |
+            a(href="{repo_url}/blob/main/bench/RESULTS.md#generation-reliability-models-writing-fhtml") font-medium text-indigo-600 hover:text-indigo-500 "Generation benchmark →"
 
       // ─── Rules in 30 seconds ───────────────────────────────────────────
       section mx-auto max-w-5xl px-6 py-20 sm:py-24
@@ -194,7 +199,13 @@ html(lang=en)
             . min-w-0
               h2 text-3xl font-semibold tracking-tight text-white sm:text-4xl "There's a template layer, too"
               p mt-4 text-lg leading-8 text-slate-300
-                | Interpolation, conditionals, and loops with a small closed expression language —
+                | Interpolation, conditionals, loops — and
+                |
+                code rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.9em] text-indigo-200 "def"
+                | components with slots and
+                |
+                code rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.9em] text-indigo-200 "include"
+                | — over a small closed expression language,
                 | not arbitrary JavaScript. Render statically, or compile to a
                 |
                 code rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.9em] text-indigo-200 "(data, ctx) => string"
@@ -207,12 +218,15 @@ html(lang=en)
                   | Read the spec
                   svg(viewBox="0 0 16 16" fill=none aria-hidden=true) h-4 w-4 > path(d="M3 8h10M9 4l4 4-4 4" stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round)
             pre w-full min-w-0 overflow-x-auto rounded-xl border border-white/10 bg-black/40 p-5 font-mono text-[13px] leading-relaxed text-slate-100 > code
+              | def badge(text)
+              |   span text-xs text-indigo-400 "\{text}"
+              |
               | ul divide-y
               |   for user in users
               |     li flex justify-between py-2
               |       span "\{user.name}"
               |       if user.admin
-              |         span text-xs text-indigo-400 "admin"
+              |         +badge(text="admin")
               |   empty
               |     li text-slate-500 "No users yet."
 
@@ -258,6 +272,9 @@ html(lang=en)
               |
               code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "editors/vscode/"
               | — full syntax highlighting, template layer included.
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "fhtml fmt"
+              | canonicalizes indentation.
 
     // ─── Footer ───────────────────────────────────────────────────────────
     footer border-t border-slate-200 bg-white

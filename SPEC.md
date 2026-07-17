@@ -201,7 +201,8 @@ element (`li > a` followed by an indented `ul` produces a `<ul>` inside the `<a>
 An element's content is, in order: its inline text (if any), its chained child (if any),
 then its indented children. Each child is emitted on its own line in the output (§11) —
 inter-element whitespace therefore collapses per normal HTML rules. Markup that requires
-*exact* inline whitespace must use raw passthrough (§8).
+*exact* inline whitespace must use raw passthrough (§8). Exception: **raw-text elements**
+(`script`, `style`) accept only `|` text-block children, with verbatim-byte semantics (§6.3).
 
 ## 6. Text
 
@@ -223,6 +224,43 @@ p text-sm text-gray-600
   | He said "hello" and left.
   | Second line of the same paragraph.
 ```
+
+### 6.3 Raw-text elements (`script`, `style`)
+
+The raw-text elements are exactly `script` and `style`, matched **case-insensitively**
+(a browser treats `SCRIPT` as script, so fhtml must too; the emitter still outputs the
+tag exactly as authored). `textarea` and `title` are **not** raw-text: they are RCDATA,
+where browsers *do* decode character references, so fhtml's normal escaping is already
+correct there.
+
+Per the HTML spec, browsers never decode character references inside script/style
+content — escaped output there is silently broken JS/CSS. fhtml therefore treats these
+bodies specially:
+
+- A raw-text element's children must be text blocks (`|` lines) — or nothing. Inline
+  `"…"` text on the tag line, element children, `>` chains, and template statements
+  (`if`/`for`/`+call`/`children`) under it are compile errors with targeted messages
+  ("script/style bodies are raw text — use `|` lines or §8 passthrough").
+- `|` lines inside a raw-text element are **verbatim bytes**: no HTML escaping, no
+  `{…}` interpolation (a `{` is literal), and no source escapes — `\{` stays two
+  characters (JS regexes and strings are full of meaningful backslashes; an escape
+  layer would corrupt them). One leading space after `|` is stripped, exactly as §6.2;
+  lines join with `\n`.
+- Emitted content is byte-identical under `--min` and `--pretty`: the body is never
+  reindented, and the open/close tags hug the content with no injected newlines beyond
+  the joined `|` lines. (Pretty may still indent the *tags* relative to siblings.)
+- A body line containing an end-tag hazard is a compile error — HTML has no escape for
+  it inside raw text; the message suggests the JS-string spelling `<\/script>` or the
+  §8 passthrough. Precision: per the HTML script-data end-tag states, `</script` only
+  counts when followed by whitespace, `/`, `>`, or the end of the line — `</scripting>`
+  is legal script text and must not error. Same rule for `</style`. Both
+  case-insensitive.
+- **No interpolation is deliberate, not a v1 gap**: interpolating data into script
+  bodies is an XSS footgun with context-dependent escaping rules fhtml should not own.
+  Dynamic data belongs in `data-*` attributes or a JSON island.
+
+Raw passthrough (§8) remains legal and canonical for gnarly cases (inline
+`</script>`-containing source, exact whitespace).
 
 ## 7. Void elements & doctype
 
@@ -262,6 +300,9 @@ embeds, exotic whitespace, and elements whose names collide with reserved words.
 
 Literal `{` in text or quoted values is written `\{`. In static-only files (no template layer),
 `{` has no meaning and needs no escape; the compiler flag `--no-templates` enforces static-only.
+
+Two contexts never interpolate: raw passthrough (§8) and raw-text element bodies
+(§6.3) — in both, `{` is a literal byte and `\{` stays two characters.
 
 ### 9.3 Expression grammar
 

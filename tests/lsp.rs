@@ -212,9 +212,10 @@ fn num(v: &Value) -> f64 {
     }
 }
 
-/// `range.start`/`range.end` of a diagnostic as ((line, char), (line, char)).
-fn range_of(diag: &Value) -> ((f64, f64), (f64, f64)) {
-    let range = get(diag, "range").expect("range");
+/// A range-valued member (`range`, `selectionRange`) of a diagnostic,
+/// symbol, or edit, as ((line, char), (line, char)).
+fn range_at(v: &Value, key: &str) -> ((f64, f64), (f64, f64)) {
+    let range = get(v, key).expect(key);
     let at = |which: &str| {
         let pos = get(range, which).expect(which);
         (
@@ -223,6 +224,17 @@ fn range_of(diag: &Value) -> ((f64, f64), (f64, f64)) {
         )
     };
     (at("start"), at("end"))
+}
+
+fn range_of(diag: &Value) -> ((f64, f64), (f64, f64)) {
+    range_at(diag, "range")
+}
+
+fn as_list(v: &Value) -> &[Value] {
+    match v {
+        Value::List(l) => l,
+        other => panic!("expected a list, got {other:?}"),
+    }
 }
 
 fn severity(diag: &Value) -> f64 {
@@ -407,7 +419,144 @@ fn unknown_traffic_never_crashes_the_server() {
     lsp.shutdown();
 }
 
+// ---- formatting and document symbols ----------------------------
+
+fn td_params(uri: &str) -> String {
+    format!(r#"{{"textDocument":{{"uri":{}}}}}"#, js(uri))
+}
+
+#[test]
+fn formatting_returns_one_whole_document_edit() {
+    let mut lsp = Lsp::start();
+    let uri = "untitled:Fmt-1";
+    let src = "div\n    span   \"hi\"\n";
+    lsp.open(uri, src);
+
+    let reply = lsp.request(
+        "textDocument/formatting",
+        &format!(
+            r#"{{"textDocument":{{"uri":{}}},"options":{{"tabSize":4,"insertSpaces":false}}}}"#,
+            js(uri)
+        ),
+    );
+    let edits = as_list(get(&reply, "result").expect("result"));
+    assert_eq!(edits.len(), 1, "one whole-document edit");
+    let expected = fhtml::format(src).unwrap();
+    assert_ne!(expected, src);
+    assert_eq!(get_str(&edits[0], "newText"), Some(expected.as_str()));
+    // The edit replaces the entire document — client options (tabSize 4,
+    // tabs) don't leak in; canonical fhtml is canonical.
+    let ((sl, sc), (el, ec)) = range_of(&edits[0]);
+    assert_eq!((sl, sc), (0.0, 0.0));
+    assert_eq!((el, ec), (2.0, 0.0), "src has 2 lines + trailing newline");
+
+    // Idempotence: the canonical text formats to no edits at all.
+    lsp.change(uri, &expected);
+    let reply = lsp.request("textDocument/formatting", &td_params(uri));
+    assert_eq!(get(&reply, "result"), Some(&Value::List(vec![])));
+    lsp.shutdown();
+}
+
+#[test]
+fn formatting_declines_broken_and_unknown_documents() {
+    let mut lsp = Lsp::start();
+    // Parse error → null (diagnostics already show why), not a crash.
+    lsp.open("untitled:Fmt-2", "div\n  span \"unclosed\n");
+    let reply = lsp.request("textDocument/formatting", &td_params("untitled:Fmt-2"));
+    assert_eq!(get(&reply, "result"), Some(&Value::Null));
+    // Never-opened document → null.
+    let reply = lsp.request(
+        "textDocument/formatting",
+        &td_params("untitled:never-opened"),
+    );
+    assert_eq!(get(&reply, "result"), Some(&Value::Null));
+    lsp.shutdown();
+}
+
+#[test]
+fn document_symbols_outline_defs_params_and_includes() {
+    let mut lsp = Lsp::start();
+    let uri = "untitled:Sym-1";
+    // The include can't resolve on an untitled buffer (that error is
+    // published as a diagnostic) — the outline must still list everything.
+    let src = "include ./partials/lib\n\ndef card(title wide=false)\n  p \"{title}\"\n\ndiv\n  +card(title=\"x\")\n";
+    lsp.open(uri, src);
+
+    let reply = lsp.request("textDocument/documentSymbol", &td_params(uri));
+    let syms = as_list(get(&reply, "result").expect("result"));
+    assert_eq!(syms.len(), 2, "one include + one def: {syms:?}");
+
+    let inc = &syms[0];
+    assert_eq!(get_str(inc, "name"), Some("./partials/lib"));
+    assert_eq!(num(get(inc, "kind").expect("kind")), 1.0); // File
+    assert_eq!(range_of(inc), ((0.0, 8.0), (0.0, 22.0)));
+
+    let def = &syms[1];
+    assert_eq!(get_str(def, "name"), Some("card"));
+    assert_eq!(num(get(def, "kind").expect("kind")), 12.0); // Function
+    assert_eq!(get_str(def, "detail"), Some("(title wide=false)"));
+    // Full range: the `def` line through its body; selection: the name.
+    assert_eq!(range_of(def), ((2.0, 0.0), (3.0, 13.0)));
+    assert_eq!(range_at(def, "selectionRange"), ((2.0, 4.0), (2.0, 8.0)));
+
+    let params = as_list(get(def, "children").expect("children"));
+    assert_eq!(params.len(), 2);
+    assert_eq!(get_str(&params[0], "name"), Some("title"));
+    assert_eq!(num(get(&params[0], "kind").expect("kind")), 13.0); // Variable
+    assert_eq!(
+        range_at(&params[0], "selectionRange"),
+        ((2.0, 9.0), (2.0, 14.0))
+    );
+    assert_eq!(get_str(&params[1], "name"), Some("wide"));
+    assert_eq!(
+        range_at(&params[1], "selectionRange"),
+        ((2.0, 15.0), (2.0, 19.0))
+    );
+    lsp.shutdown();
+}
+
 // ---- the corpus gate ------------------------------------------------------
+
+#[test]
+fn lsp_formatting_matches_fmt_on_every_corpus_file() {
+    let mut lsp = Lsp::start();
+    let mut checked = 0;
+    for dir in ["bench/out/fhtml", "site"] {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("fhtml") {
+                continue;
+            }
+            let src = fs::read_to_string(&path).unwrap();
+            let uri = file_uri(&path);
+            lsp.open(&uri, &src);
+            let reply = lsp.request("textDocument/formatting", &td_params(&uri));
+            let expected = fhtml::format(&src).unwrap();
+            let edits = as_list(get(&reply, "result").expect("result"));
+            match edits {
+                [] => assert_eq!(expected, src, "{}", path.display()),
+                [edit] => {
+                    assert_eq!(
+                        get_str(edit, "newText"),
+                        Some(expected.as_str()),
+                        "{}",
+                        path.display()
+                    );
+                    let ((sl, sc), _) = range_of(edit);
+                    assert_eq!((sl, sc), (0.0, 0.0));
+                }
+                more => panic!(
+                    "{}: expected at most one edit, got {more:?}",
+                    path.display()
+                ),
+            }
+            lsp.close(&uri);
+            checked += 1;
+        }
+    }
+    assert!(checked >= 49, "expected the full corpus, checked {checked}");
+    lsp.shutdown();
+}
 
 #[test]
 fn full_lifecycle_over_every_corpus_file() {

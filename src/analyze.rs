@@ -58,6 +58,10 @@ pub struct DefSym {
 #[derive(Debug, Clone)]
 pub struct ParamSym {
     pub name: String,
+    /// The parameter name token inside the `def` line's parens. Falls back
+    /// to the def's name span when the token can't be located on the
+    /// physical line (`\`-continued parameter lists, SPEC §11).
+    pub name_span: Span,
     /// Default value's source text, if the parameter has one.
     pub default: Option<String>,
 }
@@ -244,20 +248,113 @@ fn block_end_line(lines: &[&str], start: usize) -> usize {
 }
 
 fn def_sym(d: &Def, lines: &[&str], file: Option<PathBuf>) -> DefSym {
+    let name_span = name_span(lines, d.line, "def", &d.name);
+    let raw: Vec<(String, Option<String>)> = d
+        .params
+        .iter()
+        .map(|p| (p.name.clone(), p.default.as_ref().map(|t| t.src.clone())))
+        .collect();
+    let params = param_syms(raw, lines, &name_span);
     DefSym {
         name: d.name.clone(),
-        name_span: name_span(lines, d.line, "def", &d.name),
-        params: d
-            .params
-            .iter()
-            .map(|p| ParamSym {
-                name: p.name.clone(),
-                default: p.default.as_ref().map(|t| t.src.clone()),
-            })
-            .collect(),
+        name_span,
+        params,
         end_line: block_end_line(lines, d.line),
         file,
     }
+}
+
+/// Builds [`ParamSym`]s, locating each name token inside the `def` line's
+/// parens: walk the list after the def name with the same quote/brace
+/// awareness as [`rescan_params`] and match top-level tokens to the expected
+/// names in order. A name that can't be matched on the physical line (a
+/// `\`-continued list) keeps the def-name fallback span.
+fn param_syms(
+    raw: Vec<(String, Option<String>)>,
+    lines: &[&str],
+    def_span: &Span,
+) -> Vec<ParamSym> {
+    let mut params: Vec<ParamSym> = raw
+        .into_iter()
+        .map(|(name, default)| ParamSym {
+            name,
+            name_span: def_span.clone(),
+            default,
+        })
+        .collect();
+    let text = lines.get(def_span.line - 1).copied().unwrap_or("");
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = def_span.col - 1 + def_span.len;
+    while matches!(chars.get(i), Some(' ' | '\t')) {
+        i += 1;
+    }
+    if chars.get(i) != Some(&'(') {
+        return params;
+    }
+    i += 1;
+    // Top-level token starts/ends (char indices) inside the paren list.
+    let mut tokens: Vec<(usize, usize)> = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut depth = 0usize;
+    let mut quote: Option<char> = None;
+    while i < chars.len() {
+        let c = chars[i];
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' => {
+                    start.get_or_insert(i);
+                    quote = Some(c);
+                }
+                '{' => {
+                    start.get_or_insert(i);
+                    depth += 1;
+                }
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                }
+                ')' if depth == 0 => {
+                    if let Some(s) = start.take() {
+                        tokens.push((s, i));
+                    }
+                    break;
+                }
+                ' ' | '\t' if depth == 0 => {
+                    if let Some(s) = start.take() {
+                        tokens.push((s, i));
+                    }
+                }
+                _ => {
+                    start.get_or_insert(i);
+                }
+            },
+        }
+        i += 1;
+    }
+    if let Some(s) = start {
+        tokens.push((s, chars.len()));
+    }
+    let mut ti = 0;
+    for p in &mut params {
+        while ti < tokens.len() {
+            let (s, e) = tokens[ti];
+            ti += 1;
+            let tok: String = chars[s..e].iter().collect();
+            if ident_prefix(&tok) == p.name {
+                p.name_span = Span {
+                    line: def_span.line,
+                    col: s + 1,
+                    len: p.name.chars().count(),
+                };
+                break;
+            }
+        }
+    }
+    params
 }
 
 fn collect_calls(doc: &Document, lines: &[&str]) -> Vec<CallSym> {
@@ -403,15 +500,17 @@ fn rescan(lines: &[&str], file: Option<&Path>) -> Analysis {
             if name.is_empty() {
                 continue;
             }
-            let params = rest
+            let raw = rest
                 .trim_start()
                 .strip_prefix(&name)
                 .and_then(|r| r.strip_prefix('('))
                 .map(rescan_params)
                 .unwrap_or_default();
+            let name_span = name_span(lines, line, "def", &name);
+            let params = param_syms(raw, lines, &name_span);
             a.defs.push(DefSym {
                 name: name.clone(),
-                name_span: name_span(lines, line, "def", &name),
+                name_span,
                 params,
                 end_line: block_end_line(lines, line),
                 file: None,
@@ -492,7 +591,7 @@ fn ident_prefix(s: &str) -> String {
 /// Parameter names (and default texts) from the inside of a rescanned
 /// `def`'s paren list: split on top-level whitespace, quote- and
 /// brace-aware so `limit={ctx.pageSize - 1}` stays one parameter.
-fn rescan_params(s: &str) -> Vec<ParamSym> {
+fn rescan_params(s: &str) -> Vec<(String, Option<String>)> {
     let mut toks: Vec<String> = Vec::new();
     let mut cur = String::new();
     let mut depth = 0usize;
@@ -538,7 +637,7 @@ fn rescan_params(s: &str) -> Vec<ParamSym> {
                 None => (t.as_str(), None),
             };
             let id = ident_prefix(name);
-            (!id.is_empty() && id == name).then_some(ParamSym { name: id, default })
+            (!id.is_empty() && id == name).then_some((id, default))
         })
         .collect()
 }

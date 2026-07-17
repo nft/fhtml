@@ -115,9 +115,11 @@ impl<W: Write> Server<W> {
         }
     }
 
-    fn request(&mut self, method: &str, id: &Value, _params: &Value) {
+    fn request(&mut self, method: &str, id: &Value, params: &Value) {
         match method {
             "initialize" => self.respond(id, initialize_result()),
+            "textDocument/formatting" => self.formatting(id, params),
+            "textDocument/documentSymbol" => self.document_symbol(id, params),
             "shutdown" => {
                 self.shutdown = true;
                 self.respond(id, Value::Null);
@@ -205,6 +207,117 @@ impl<W: Write> Server<W> {
         );
     }
 
+    /// URI of `params.textDocument`, if that document is open.
+    fn doc_text(&self, params: &Value) -> Option<(String, &String)> {
+        let uri = get(params, "textDocument").and_then(|d| get_str(d, "uri"))?;
+        Some((uri.to_string(), self.docs.get(uri)?))
+    }
+
+    /// `textDocument/formatting`: whole-document reformat through
+    /// [`fhtml::format`] — byte-identical to `fhtml fmt`. One edit spanning
+    /// the entire document, an empty list when already canonical, and null
+    /// when the source doesn't format (parse error — diagnostics already
+    /// show why). Client formatting options are ignored: canonical fhtml is
+    /// 2-space indented by definition.
+    fn formatting(&mut self, id: &Value, params: &Value) {
+        let Some((_, text)) = self.doc_text(params) else {
+            self.respond(id, Value::Null);
+            return;
+        };
+        let result = match fhtml::format(text) {
+            Err(_) => Value::Null,
+            Ok(formatted) if formatted == *text => Value::List(Vec::new()),
+            Ok(formatted) => {
+                let (line, character) = end_of(text);
+                Value::List(vec![obj(vec![
+                    (
+                        "range",
+                        obj(vec![
+                            ("start", position(0, 0)),
+                            ("end", position(line, character)),
+                        ]),
+                    ),
+                    ("newText", str_val(&formatted)),
+                ])])
+            }
+        };
+        self.respond(id, result);
+    }
+
+    /// `textDocument/documentSymbol`: one symbol per `def` (kind Function,
+    /// params as Variable children) plus `include` targets (kind File).
+    /// Analyzed without a path — the outline is same-file by definition —
+    /// and symbols survive parse errors via analyze's rescan.
+    fn document_symbol(&mut self, id: &Value, params: &Value) {
+        let Some((_, text)) = self.doc_text(params) else {
+            self.respond(id, Value::Null);
+            return;
+        };
+        let a = analyze(text, None);
+        let mut symbols: Vec<(usize, Value)> = Vec::new();
+        for inc in &a.includes {
+            let range = range_value(text, &inc.span);
+            symbols.push((
+                inc.span.line,
+                obj(vec![
+                    ("name", str_val(&inc.path)),
+                    ("kind", num(1)), // File
+                    ("range", range.clone()),
+                    ("selectionRange", range),
+                    ("children", Value::List(Vec::new())),
+                ]),
+            ));
+        }
+        for d in &a.defs {
+            let children: Vec<Value> = d
+                .params
+                .iter()
+                .map(|p| {
+                    let range = range_value(text, &p.name_span);
+                    obj(vec![
+                        ("name", str_val(&p.name)),
+                        ("kind", num(13)), // Variable
+                        ("range", range.clone()),
+                        ("selectionRange", range),
+                        ("children", Value::List(Vec::new())),
+                    ])
+                })
+                .collect();
+            let sig: Vec<String> = d
+                .params
+                .iter()
+                .map(|p| match &p.default {
+                    Some(v) => format!("{}={v}", p.name),
+                    None => p.name.clone(),
+                })
+                .collect();
+            // The whole definition block, def line through body end.
+            let range = obj(vec![
+                ("start", position(d.name_span.line - 1, 0)),
+                (
+                    "end",
+                    position(d.end_line - 1, line_utf16_len(text, d.end_line)),
+                ),
+            ]);
+            symbols.push((
+                d.name_span.line,
+                obj(vec![
+                    ("name", str_val(&d.name)),
+                    ("detail", str_val(&format!("({})", sig.join(" ")))),
+                    ("kind", num(12)), // Function
+                    ("range", range),
+                    ("selectionRange", range_value(text, &d.name_span)),
+                    ("children", Value::List(children)),
+                ]),
+            ));
+        }
+        symbols.sort_by_key(|(line, _)| *line);
+        self.respond(
+            id,
+            Value::List(symbols.into_iter().map(|(_, s)| s).collect()),
+        );
+    }
+
     fn respond(&mut self, id: &Value, result: Value) {
         self.send(obj(vec![
             ("jsonrpc", str_val("2.0")),
@@ -275,30 +388,58 @@ fn initialize_result() -> Value {
 /// One LSP `Diagnostic` from an analyze [`fhtml::Diag`], positions converted
 /// to 0-based UTF-16 against the document text.
 fn diagnostic(text: &str, d: &fhtml::Diag, severity: usize) -> Value {
-    let line_text = text
-        .split('\n')
-        .nth(d.line - 1)
-        .unwrap_or("")
-        .trim_end_matches('\r');
-    let chars = line_text.chars().count();
-    // Clamp: an error one past EOL (or past a `\`-joined continuation,
-    // SPEC §11) collapses to a caret at the line end.
-    let start = (d.col - 1).min(chars);
-    let end = (d.col - 1 + d.len).min(chars);
-    let utf16 =
-        |upto: usize| -> usize { line_text.chars().take(upto).map(|c| c.len_utf16()).sum() };
     obj(vec![
-        (
-            "range",
-            obj(vec![
-                ("start", position(d.line - 1, utf16(start))),
-                ("end", position(d.line - 1, utf16(end))),
-            ]),
-        ),
+        ("range", range(text, d.line, d.col, d.len)),
         ("severity", num(severity)),
         ("source", str_val("fhtml")),
         ("message", str_val(&d.msg)),
     ])
+}
+
+/// An LSP `Range` from a compiler span (1-based char columns, SPEC §11),
+/// converted to 0-based UTF-16 against the document text.
+fn range_value(text: &str, span: &fhtml::Span) -> Value {
+    range(text, span.line, span.col, span.len)
+}
+
+fn range(text: &str, line: usize, col: usize, len: usize) -> Value {
+    let line_text = source_line(text, line);
+    let chars = line_text.chars().count();
+    // Clamp: a position one past EOL (or past a `\`-joined continuation,
+    // SPEC §11) collapses to a caret at the line end.
+    let start = (col - 1).min(chars);
+    let end = (col - 1 + len).min(chars);
+    let utf16 =
+        |upto: usize| -> usize { line_text.chars().take(upto).map(|c| c.len_utf16()).sum() };
+    obj(vec![
+        ("start", position(line - 1, utf16(start))),
+        ("end", position(line - 1, utf16(end))),
+    ])
+}
+
+fn source_line(text: &str, line: usize) -> &str {
+    text.split('\n')
+        .nth(line - 1)
+        .unwrap_or("")
+        .trim_end_matches('\r')
+}
+
+/// UTF-16 length of a 1-based source line.
+fn line_utf16_len(text: &str, line: usize) -> usize {
+    source_line(text, line).chars().map(|c| c.len_utf16()).sum()
+}
+
+/// 0-based UTF-16 position of the very end of the document.
+fn end_of(text: &str) -> (usize, usize) {
+    let lines = text.split('\n').count(); // >= 1 even for ""
+    let last: usize = text
+        .split('\n')
+        .next_back()
+        .unwrap_or("")
+        .chars()
+        .map(|c| c.len_utf16())
+        .sum();
+    (lines - 1, last)
 }
 
 fn position(line: usize, character: usize) -> Value {

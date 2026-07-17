@@ -35,6 +35,11 @@ fn assert_round_trip(src: &str, a: &Analysis) {
         };
         assert_eq!(slice(owner, &d.name_span), d.name, "def `{}`", d.name);
         assert!(d.end_line >= d.name_span.line);
+        for p in &d.params {
+            // The def-name fallback (`\`-continued lists) never fires on
+            // fixture/corpus files, so params must round-trip exactly too.
+            assert_eq!(slice(owner, &p.name_span), p.name, "param `{}`", p.name);
+        }
     }
     for c in &a.calls {
         assert_eq!(slice(src, &c.name_span), c.name, "call `{}`", c.name);
@@ -125,6 +130,23 @@ fn def_and_call_spans_are_exact_and_physical() {
         .map(|p| (p.name.as_str(), p.default.as_deref()))
         .collect();
     assert_eq!(params, vec![("title", None), ("wide", Some("false"))]);
+    // Param name tokens inside the parens: `def card(title wide=false)`.
+    assert_eq!(
+        d.params[0].name_span,
+        Span {
+            line: 1,
+            col: 10,
+            len: 5
+        }
+    );
+    assert_eq!(
+        d.params[1].name_span,
+        Span {
+            line: 1,
+            col: 16,
+            len: 4
+        }
+    );
 
     // Nested calls: columns count the indentation (SPEC §11).
     assert_eq!(a.calls.len(), 2);

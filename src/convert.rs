@@ -460,6 +460,7 @@ impl Conv<'_> {
             text: None,
             chain: None,
             children: Vec::new(),
+            raw_body: None,
             line: 0,
         };
 

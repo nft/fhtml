@@ -186,6 +186,157 @@ fn comments_silent_and_emitted() {
     assert_eq!(pretty(src), "<!-- kept -->\n<p>x</p>\n");
 }
 
+// ------------------------------------------------- raw-text elements §6.3
+
+mod raw_text {
+    use super::{error, min, pretty};
+    use fhtml::{compile_opts, Mode, Options};
+
+    #[test]
+    fn script_body_is_verbatim_not_escaped() {
+        let src = "script\n  | if (a && b < c) go();\n";
+        assert_eq!(min(src), "<script>if (a && b < c) go();</script>");
+    }
+
+    #[test]
+    fn style_body_is_verbatim() {
+        let src = "style\n  | .a > .b { color: red; }\n";
+        assert_eq!(min(src), "<style>.a > .b { color: red; }</style>");
+    }
+
+    #[test]
+    fn braces_are_literal_and_backslash_brace_stays_two_chars() {
+        // No interpolation, no source escapes: `{` is a byte, `\{` is two.
+        let src = "script\n  | let re = /\\{/; f({a: 1});\n";
+        assert_eq!(min(src), "<script>let re = /\\{/; f({a: 1});</script>");
+    }
+
+    #[test]
+    fn interpolation_stays_inert_under_render() {
+        let src = "script\n  | send({user.name});\n";
+        let data = fhtml::json::parse(r#"{"user": {"name": "Erin"}}"#).unwrap();
+        assert_eq!(
+            fhtml::render(src, &data, Mode::Min).unwrap(),
+            "<script>send({user.name});</script>"
+        );
+    }
+
+    #[test]
+    fn body_bytes_identical_min_and_pretty() {
+        let src = "div\n  script\n    | let x = 1;\n    |   x += 2;\n";
+        let body = "<script>let x = 1;\n  x += 2;</script>";
+        assert!(pretty(src).contains(body), "pretty: {}", pretty(src));
+        assert!(min(src).contains(body), "min: {}", min(src));
+    }
+
+    #[test]
+    fn leading_space_after_pipe_stripped_like_6_2() {
+        // `|` + two spaces keeps one; a bare `|` is an empty line.
+        let src = "script\n  |  indented();\n  |\n  | done();\n";
+        assert_eq!(min(src), "<script> indented();\n\ndone();</script>");
+    }
+
+    #[test]
+    fn tag_emitted_as_authored_but_matched_case_insensitively() {
+        let src = "SCRIPT\n  | a && b\n";
+        assert_eq!(min(src), "<SCRIPT>a && b</SCRIPT>");
+    }
+
+    #[test]
+    fn empty_body_and_src_attr_untouched() {
+        assert_eq!(min("script(src=/a.js)"), r#"<script src="/a.js"></script>"#);
+        assert_eq!(
+            pretty("script(src=/a.js)"),
+            "<script src=\"/a.js\"></script>\n"
+        );
+    }
+
+    #[test]
+    fn no_templates_mode_is_identical() {
+        let src = "script\n  | if (x) { f({a: 1}) }\n";
+        let out = compile_opts(
+            src,
+            &Options {
+                templates: false,
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(out.html, "<script>if (x) { f({a: 1}) }</script>");
+    }
+
+    #[test]
+    fn inline_text_on_tag_line_errors() {
+        let e = error("script \"alert(1)\"");
+        assert!(e.contains("raw text"), "got: {e}");
+        assert!(e.contains("1:8"), "got: {e}");
+    }
+
+    #[test]
+    fn chain_from_raw_text_element_errors() {
+        let e = error("script > div \"x\"");
+        assert!(e.contains("cannot chain"), "got: {e}");
+    }
+
+    #[test]
+    fn element_child_errors() {
+        let e = error("script\n  div \"x\"\n");
+        assert!(e.contains("raw text"), "got: {e}");
+        assert!(e.contains("2:1"), "got: {e}");
+    }
+
+    #[test]
+    fn statement_child_errors() {
+        let e = error("script\n  if x\n    | y\n");
+        assert!(e.contains("`if` cannot nest inside `script`"), "got: {e}");
+    }
+
+    #[test]
+    fn call_child_errors() {
+        let e = error("style\n  +card\n");
+        assert!(e.contains("`+card` cannot nest inside `style`"), "got: {e}");
+    }
+
+    #[test]
+    fn end_tag_in_body_errors_with_position() {
+        let e = error("script\n  | x('</script>');\n");
+        assert!(e.contains("would end the `script` element"), "got: {e}");
+        // Columns count within the line's content, indent excluded — the
+        // `<` of `</script>` in `| x('</script>');` sits at column 6.
+        assert!(e.contains("2:6"), "got: {e}");
+    }
+
+    #[test]
+    fn end_tag_match_is_case_insensitive() {
+        let e = error("script\n  | x('</SCRIPT foo');\n");
+        assert!(e.contains("would end the `script` element"), "got: {e}");
+    }
+
+    #[test]
+    fn end_tag_at_end_of_line_errors() {
+        // Lines join with `\n`, which HTML reads as tag-name-terminating
+        // whitespace — end-of-line counts.
+        let e = error("script\n  | a = '</script\n");
+        assert!(e.contains("would end the `script` element"), "got: {e}");
+    }
+
+    #[test]
+    fn longer_tag_names_are_legal_text() {
+        // `</scripting>` is not an end-tag per the script-data states.
+        let src = "script\n  | x = '</scripting>' + '</style>';\n";
+        assert_eq!(
+            min(src),
+            "<script>x = '</scripting>' + '</style>';</script>"
+        );
+    }
+
+    #[test]
+    fn chained_target_script_takes_raw_body() {
+        let src = "div p-4 > script\n  | go();\n";
+        assert_eq!(min(src), "<div class=\"p-4\"><script>go();</script></div>");
+    }
+}
+
 // -------------------------------------------------------------- document
 
 #[test]

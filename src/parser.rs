@@ -23,6 +23,15 @@ pub fn is_void(tag: &str) -> bool {
     VOID.contains(&tag)
 }
 
+/// Raw-text elements (SPEC §6.3): exactly `script` and `style`, compared
+/// case-insensitively — a browser treats `<SCRIPT>` as script, so fhtml must
+/// too (the emitter still outputs the tag as authored). RCDATA elements
+/// (`textarea`, `title`) are *not* raw-text: browsers decode character
+/// references there, so normal escaping is already correct.
+pub fn is_raw_text(tag: &str) -> bool {
+    tag.eq_ignore_ascii_case("script") || tag.eq_ignore_ascii_case("style")
+}
+
 /// An expression embedded in the template layer: the parsed AST plus the
 /// trimmed source text between the braces / after the keyword (`fhtml fmt`
 /// reprints this text — it never re-serializes the AST) and the expression's
@@ -211,6 +220,13 @@ pub struct Element {
     pub chain: Option<Box<Element>>,
     /// Indented children; for chains these belong to the innermost element.
     pub children: Vec<Node>,
+    /// Verbatim body of a raw-text element (`script`/`style`, SPEC §6.3):
+    /// the `|` lines' bytes — no HTML escaping, no interpolation, no source
+    /// escapes — joined with `\n` on output, byte-identical in both modes.
+    /// `None` for every other element and for a raw-text element with no
+    /// body. A raw-text element never has `text`, `chain`, or `children`
+    /// (parser-enforced).
+    pub raw_body: Option<Vec<String>>,
     pub line: usize,
 }
 
@@ -224,6 +240,7 @@ impl Element {
             text: None,
             chain: None,
             children: Vec::new(),
+            raw_body: None,
             line,
         }
     }
@@ -568,8 +585,13 @@ impl Parser {
                     let mut cur = Cur::new(&logical, start);
                     let mut el = parse_element(&mut cur, self.templates, self.shorthand)?;
                     self.warn_attr_shaped_classes(&el);
-                    let children = self.parse_block(depth + 1)?;
-                    innermost(&mut el).children = children;
+                    let inner = innermost(&mut el);
+                    if is_raw_text(&inner.tag) {
+                        let tag = inner.tag.clone();
+                        inner.raw_body = self.parse_raw_body(depth, &tag)?;
+                    } else {
+                        inner.children = self.parse_block(depth + 1)?;
+                    }
                     check_void_content(&el)?;
                     nodes.push(Node::Element(el));
                 }
@@ -943,6 +965,63 @@ impl Parser {
         out
     }
 
+    /// The body of a raw-text element (SPEC §6.3): `|` lines collected as
+    /// verbatim bytes — no interpolation scan, no source escapes; one leading
+    /// space after `|` is stripped, exactly as §6.2. Every other child form
+    /// is a targeted error, and so is a line HTML would read as the
+    /// element's own end tag. Returns `None` when there are no body lines.
+    fn parse_raw_body(&mut self, depth: usize, tag: &str) -> Result<Option<Vec<String>>> {
+        let mut body = Vec::new();
+        let mut seen = false;
+        while self.pos < self.lines.len() {
+            if self.lines[self.pos].content.is_empty() {
+                self.pos += 1;
+                continue;
+            }
+            let d = self.level_of(self.pos)?;
+            if d <= depth {
+                break;
+            }
+            let num = self.lines[self.pos].num;
+            if d > depth + 1 {
+                return err(
+                    num,
+                    1,
+                    "unexpected indentation — the line above cannot have children",
+                );
+            }
+            let content = &self.lines[self.pos].content;
+            if !content.starts_with('|') {
+                let first = content.split_whitespace().next().unwrap();
+                return err(
+                    num,
+                    1,
+                    format!(
+                        "`{first}` cannot nest inside `{tag}` — script/style bodies are raw text: use `|` lines, or §8 raw passthrough for the whole element (SPEC §6.3)"
+                    ),
+                );
+            }
+            let rest = &content[1..];
+            let text = rest.strip_prefix(' ').unwrap_or(rest);
+            if let Some(off) = end_tag_hazard(text, tag) {
+                let skipped = content.len() - text.len(); // `|` and its stripped space
+                let col = content[..skipped + off].chars().count() + 1;
+                let t = tag.to_ascii_lowercase();
+                return err(
+                    num,
+                    col,
+                    format!(
+                        "`</{t}` here would end the `{tag}` element — HTML raw text has no escape for it; write `<\\/{t}` in a JS string, or use §8 passthrough (SPEC §6.3)"
+                    ),
+                );
+            }
+            body.push(text.to_string());
+            seen = true;
+            self.pos += 1;
+        }
+        Ok(seen.then_some(body))
+    }
+
     /// Consecutive `|` lines at the same depth form one text block (SPEC §6.2).
     fn parse_text_block(&mut self, depth: usize) -> Result<Vec<Vec<TextPart>>> {
         let mut lines = Vec::new();
@@ -1259,6 +1338,26 @@ fn expr_value(cur: &mut Cur, missing: &str, what: &str) -> Result<TplExpr> {
     }
 }
 
+/// Scans one raw-text body line for an end-tag hazard (SPEC §6.3): a
+/// case-insensitive `</tag` that HTML's script-data end-tag states would
+/// treat as ending the element — i.e. followed by whitespace, `/`, `>`, or
+/// the end of the line (body lines join with `\n`, which is whitespace). A
+/// bare substring check would false-positive on `</scripting>`, which is
+/// legal script text. Returns the byte offset of the `<`.
+fn end_tag_hazard(line: &str, tag: &str) -> Option<usize> {
+    let lower = line.to_ascii_lowercase();
+    let needle = format!("</{}", tag.to_ascii_lowercase());
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(&needle) {
+        let idx = from + i;
+        match lower[idx + needle.len()..].chars().next() {
+            None | Some(' ' | '\t' | '\x0C' | '\r' | '/' | '>') => return Some(idx),
+            Some(_) => from = idx + needle.len(),
+        }
+    }
+    None
+}
+
 /// SPEC §7: void elements cannot have content. Children of chain elements were
 /// checked in their own parse pass; this checks the chain path itself.
 fn check_void_content(el: &Element) -> Result<()> {
@@ -1532,6 +1631,16 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
         let Some(c) = cur.peek() else { break };
 
         if c == '"' {
+            if is_raw_text(&el.tag) {
+                return err(
+                    line,
+                    col,
+                    format!(
+                        "`{}` takes no inline text — script/style bodies are raw text: use `|` lines under the tag, or §8 raw passthrough (SPEC §6.3)",
+                        el.tag
+                    ),
+                );
+            }
             if el.text.is_some() {
                 return err(
                     line,
@@ -1560,6 +1669,16 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
 
         let tok = cur.read_token();
         if tok == ">" {
+            if is_raw_text(&el.tag) {
+                return err(
+                    line,
+                    col,
+                    format!(
+                        "`{}` cannot chain with `>` — script/style bodies are raw text: use `|` lines under the tag, or §8 raw passthrough (SPEC §6.3)",
+                        el.tag
+                    ),
+                );
+            }
             cur.eat_ws();
             if cur.at_end() {
                 return err(line, cur.col(), "expected an element after `>`");

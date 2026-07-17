@@ -538,7 +538,12 @@ impl<'a> R<'a> {
         };
         let nl = if self.mode == Mode::Pretty { "\n" } else { "" };
 
-        if inner.children.is_empty() {
+        if let Some(body) = &inner.raw_body {
+            // Raw-text body (SPEC §6.3): verbatim bytes, byte-identical in
+            // both modes — the tags hug the content, never reindented.
+            self.out
+                .push_str(&format!("{ind}{opens}{}{closings}{nl}", body.join("\n")));
+        } else if inner.children.is_empty() {
             self.out.push_str(&format!("{ind}{opens}{closings}{nl}"));
         } else {
             self.out.push_str(&format!("{ind}{opens}{nl}"));

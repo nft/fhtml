@@ -290,18 +290,16 @@ html(lang=en)
 
     // Progressive enhancement: copy-to-clipboard for [data-copy] buttons. ~20 lines,
     // no framework. The page is fully functional without it.
-    // A `<` line is raw passthrough: it AND every deeper-indented line below it are
-    // emitted verbatim (dedented). So the JS body is just indented under `<script>`;
-    // `</script>` dedents back to close the block.
-    <script>
-      document.querySelectorAll('[data-copy]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
-            var original = btn.innerHTML;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            btn.classList.add('text-green-400');
-            setTimeout(function () { btn.innerHTML = original; btn.classList.remove('text-green-400'); }, 1500);
-          });
-        });
-      });
-    </script>
+    // `script` is a raw-text element (SPEC §6.3): its `|` lines emit verbatim —
+    // no HTML escaping, no `{…}` interpolation, byte-identical in min and pretty.
+    script
+      | document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      |   btn.addEventListener('click', function () {
+      |     navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+      |       var original = btn.innerHTML;
+      |       btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      |       btn.classList.add('text-green-400');
+      |       setTimeout(function () { btn.innerHTML = original; btn.classList.remove('text-green-400'); }, 1500);
+      |     });
+      |   });
+      | });

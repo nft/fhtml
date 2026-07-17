@@ -217,7 +217,8 @@ output (`& < > "`). May contain `{expr}` interpolation (§9).
 A line whose first token is `|` contributes the rest of the line (one leading space after
 `|` is stripped) as a text child of the parent element. Consecutive `|` lines are separate
 text lines in the output (HTML collapses the newline to a space). No quote escaping needed;
-`\{` escapes a literal brace; interpolation allowed.
+`\{` escapes a literal brace; interpolation allowed. (Inside raw-text elements, `|` lines
+have verbatim-byte semantics instead — §6.3.)
 
 ```fhtml
 p text-sm text-gray-600
@@ -275,7 +276,9 @@ line can never silently parse as an element.
 A line whose first character (after indentation) is `<` is emitted **verbatim**, along with
 every following line indented deeper than it (dedented by the raw line's own indentation).
 No escaping, no interpolation, no parsing. This is the escape hatch for inline SVG paths,
-embeds, exotic whitespace, and elements whose names collide with reserved words.
+embeds, exotic whitespace, and elements whose names collide with reserved words. (For
+`script`/`style` bodies, prefer the raw-text element form (§6.3); passthrough remains the
+fallback for content that must contain a literal `</script>` or exact whitespace.)
 
 ---
 

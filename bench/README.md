@@ -119,7 +119,11 @@ harmless superset artifact (bare tag tokens that name a utility, e.g.
 - `pug_emit.py` — HTML → conservative idiomatic Pug
 - `generate.py` — LLM translation benchmark (needs `ANTHROPIC_API_KEY`)
 - `tailwind_scan.sh` — Tailwind `@source` coverage check (needs the npm install above)
-- `cheatsheet.md` — the fhtml syntax reference given to models
+- `cheatsheet.md` — the fhtml syntax reference given to models. **Frozen between
+  re-baselinings**: it is the recorded sweeps' prompt, and comparability dies with any
+  edit. It predates raw-text elements (SPEC §6.3, added 2026-07-16) — add that section
+  (and switch `html2fhtml` to emitting the `script` + `|` form) only at the next full
+  re-baselining, never alone.
 - `cheatsheet-components.md` — the components section (`fhtml-def` + `fhtml-def-plan`)
 - `cheatsheet-microparts.md` — the micro-parts scheme spec (`microparts` target)
 - `microparts_assemble.py` — the micro-parts grammar/assembler (the control's grader)

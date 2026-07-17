@@ -53,6 +53,8 @@ Line shape: `tag(attrs) #id classes… "text"` — everything after the tag is o
 - **`.` alone means `div`**; `#id` as a token sets the id.
 - **Text is quoted** (`span "Sign in"`), HTML-escaped; `|` lines for text blocks.
 - **`li > a(href=/docs) "Docs"`** chains a single inline child.
+- **`script`/`style` bodies are raw text** (SPEC §6.3): `|` lines under them emit
+  verbatim — no escaping, no `{…}` interpolation.
 - **A line starting with `<`** is raw HTML passthrough — the escape hatch.
 - `\` at end of line continues it; `//` comments; `doctype` → `<!DOCTYPE html>`.
 

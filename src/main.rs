@@ -1,3 +1,5 @@
+mod lsp;
+
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -19,6 +21,8 @@ USAGE:
   fhtml deps <FILE>                list every transitively included file
                                    (absolute paths, one per line; empty if
                                    none) — the watch set for HMR/CI
+  fhtml lsp                        run the Language Server (JSON-RPC over
+                                   stdio) — for editor integration
 
 OPTIONS:
   -o <PATH>      output file, or output directory for `build` of a directory
@@ -69,6 +73,7 @@ fn run() -> Result<(), String> {
     let mut build = false;
     let mut fmt = false;
     let mut deps = false;
+    let mut serve_lsp = false;
     let mut templates = true;
     let mut static_only = false;
     let mut shorthand: Option<ShorthandPolicy> = None;
@@ -150,9 +155,10 @@ fn run() -> Result<(), String> {
                 println!("fhtml {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
-            "build" if !build && !fmt && !deps && input.is_none() => build = true,
-            "fmt" if !build && !fmt && !deps && input.is_none() => fmt = true,
-            "deps" if !build && !fmt && !deps && input.is_none() => deps = true,
+            "build" if !build && !fmt && !deps && !serve_lsp && input.is_none() => build = true,
+            "fmt" if !build && !fmt && !deps && !serve_lsp && input.is_none() => fmt = true,
+            "deps" if !build && !fmt && !deps && !serve_lsp && input.is_none() => deps = true,
+            "lsp" if !build && !fmt && !deps && !serve_lsp && input.is_none() => serve_lsp = true,
             s if s.starts_with('-') && s != "-" => {
                 return Err(format!("unknown option `{s}` (see `fhtml --help`)"))
             }
@@ -166,6 +172,14 @@ fn run() -> Result<(), String> {
         i += 1;
     }
 
+    if serve_lsp {
+        if input.is_some() {
+            return Err(
+                "`fhtml lsp` takes no arguments — it speaks LSP on stdin/stdout".to_string(),
+            );
+        }
+        return lsp::run();
+    }
     if !templates && (data_path.is_some() || ctx_path.is_some()) {
         return Err("`--data`/`--ctx` cannot be combined with `--no-templates`".to_string());
     }

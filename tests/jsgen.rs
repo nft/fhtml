@@ -198,6 +198,44 @@ html(lang=en)
 }
 
 #[test]
+fn js_raw_text_elements_match_rust_renderer() {
+    if !node_available() {
+        eprintln!("skipping js parity test: `node` not found on PATH");
+        return;
+    }
+    let mut h = Harness::new("rawtext");
+
+    // Raw-text bodies (SPEC §6.3): verbatim bytes — no escaping, braces and
+    // backslashes inert, `</scripting>` legal text, blank `|` lines kept.
+    let src = r#"div p-4
+  script(type=module)
+    | if (a && b < c) go();
+    |   x = { a: 1, b: '</scripting>' };
+    |
+    | done(/\{/);
+  style
+    | .a > .b { color: red; }
+  script(src=/a.js)
+"#;
+    for mode in [Mode::Pretty, Mode::Min] {
+        h.assert_parity(src, "{}", "{}", mode);
+        h.assert_parity(src, r#"{"a": 1, "b": "<decoy>"}"#, "{}", mode);
+    }
+
+    // The min/pretty invariant on the body bytes themselves (SPEC §6.3):
+    // both modes emit the identical content between the hugging tags.
+    let body = "<script type=\"module\">if (a && b < c) go();\n  x = { a: 1, b: '</scripting>' };\n\ndone(/\\{/);</script>";
+    for mode in [Mode::Pretty, Mode::Min] {
+        let html = fhtml::compile(src, mode).unwrap();
+        assert!(html.contains(body), "{mode:?}:\n{html}");
+        assert!(
+            html.contains("<style>.a > .b { color: red; }</style>"),
+            "{mode:?}:\n{html}"
+        );
+    }
+}
+
+#[test]
 fn js_components_match_rust_renderer() {
     if !node_available() {
         eprintln!("skipping js parity test: `node` not found on PATH");

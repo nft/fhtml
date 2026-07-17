@@ -762,7 +762,12 @@ impl<'a> G<'a> {
         }
         let inner = cur;
 
-        if inner.children.is_empty() {
+        if let Some(body) = &inner.raw_body {
+            // Raw-text body (SPEC §6.3): verbatim static bytes, byte-identical
+            // in both modes — the tags hug the content, never reindented.
+            self.lit(&body.join("\n"));
+            self.lit(&format!("{closings}{nl}"));
+        } else if inner.children.is_empty() {
             self.lit(&format!("{closings}{nl}"));
         } else {
             self.lit(nl);

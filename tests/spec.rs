@@ -576,6 +576,20 @@ fn fmt_preserves_silent_comments_and_text_blocks() {
 }
 
 #[test]
+fn fmt_preserves_raw_text_bodies() {
+    // SPEC §6.3 guard: content bytes reprint verbatim — indentation inside
+    // the `|` untouched, no `\{` escape rewriting, blank `|` lines kept.
+    let src = "div\n    script\n        | if (a && b < c) { go(); }\n        |   deep(\\{);\n        |\n        | done();\n";
+    let formatted = fhtml::format(src).unwrap();
+    assert_eq!(
+        formatted,
+        ".\n  script\n    | if (a && b < c) { go(); }\n    |   deep(\\{);\n    |\n    | done();\n"
+    );
+    assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    assert_eq!(min(&formatted), min(src));
+}
+
+#[test]
 fn error_reserved_word_as_tag_with_attrs() {
     let e = error("if(x=1) flex");
     assert!(e.contains("reserved word"), "got: {e}");

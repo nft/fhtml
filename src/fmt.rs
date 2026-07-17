@@ -152,7 +152,20 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize, classes: Classes) {
         }
         Node::Element(el) => {
             out.push_str(&format!("{ind}{}\n", element_line(el, classes)));
-            for child in &innermost(el).children {
+            let inner = innermost(el);
+            if let Some(body) = &inner.raw_body {
+                // Raw-text body (SPEC §6.3): content bytes reprint verbatim —
+                // no reindent inside the `|`, no escape rewriting.
+                let cind = "  ".repeat(depth + 1);
+                for l in body {
+                    if l.is_empty() {
+                        out.push_str(&format!("{cind}|\n"));
+                    } else {
+                        out.push_str(&format!("{cind}| {l}\n"));
+                    }
+                }
+            }
+            for child in &inner.children {
                 fmt_node(out, child, depth + 1, classes);
             }
         }

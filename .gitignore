@@ -10,3 +10,5 @@
 /integrations/vite/example/node_modules
 /integrations/vite/example/package-lock.json
 /integrations/vite/example/dist
+/editors/vscode/node_modules
+/editors/vscode/package-lock.json

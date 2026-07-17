@@ -1,12 +1,14 @@
 {
   "name": "fhtml",
   "displayName": "fhtml",
-  "description": "Syntax highlighting for fhtml (Fluid HTML) — a whitespace-based markup language that compiles 1:1 to HTML.",
+  "description": "Language support for fhtml (Fluid HTML) — a whitespace-based markup language that compiles 1:1 to HTML. Syntax highlighting plus, when the fhtml compiler is installed, diagnostics, formatting, outline, go-to-definition and completion via `fhtml lsp`.",
   "version": "0.1.0",
   "publisher": "fhtml",
   "license": "MIT",
-  "engines": { "vscode": "^1.75.0" },
+  "engines": { "vscode": "^1.82.0" },
   "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:fhtml"],
   "contributes": {
     "languages": [
       {
@@ -23,6 +25,19 @@
         "path": "./syntaxes/fhtml.tmLanguage.json",
         "embeddedLanguages": { "meta.embedded.block.html": "html" }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "fhtml",
+      "properties": {
+        "fhtml.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the fhtml binary. Empty means `fhtml` on $PATH."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }

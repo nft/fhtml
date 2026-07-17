@@ -7,7 +7,9 @@
 //! `include`) across the whole toolchain — render, `fmt`, and `--target=js`.
 //! Includes need a file context: use the `_from` entry points (or the CLI,
 //! which passes the source path); the string-only entry points reject
-//! `include` since stdin has no base path.
+//! `include` since stdin has no base path. The `_vfs` variants take an
+//! explicit file loader ([`Vfs`]) instead of the disk — a [`MemVfs`] file
+//! map serves WASM hosts and embedders with in-memory templates.
 
 mod analyze;
 #[cfg(feature = "convert")]
@@ -21,11 +23,15 @@ pub mod json;
 mod parser;
 mod resolve;
 pub mod shorthand;
+mod vfs;
 
-pub use analyze::{analyze, Analysis, ArgSym, CallSym, DefSym, Diag, IncludeSym, ParamSym, Span};
+pub use analyze::{
+    analyze, analyze_vfs, Analysis, ArgSym, CallSym, DefSym, Diag, IncludeSym, ParamSym, Span,
+};
 pub use emit::Mode;
 pub use error::Error;
 pub use expr::Value;
+pub use vfs::{DiskVfs, MemVfs, Vfs};
 
 /// Whether bare class tokens decode through the shorthand codebook
 /// (SPEC §3.2, [`shorthand`]). `Auto` lets each file's `#!shorthand`
@@ -182,8 +188,31 @@ pub fn render_opts_from(
     ctx: &Value,
     opts: &Options,
 ) -> Result<Output, Error> {
+    render_opts_vfs(src, file, data, ctx, opts, &DiskVfs)
+}
+
+/// [`render_opts_from`] with an explicit file loader (SPEC §10.5 include
+/// resolution goes through `vfs` instead of the disk). With a [`MemVfs`],
+/// `file` is the entry's key in the map — relative include paths resolve
+/// against it lexically, exactly as they resolve against a real path on
+/// disk.
+pub fn render_opts_vfs(
+    src: &str,
+    file: Option<&std::path::Path>,
+    data: &Value,
+    ctx: &Value,
+    opts: &Options,
+    vfs: &dyn Vfs,
+) -> Result<Output, Error> {
     let (doc, mut warnings) = parser::parse(src, true, opts.shorthand)?;
-    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings, &mut Vec::new())?;
+    let doc = resolve::resolve_includes(
+        doc,
+        file,
+        opts.shorthand,
+        &mut warnings,
+        &mut Vec::new(),
+        vfs,
+    )?;
     Ok(Output {
         html: emit::render_document(&doc, opts.mode, data, ctx)?,
         warnings,
@@ -202,9 +231,26 @@ pub fn deps_from(
     src: &str,
     file: Option<&std::path::Path>,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
+    deps_vfs(src, file, &DiskVfs)
+}
+
+/// [`deps_from`] with an explicit file loader; with a [`MemVfs`] the listed
+/// paths are the map's normalized keys rather than canonical disk paths.
+pub fn deps_vfs(
+    src: &str,
+    file: Option<&std::path::Path>,
+    vfs: &dyn Vfs,
+) -> Result<Vec<std::path::PathBuf>, Error> {
     let (doc, mut warnings) = parser::parse(src, true, ShorthandPolicy::Auto)?;
     let mut deps = Vec::new();
-    resolve::resolve_includes(doc, file, ShorthandPolicy::Auto, &mut warnings, &mut deps)?;
+    resolve::resolve_includes(
+        doc,
+        file,
+        ShorthandPolicy::Auto,
+        &mut warnings,
+        &mut deps,
+        vfs,
+    )?;
     Ok(deps)
 }
 
@@ -244,8 +290,26 @@ pub fn compile_to_js_opts_from(
     file: Option<&std::path::Path>,
     opts: &Options,
 ) -> Result<Output, Error> {
+    compile_to_js_opts_vfs(src, file, opts, &DiskVfs)
+}
+
+/// [`compile_to_js_opts_from`] with an explicit file loader — the WASM
+/// build's compile path, where the host supplies a [`MemVfs`] file map.
+pub fn compile_to_js_opts_vfs(
+    src: &str,
+    file: Option<&std::path::Path>,
+    opts: &Options,
+    vfs: &dyn Vfs,
+) -> Result<Output, Error> {
     let (doc, mut warnings) = parser::parse(src, true, opts.shorthand)?;
-    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings, &mut Vec::new())?;
+    let doc = resolve::resolve_includes(
+        doc,
+        file,
+        opts.shorthand,
+        &mut warnings,
+        &mut Vec::new(),
+        vfs,
+    )?;
     Ok(Output {
         html: jsgen::generate(&doc, opts.mode)?,
         warnings,

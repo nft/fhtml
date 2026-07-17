@@ -15,13 +15,13 @@
 //! trade-off is deliberate v0.1: a coarse-but-honest location over a precise
 //! line in the wrong file.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{err, Error, Result};
 use crate::parser::{
     self, Arg, AttrValue, ClassItem, Def, Document, Element, Node, TextPart, TplExpr,
 };
+use crate::vfs::Vfs;
 
 /// Splices every `include` in `doc` (recursively). `file` is the path the
 /// source was read from — the base for relative include paths and the first
@@ -39,6 +39,7 @@ pub(crate) fn resolve_includes(
     policy: crate::ShorthandPolicy,
     warnings: &mut Vec<String>,
     deps: &mut Vec<PathBuf>,
+    vfs: &dyn Vfs,
 ) -> Result<Document> {
     let Some((line, path)) = first_include(&doc.body) else {
         return Ok(doc);
@@ -52,8 +53,8 @@ pub(crate) fn resolve_includes(
             ),
         );
     };
-    let mut stack = vec![(canon(file), file.display().to_string())];
-    expand(doc, file, policy, &mut stack, warnings, deps)
+    let mut stack = vec![(vfs.canon(file), file.display().to_string())];
+    expand(doc, file, policy, &mut stack, warnings, deps, vfs)
 }
 
 fn first_include(nodes: &[Node]) -> Option<(usize, &str)> {
@@ -61,13 +62,6 @@ fn first_include(nodes: &[Node]) -> Option<(usize, &str)> {
         Node::Include { path, line } => Some((*line, path.as_str())),
         _ => None,
     })
-}
-
-/// Identity for cycle detection. Canonicalization only fails for paths that
-/// don't exist — and the target is read before this is called — so the
-/// fallback is defensive.
-fn canon(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// The file an `include <path>` line in `file` names: `.fhtml` appended if
@@ -95,6 +89,7 @@ fn at_include(line: usize, display: &str, e: Error) -> Error {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn expand(
     doc: Document,
     file: &Path,
@@ -102,6 +97,7 @@ fn expand(
     stack: &mut Vec<(PathBuf, String)>,
     warnings: &mut Vec<String>,
     deps: &mut Vec<PathBuf>,
+    vfs: &dyn Vfs,
 ) -> Result<Document> {
     let mut defs = doc.defs;
     // This document's own directive: an included file's flag is consumed by
@@ -115,12 +111,12 @@ fn expand(
         };
         let target = include_target(file, &path);
         let display = target.display().to_string();
-        let src = fs::read_to_string(&target).map_err(|e| Error {
+        let src = vfs.read(&target).map_err(|e| Error {
             line,
             col: 1,
             msg: format!("cannot include `{display}`: {e}"),
         })?;
-        let id = canon(&target);
+        let id = vfs.canon(&target);
         if let Some(pos) = stack.iter().position(|(c, _)| *c == id) {
             let chain: Vec<&str> = stack[pos..]
                 .iter()
@@ -146,7 +142,7 @@ fn expand(
             warnings.push(format!("`{display}`:{w}"));
         }
         stack.push((id, display.clone()));
-        let mut idoc = expand(idoc, &target, policy, stack, warnings, deps).map_err(|e| {
+        let mut idoc = expand(idoc, &target, policy, stack, warnings, deps, vfs).map_err(|e| {
             // A nested failure already names its own file; re-anchor its
             // position (a line in `target`) to this include site.
             at_include(line, &display, e)

@@ -12,11 +12,11 @@
 //! indentation included. Span lengths are in characters too. LSP UTF-16
 //! conversion is the transport's job, not this module's.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::parser::{self, Def, Document, Node};
+use crate::vfs::{DiskVfs, Vfs};
 use crate::{resolve, ShorthandPolicy};
 
 /// A source span: 1-based `line` and `col`, `len` characters long, all
@@ -120,6 +120,14 @@ pub struct Analysis {
 /// [`Analysis::defs`] with their own file and positions; without it
 /// (unsaved buffer, stdin), symbols are same-file only.
 pub fn analyze(src: &str, file: Option<&Path>) -> Analysis {
+    analyze_vfs(src, file, &DiskVfs)
+}
+
+/// [`analyze`] with an explicit file loader: include resolution and the
+/// cross-file definition sweep go through `vfs` — a [`crate::MemVfs`] file
+/// map gives browser editors the same cross-file diagnostics and
+/// definitions the LSP gets from disk.
+pub fn analyze_vfs(src: &str, file: Option<&Path>, vfs: &dyn Vfs) -> Analysis {
     let lines = split_lines(src);
     match parser::parse(src, true, ShorthandPolicy::Auto) {
         Ok((doc, warnings)) => {
@@ -143,7 +151,7 @@ pub fn analyze(src: &str, file: Option<&Path>) -> Analysis {
             };
             if let Some(file) = file {
                 for inc in &mut a.includes {
-                    inc.resolved = fs::canonicalize(resolve::include_target(file, &inc.path)).ok();
+                    inc.resolved = vfs.locate(&resolve::include_target(file, &inc.path));
                 }
             }
             // The real resolution pass, for exact compile-error parity
@@ -152,18 +160,23 @@ pub fn analyze(src: &str, file: Option<&Path>) -> Analysis {
             // transitive dep list in first-include order.
             let mut sink = Vec::new();
             let mut deps = Vec::new();
-            if let Err(e) =
-                resolve::resolve_includes(doc, file, ShorthandPolicy::Auto, &mut sink, &mut deps)
-            {
+            if let Err(e) = resolve::resolve_includes(
+                doc,
+                file,
+                ShorthandPolicy::Auto,
+                &mut sink,
+                &mut deps,
+                vfs,
+            ) {
                 a.error = Some(error_diag(&e, &lines));
             }
             for dep in deps {
-                a.defs.extend(file_defs(&dep));
+                a.defs.extend(file_defs(&dep, vfs));
             }
             a
         }
         Err(e) => {
-            let mut a = rescan(&lines, file);
+            let mut a = rescan(&lines, file, vfs);
             a.error = Some(error_diag(&e, &lines));
             a
         }
@@ -427,8 +440,8 @@ fn walk_calls(nodes: &[Node], lines: &[&str], out: &mut Vec<CallSym>) {
 /// Definitions of one included file, tagged with its canonical path. A file
 /// that can't be read or parsed contributes nothing — the resolution pass
 /// already reported that as [`Analysis::error`].
-fn file_defs(path: &Path) -> Vec<DefSym> {
-    let Ok(src) = fs::read_to_string(path) else {
+fn file_defs(path: &Path, vfs: &dyn Vfs) -> Vec<DefSym> {
+    let Ok(src) = vfs.read(path) else {
         return Vec::new();
     };
     let Ok((doc, _)) = parser::parse(&src, true, ShorthandPolicy::Auto) else {
@@ -481,7 +494,7 @@ fn warning_diag(w: &str, lines: &[&str]) -> Diag {
 // raw-passthrough body line starting `+x` is not). Good enough for "the
 // buffer is mid-keystroke" — the parse error is shown alongside.
 
-fn rescan(lines: &[&str], file: Option<&Path>) -> Analysis {
+fn rescan(lines: &[&str], file: Option<&Path>, vfs: &dyn Vfs) -> Analysis {
     let mut a = Analysis {
         defs: Vec::new(),
         calls: Vec::new(),
@@ -526,8 +539,7 @@ fn rescan(lines: &[&str], file: Option<&Path>) -> Analysis {
             a.includes.push(IncludeSym {
                 path: path.to_string(),
                 span: include_path_span(lines, line, path),
-                resolved: file
-                    .and_then(|f| fs::canonicalize(resolve::include_target(f, path)).ok()),
+                resolved: file.and_then(|f| vfs.locate(&resolve::include_target(f, path))),
             });
         } else if let Some(rest) = t.strip_prefix('+') {
             let name = ident_prefix(rest);
@@ -552,15 +564,15 @@ fn rescan(lines: &[&str], file: Option<&Path>) -> Analysis {
             .map(|i| (file.to_path_buf(), i.path.clone()))
             .collect();
         while let Some((from, path)) = queue.pop() {
-            let Ok(target) = fs::canonicalize(resolve::include_target(&from, &path)) else {
+            let Some(target) = vfs.locate(&resolve::include_target(&from, &path)) else {
                 continue;
             };
             if visited.contains(&target) {
                 continue;
             }
             visited.push(target.clone());
-            a.defs.extend(file_defs(&target));
-            let Ok(src) = fs::read_to_string(&target) else {
+            a.defs.extend(file_defs(&target, vfs));
+            let Ok(src) = vfs.read(&target) else {
                 continue;
             };
             if let Ok((doc, _)) = parser::parse(&src, true, ShorthandPolicy::Auto) {

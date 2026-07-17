@@ -1,0 +1,29 @@
+# The WASM build of the fhtml compiler.
+# Standalone on purpose — the empty [workspace] detaches it from the root
+# crate, exactly like the Node code under integrations/ stays out of the
+# core. Its only dependency is the core itself; version stays in lockstep.
+#
+# Build: cargo build --release --target wasm32-unknown-unknown
+# Artifact: target/wasm32-unknown-unknown/release/fhtml_wasm.wasm
+
+[package]
+name = "fhtml-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+fhtml = { path = "../../.." }
+
+[workspace]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

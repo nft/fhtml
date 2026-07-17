@@ -284,9 +284,80 @@ impl P<'_> {
     }
 }
 
+// ---- writing --------------------------------------------------------------
+
+/// Serializes a [`Value`] as compact JSON. Finite integral numbers print as
+/// JSON integers (`16`, not `16.0`) — protocol consumers (LSP positions and
+/// ids, the WASM ABI envelope) require integer syntax; non-finite numbers
+/// have no JSON spelling and print as `null`. Maps keep insertion order.
+pub fn to_string(v: &Value) -> String {
+    let mut out = String::new();
+    write_value(v, &mut out);
+    out
+}
+
+fn write_value(v: &Value, out: &mut String) {
+    use std::fmt::Write as _;
+    match v {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Number(n) => {
+            if n.is_finite() && n.fract() == 0.0 && n.abs() < 9.007_199_254_740_992e15 {
+                let _ = write!(out, "{}", *n as i64);
+            } else if n.is_finite() {
+                let _ = write!(out, "{n}");
+            } else {
+                out.push_str("null");
+            }
+        }
+        Value::Str(s) => write_string(s, out),
+        Value::List(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_value(item, out);
+            }
+            out.push(']');
+        }
+        Value::Map(pairs) => {
+            out.push('{');
+            for (i, (k, item)) in pairs.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_string(k, out);
+                out.push(':');
+                write_value(item, out);
+            }
+            out.push('}');
+        }
+    }
+}
+
+fn write_string(s: &str, out: &mut String) {
+    use std::fmt::Write as _;
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::{parse, to_string};
     use crate::expr::Value;
 
     fn ok(src: &str) -> Value {
@@ -395,5 +466,15 @@ mod tests {
     fn error_positions_are_line_and_column() {
         let e = parse("{\n  \"a\": 01\n}").unwrap_err();
         assert_eq!((e.line, e.col), (2, 8));
+    }
+
+    #[test]
+    fn writer_round_trips_and_prints_integers() {
+        let src = "{\"a\":[1,2.5,null,true],\"s\":\"x\\n\\\"y\\\"\",\"n\":{\"k\":16}}";
+        let v = parse(src).unwrap();
+        assert_eq!(to_string(&v), src);
+        assert_eq!(to_string(&Value::Number(16.0)), "16");
+        assert_eq!(to_string(&Value::Number(f64::NAN)), "null");
+        assert_eq!(to_string(&Value::Str("\u{1}".into())), "\"\\u0001\"");
     }
 }

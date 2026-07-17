@@ -498,7 +498,7 @@ impl<W: Write> Server<W> {
     }
 
     fn send(&mut self, msg: Value) {
-        let body = to_json(&msg);
+        let body = fhtml::json::to_string(&msg);
         // Content-Length counts bytes; `String::len` is exactly that.
         let _ = write!(self.out, "Content-Length: {}\r\n\r\n{body}", body.len());
         let _ = self.out.flush();
@@ -917,66 +917,6 @@ fn get_str<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
     }
 }
 
-fn to_json(v: &Value) -> String {
-    let mut out = String::new();
-    write_json(v, &mut out);
-    out
-}
-
-fn write_json(v: &Value, out: &mut String) {
-    match v {
-        Value::Null => out.push_str("null"),
-        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Value::Number(n) => {
-            // LSP positions and ids must be integers, not `16.0`.
-            if n.is_finite() && n.fract() == 0.0 && n.abs() < 9.007_199_254_740_992e15 {
-                let _ = write!(out, "{}", *n as i64);
-            } else if n.is_finite() {
-                let _ = write!(out, "{n}");
-            } else {
-                out.push_str("null");
-            }
-        }
-        Value::Str(s) => write_json_string(s, out),
-        Value::List(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_json(item, out);
-            }
-            out.push(']');
-        }
-        Value::Map(pairs) => {
-            out.push('{');
-            for (i, (k, item)) in pairs.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                write_json_string(k, out);
-                out.push(':');
-                write_json(item, out);
-            }
-            out.push('}');
-        }
-    }
-}
-
-fn write_json_string(s: &str, out: &mut String) {
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => {
-                let _ = write!(out, "\\u{:04x}", c as u32);
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-}
+// JSON writing lives in `fhtml::json::to_string` (shared with the WASM ABI;
+// it prints integral numbers as JSON integers, which LSP positions and ids
+// require).

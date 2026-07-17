@@ -12,3 +12,4 @@
 /integrations/vite/example/dist
 /editors/vscode/node_modules
 /editors/vscode/package-lock.json
+/integrations/npm/crate/target

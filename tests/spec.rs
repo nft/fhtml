@@ -523,6 +523,118 @@ fn attr_shaped_class_token_compiles_with_warning() {
     assert!(out.warnings.is_empty(), "warnings: {:?}", out.warnings);
 }
 
+// --------------------------------------------- concat-class lint §9.1
+
+/// Returns the parse warnings for a template source. Goes through the JS
+/// target because the lint fires at parse time and this path never
+/// evaluates — null data would make some `+` fixtures render errors.
+fn lint_warnings(src: &str) -> Vec<String> {
+    fhtml::compile_to_js(src, Mode::Min).unwrap().warnings
+}
+
+#[test]
+fn concat_class_token_warns() {
+    // SPEC §9.1 lint: a class name built by `+` is invisible to Tailwind's
+    // static scanner. The expression still renders.
+    let w = lint_warnings("span {\"bg-\" + color + \"-100\"} \"x\"\n");
+    assert_eq!(w.len(), 1, "warnings: {w:?}");
+    assert!(
+        w[0].starts_with("1:6: warning:") && w[0].contains("string concatenation"),
+        "got: {}",
+        w[0]
+    );
+    assert!(
+        w[0].contains("`{\"bg-\" + color + \"-100\"}`"),
+        "got: {}",
+        w[0]
+    );
+}
+
+#[test]
+fn concat_in_class_attr_value_warns() {
+    // Both `class` attribute spellings reach the same class list.
+    let w = lint_warnings("div(class=\"a {p + q}\")\n");
+    assert_eq!(w.len(), 1, "warnings: {w:?}");
+    assert!(w[0].contains("string concatenation"), "got: {}", w[0]);
+    let w = lint_warnings("div(class={p + q})\n");
+    assert_eq!(w.len(), 1, "warnings: {w:?}");
+}
+
+#[test]
+fn whole_token_class_interp_is_silent() {
+    // The documented idiom (SPEC §9.2) stays warning-free.
+    let w = lint_warnings("span {active ? \"bg-blue-600\" : \"bg-gray-100\"} \"x\"\n");
+    assert!(w.is_empty(), "warnings: {w:?}");
+    let w = lint_warnings("span {tone} \"x\"\n");
+    assert!(w.is_empty(), "warnings: {w:?}");
+}
+
+#[test]
+fn concat_outside_class_position_is_silent() {
+    // Position-scoped: string building in text and non-class attributes is
+    // legitimate and Tailwind-irrelevant.
+    let w = lint_warnings("p \"total: {a + b}\"\n");
+    assert!(w.is_empty(), "warnings: {w:?}");
+    let w = lint_warnings("a(href={base + path}) \"go\"\n");
+    assert!(w.is_empty(), "warnings: {w:?}");
+    let w = lint_warnings("p\n  | sum {a + b}\n");
+    assert!(w.is_empty(), "warnings: {w:?}");
+}
+
+#[test]
+fn concat_class_on_chain_target_warns() {
+    let w = lint_warnings("li > a {\"text-\" + tone} \"x\"\n");
+    assert_eq!(w.len(), 1, "warnings: {w:?}");
+}
+
+#[test]
+fn concat_class_in_statement_body_warns_and_js_target_compiles() {
+    // Elements nested under statements pass the same lint; the JS target
+    // carries the warning in Output and still emits the module (warnings
+    // are compile-time only — nothing lands in the emitted code).
+    let out = fhtml::compile_to_js(
+        "for item in items\n  li {\"bg-\" + item.tone} \"x\"\n",
+        Mode::Min,
+    )
+    .unwrap();
+    assert_eq!(out.warnings.len(), 1, "warnings: {:?}", out.warnings);
+    assert!(!out.html.contains("warning"), "module: {}", out.html);
+}
+
+#[test]
+fn deny_warnings_flips_the_exit_code() {
+    // `--deny-warnings` (SPEC §9.1 note): warnings still print, the run
+    // fails, and no output is written.
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let run = |args: &[&str]| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_fhtml"))
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let src = "span {\"bg-\" + color} \"x\"\n";
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(src.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    };
+    let ok = run(&[]);
+    assert!(ok.status.success(), "plain compile must pass");
+    assert!(!ok.stdout.is_empty(), "html still emitted");
+    let denied = run(&["--deny-warnings"]);
+    assert!(!denied.status.success(), "--deny-warnings must fail");
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert!(stderr.contains("string concatenation"), "got: {stderr}");
+    assert!(stderr.contains("--deny-warnings"), "got: {stderr}");
+    assert!(denied.stdout.is_empty(), "no output under deny");
+}
+
 // ------------------------------------------------------------------ fmt
 
 #[test]

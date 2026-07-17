@@ -8,7 +8,7 @@
 //! error.
 
 use crate::error::{err, Result};
-use crate::expr::{self, Expr};
+use crate::expr::{self, BinOp, Expr};
 
 pub const RESERVED: [&str; 8] = [
     "if", "elif", "else", "for", "empty", "def", "children", "include",
@@ -585,6 +585,7 @@ impl Parser {
                     let mut cur = Cur::new(&logical, start);
                     let mut el = parse_element(&mut cur, self.templates, self.shorthand)?;
                     self.warn_attr_shaped_classes(&el);
+                    self.warn_concat_classes(&el);
                     let inner = innermost(&mut el);
                     if is_raw_text(&inner.tag) {
                         let tag = inner.tag.clone();
@@ -619,6 +620,27 @@ impl Parser {
         }
         if let Some(chain) = &el.chain {
             self.warn_attr_shaped_classes(chain);
+        }
+    }
+
+    /// A class name built by string concatenation is invisible to Tailwind's
+    /// static scanner (SPEC §9.1 lint note) — the glued form is already a
+    /// hard error; this warns on the concat form, which compiles fine (the
+    /// result is a legal class list, just unscannable). Position-scoped: the
+    /// same `+` in text or a non-class attribute is legitimate and silent.
+    fn warn_concat_classes(&mut self, el: &Element) {
+        for item in &el.classes {
+            if let ClassItem::Interp(t) = item {
+                if expr_has_concat(&t.expr) {
+                    self.warnings.push(format!(
+                        "{}:{}: warning: class name built by string concatenation — Tailwind's scanner cannot see `{{{}}}`; interpolate whole class names instead (e.g. `{{active ? \"bg-blue-600\" : \"bg-gray-100\"}}`)",
+                        t.line, t.col, t.src
+                    ));
+                }
+            }
+        }
+        if let Some(chain) = &el.chain {
+            self.warn_concat_classes(chain);
         }
     }
 
@@ -1742,6 +1764,22 @@ pub(crate) fn class_token(tok: &str, shorthand: bool) -> String {
     match tok.strip_prefix('=') {
         Some(literal) => literal.to_string(),
         None => crate::shorthand::decode(tok).unwrap_or_else(|| tok.to_string()),
+    }
+}
+
+/// Whether the expression contains a `+` operator anywhere — the trigger for
+/// the concat-class lint (SPEC §9.1 note). Any `+` counts: in class position
+/// there is no legitimate arithmetic, and a numeric add that lands in a class
+/// list is exactly as unscannable as string glue.
+fn expr_has_concat(e: &Expr) -> bool {
+    match e {
+        Expr::Null | Expr::Bool(_) | Expr::Number(_) | Expr::Str(_) | Expr::Name(_) => false,
+        Expr::Field(b, _) | Expr::Not(b) | Expr::Neg(b) => expr_has_concat(b),
+        Expr::Index(a, b) | Expr::And(a, b) | Expr::Or(a, b) => {
+            expr_has_concat(a) || expr_has_concat(b)
+        }
+        Expr::Binary(op, a, b) => *op == BinOp::Add || expr_has_concat(a) || expr_has_concat(b),
+        Expr::Ternary(c, t, f) => expr_has_concat(c) || expr_has_concat(t) || expr_has_concat(f),
     }
 }
 

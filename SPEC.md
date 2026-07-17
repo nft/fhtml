@@ -292,6 +292,14 @@ fallback for content that must contain a literal `</script>` or exact whitespace
   attribute values**. Raw output in class position is also forbidden; `{expr}` there is
   already emitted attribute-escaped.
 
+**Lint (warning, not error):** in class position — a bare `{expr}` token or an
+interpolation inside a `class` attribute value — an expression containing the `+` operator
+warns: a class name built by concatenation is invisible to Tailwind's static scanner.
+Interpolate whole class names instead (`{active ? "bg-blue-600" : "bg-gray-100"}`). It
+compiles anyway (non-Tailwind output may build class names legitimately); the same `+` in
+text or a non-class attribute is silent. `--deny-warnings` makes any warning fail the run
+for CI. (Interpolation *glued* to class text is a hard error — §9.2.)
+
 ### 9.2 Contexts
 
 | Context | Example | Notes |

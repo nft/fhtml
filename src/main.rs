@@ -36,6 +36,9 @@ OPTIONS:
                  or not
   --no-shorthand never decode class shorthand, even under a `#!shorthand`
                  directive (`=` escapes stay literal too)
+  --deny-warnings
+                 exit non-zero if any warning was emitted (warnings still
+                 print; output files are not written) — for CI
   --contract     with `fmt`: rewrite classes into shorthand form — codes where
                  they round-trip, `#!shorthand` directive added (SPEC §3.2)
   --expand       with `fmt`: rewrite shorthand back to full classes and drop
@@ -65,6 +68,7 @@ fn run() -> Result<(), String> {
     let mut js_target = false;
     let mut data_path: Option<PathBuf> = None;
     let mut ctx_path: Option<PathBuf> = None;
+    let mut deny_warnings = false;
     let mut input: Option<String> = None;
 
     let args: Vec<String> = env::args().skip(1).collect();
@@ -98,6 +102,7 @@ fn run() -> Result<(), String> {
                 }
                 fmt_shorthand = Some(m);
             }
+            "--deny-warnings" => deny_warnings = true,
             "--target=js" => js_target = true,
             "--target=html" => js_target = false,
             "--target" => {
@@ -195,10 +200,11 @@ fn run() -> Result<(), String> {
                 &out_path.unwrap_or_else(|| PathBuf::from("dist")),
                 pretty,
                 &job,
+                deny_warnings,
             )
         } else {
             let out = out_path.unwrap_or_else(|| src.with_extension(ext));
-            build_file(&src, &out, pretty, &job)
+            build_file(&src, &out, pretty, &job, deny_warnings)
         }
     } else if fmt {
         run_fmt(
@@ -224,6 +230,7 @@ fn run() -> Result<(), String> {
             .run(&source, file.as_deref(), mode)
             .map_err(|e| format!("{name}:{e}"))?;
         print_warnings(&name, &output.warnings);
+        deny(deny_warnings, &output.warnings)?;
         match out_path {
             Some(path) => {
                 fs::write(&path, output.html).map_err(|e| format!("{}: {e}", path.display()))
@@ -294,6 +301,18 @@ fn print_warnings(name: &str, warnings: &[String]) {
     }
 }
 
+/// `--deny-warnings`: any warning fails the run (after printing it), and the
+/// pending output is not written — CI semantics, like rustc's `-Dwarnings`.
+fn deny(deny_warnings: bool, warnings: &[String]) -> Result<(), String> {
+    if deny_warnings && !warnings.is_empty() {
+        return Err(format!(
+            "{} warning(s) denied (--deny-warnings)",
+            warnings.len()
+        ));
+    }
+    Ok(())
+}
+
 fn run_fmt(
     input: Option<&str>,
     out_path: Option<PathBuf>,
@@ -351,19 +370,32 @@ fn mode_for(pretty: Option<bool>, writing_file: bool) -> Mode {
     }
 }
 
-fn build_file(src: &Path, out: &Path, pretty: Option<bool>, job: &Job) -> Result<(), String> {
+fn build_file(
+    src: &Path,
+    out: &Path,
+    pretty: Option<bool>,
+    job: &Job,
+    deny_warnings: bool,
+) -> Result<(), String> {
     let source = fs::read_to_string(src).map_err(|e| format!("{}: {e}", src.display()))?;
     let output = job
         .run(&source, Some(src), mode_for(pretty, true))
         .map_err(|e| format!("{}:{e}", src.display()))?;
     print_warnings(&src.display().to_string(), &output.warnings);
+    deny(deny_warnings, &output.warnings).map_err(|e| format!("{}: {e}", src.display()))?;
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
     fs::write(out, output.html).map_err(|e| format!("{}: {e}", out.display()))
 }
 
-fn build_dir(src: &Path, out_dir: &Path, pretty: Option<bool>, job: &Job) -> Result<(), String> {
+fn build_dir(
+    src: &Path,
+    out_dir: &Path,
+    pretty: Option<bool>,
+    job: &Job,
+    deny_warnings: bool,
+) -> Result<(), String> {
     let mut files = Vec::new();
     collect_fhtml(src, &mut files).map_err(|e| format!("{}: {e}", src.display()))?;
     if files.is_empty() {
@@ -376,7 +408,7 @@ fn build_dir(src: &Path, out_dir: &Path, pretty: Option<bool>, job: &Job) -> Res
         let rel = file.strip_prefix(src).unwrap();
         let ext = if job.js_target { "js" } else { "html" };
         let out = out_dir.join(rel).with_extension(ext);
-        if let Err(msg) = build_file(file, &out, pretty, job) {
+        if let Err(msg) = build_file(file, &out, pretty, job, deny_warnings) {
             eprintln!("{msg}");
             failures += 1;
         }

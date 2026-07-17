@@ -181,11 +181,29 @@ pub fn render_opts_from(
     opts: &Options,
 ) -> Result<Output, Error> {
     let (doc, mut warnings) = parser::parse(src, true, opts.shorthand)?;
-    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings)?;
+    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings, &mut Vec::new())?;
     Ok(Output {
         html: emit::render_document(&doc, opts.mode, data, ctx)?,
         warnings,
     })
+}
+
+/// Lists every file transitively included by `src` (SPEC §10.5): canonical
+/// absolute paths, deduplicated, in first-include order (includers before
+/// their own includes). This is the invalidation set for a watcher driving
+/// recompilation — editing any listed file changes the compiled output of
+/// the root. A source with no includes returns an empty list. Errors
+/// (missing target, cycle, parse error or `def` collision anywhere in the
+/// graph) are exactly the compile errors; `file` is the path `src` was read
+/// from, required as the base whenever includes are present.
+pub fn deps_from(
+    src: &str,
+    file: Option<&std::path::Path>,
+) -> Result<Vec<std::path::PathBuf>, Error> {
+    let (doc, mut warnings) = parser::parse(src, true, ShorthandPolicy::Auto)?;
+    let mut deps = Vec::new();
+    resolve::resolve_includes(doc, file, ShorthandPolicy::Auto, &mut warnings, &mut deps)?;
+    Ok(deps)
 }
 
 /// Compiles fhtml source to a self-contained ES module exporting
@@ -225,7 +243,7 @@ pub fn compile_to_js_opts_from(
     opts: &Options,
 ) -> Result<Output, Error> {
     let (doc, mut warnings) = parser::parse(src, true, opts.shorthand)?;
-    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings)?;
+    let doc = resolve::resolve_includes(doc, file, opts.shorthand, &mut warnings, &mut Vec::new())?;
     Ok(Output {
         html: jsgen::generate(&doc, opts.mode)?,
         warnings,

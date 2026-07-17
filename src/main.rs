@@ -16,6 +16,9 @@ USAGE:
   fhtml build <SRC> [-o <PATH>]    compile a .fhtml file or directory tree
   fhtml fmt [FILE|DIR]             reformat to canonical style (in place;
                                    stdin prints to stdout)
+  fhtml deps <FILE>                list every transitively included file
+                                   (absolute paths, one per line; empty if
+                                   none) — the watch set for HMR/CI
 
 OPTIONS:
   -o <PATH>      output file, or output directory for `build` of a directory
@@ -62,6 +65,7 @@ fn run() -> Result<(), String> {
     let mut out_path: Option<PathBuf> = None;
     let mut build = false;
     let mut fmt = false;
+    let mut deps = false;
     let mut templates = true;
     let mut shorthand: Option<ShorthandPolicy> = None;
     let mut fmt_shorthand: Option<FmtShorthand> = None;
@@ -141,8 +145,9 @@ fn run() -> Result<(), String> {
                 println!("fhtml {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
-            "build" if !build && !fmt && input.is_none() => build = true,
-            "fmt" if !build && !fmt && input.is_none() => fmt = true,
+            "build" if !build && !fmt && !deps && input.is_none() => build = true,
+            "fmt" if !build && !fmt && !deps && input.is_none() => fmt = true,
+            "deps" if !build && !fmt && !deps && input.is_none() => deps = true,
             s if s.starts_with('-') && s != "-" => {
                 return Err(format!("unknown option `{s}` (see `fhtml --help`)"))
             }
@@ -212,6 +217,17 @@ fn run() -> Result<(), String> {
             out_path,
             fmt_shorthand.unwrap_or_default(),
         )
+    } else if deps {
+        // Includes are relative to the including file (SPEC §10.5), so this
+        // needs a real path — no stdin form.
+        let path = input.ok_or("`fhtml deps` requires a file path")?;
+        let source = fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))?;
+        let list =
+            fhtml::deps_from(&source, Some(Path::new(&path))).map_err(|e| format!("{path}:{e}"))?;
+        for p in &list {
+            println!("{}", p.display());
+        }
+        Ok(())
     } else {
         let (name, source) = match input.as_deref() {
             None | Some("-") => ("<stdin>".to_string(), read_stdin()?),

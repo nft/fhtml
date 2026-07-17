@@ -2366,6 +2366,107 @@ mod includes {
             "<p class=\"ti4\"></p>"
         );
     }
+
+    // ---- `deps_from` / `fhtml deps` — the include graph as a watch list
+    // (graph semantics are SPEC §10.5).
+
+    impl Fixture {
+        fn deps(&self, root: &str) -> Result<Vec<PathBuf>, Error> {
+            let path = self.dir.join(root);
+            let src = fs::read_to_string(&path).unwrap();
+            fhtml::deps_from(&src, Some(&path))
+        }
+
+        /// Canonicalized fixture path — what `deps` output must equal
+        /// (`temp_dir` is itself a symlink on macOS: /var → /private/var).
+        fn canon(&self, rel: &str) -> PathBuf {
+            fs::canonicalize(self.dir.join(rel)).unwrap()
+        }
+    }
+
+    #[test]
+    fn deps_lists_nested_includes_in_first_include_order() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./sub/a\ninclude ./top\n"),
+            ("sub/a.fhtml", "include ./b\np \"a\"\n"),
+            ("sub/b.fhtml", "p \"b\"\n"),
+            ("top.fhtml", "p \"t\"\n"),
+        ]);
+        // Pre-order: an includer precedes its own includes; `top` comes last.
+        assert_eq!(
+            f.deps("main.fhtml").unwrap(),
+            vec![
+                f.canon("sub/a.fhtml"),
+                f.canon("sub/b.fhtml"),
+                f.canon("top.fhtml")
+            ]
+        );
+    }
+
+    #[test]
+    fn deps_of_an_include_free_file_is_empty() {
+        let f = Fixture::new(&[("main.fhtml", "p \"solo\"\n")]);
+        assert_eq!(f.deps("main.fhtml").unwrap(), Vec::<PathBuf>::new());
+    }
+
+    #[test]
+    fn deps_deduplicates_a_twice_included_file() {
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./part\ninclude ./part\n"),
+            ("part.fhtml", "p \"x\"\n"),
+        ]);
+        assert_eq!(f.deps("main.fhtml").unwrap(), vec![f.canon("part.fhtml")]);
+    }
+
+    #[test]
+    fn deps_errors_are_the_compile_errors() {
+        // Cycle and missing-target failures must report exactly as a compile
+        // of the same root does — the plugin surfaces them verbatim.
+        let cycle = Fixture::new(&[("a.fhtml", "include ./b\n"), ("b.fhtml", "include ./a\n")]);
+        let d = cycle.deps("a.fhtml").unwrap_err();
+        let c = cycle.err("a.fhtml");
+        assert_eq!((d.line, d.col, &d.msg), (c.line, c.col, &c.msg));
+        assert!(d.msg.contains("include cycle"), "got: {}", d.msg);
+
+        let missing = Fixture::new(&[("main.fhtml", "include ./nope\n")]);
+        let d = missing.deps("main.fhtml").unwrap_err();
+        let c = missing.err("main.fhtml");
+        assert_eq!((d.line, d.col, &d.msg), (c.line, c.col, &c.msg));
+    }
+
+    #[test]
+    fn deps_cli_prints_absolute_paths_one_per_line() {
+        use std::process::Command;
+        let f = Fixture::new(&[
+            ("main.fhtml", "include ./sub/a\n"),
+            ("sub/a.fhtml", "include ./b\n"),
+            ("sub/b.fhtml", "p \"b\"\n"),
+            ("plain.fhtml", "p \"solo\"\n"),
+        ]);
+        let run = |root: &str| {
+            Command::new(env!("CARGO_BIN_EXE_fhtml"))
+                .args(["deps", f.dir.join(root).to_str().unwrap()])
+                .output()
+                .unwrap()
+        };
+        let out = run("main.fhtml");
+        assert!(out.status.success(), "deps must succeed");
+        let stdout = String::from_utf8(out.stdout).unwrap();
+        let lines: Vec<&str> = stdout.lines().collect();
+        assert_eq!(
+            lines,
+            vec![
+                f.canon("sub/a.fhtml").to_str().unwrap().to_string(),
+                f.canon("sub/b.fhtml").to_str().unwrap().to_string(),
+            ]
+        );
+        assert!(lines.iter().all(|l| PathBuf::from(l).is_absolute()));
+
+        // No includes → empty stdout, still success.
+        let plain = run("plain.fhtml");
+        assert!(plain.status.success());
+        assert!(plain.stdout.is_empty(), "no includes prints nothing");
+    }
 }
 
 // ---------------------------------------------------- #!shorthand (SPEC §3.2)

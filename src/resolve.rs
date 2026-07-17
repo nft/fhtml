@@ -28,11 +28,17 @@ use crate::parser::{
 /// link of cycle chains. A document with no includes passes through untouched
 /// (so string-only entry points keep working); with includes and no `file`,
 /// this is the "stdin has no base path" error.
+///
+/// `deps` collects the canonical path of every included file, deduplicated,
+/// in first-include order (includers before their own includes) — the
+/// invalidation set behind `fhtml deps`. Callers that don't need it pass a
+/// throwaway.
 pub(crate) fn resolve_includes(
     doc: Document,
     file: Option<&Path>,
     policy: crate::ShorthandPolicy,
     warnings: &mut Vec<String>,
+    deps: &mut Vec<PathBuf>,
 ) -> Result<Document> {
     let Some((line, path)) = first_include(&doc.body) else {
         return Ok(doc);
@@ -47,7 +53,7 @@ pub(crate) fn resolve_includes(
         );
     };
     let mut stack = vec![(canon(file), file.display().to_string())];
-    expand(doc, file, policy, &mut stack, warnings)
+    expand(doc, file, policy, &mut stack, warnings, deps)
 }
 
 fn first_include(nodes: &[Node]) -> Option<(usize, &str)> {
@@ -81,6 +87,7 @@ fn expand(
     policy: crate::ShorthandPolicy,
     stack: &mut Vec<(PathBuf, String)>,
     warnings: &mut Vec<String>,
+    deps: &mut Vec<PathBuf>,
 ) -> Result<Document> {
     let mut defs = doc.defs;
     // This document's own directive: an included file's flag is consumed by
@@ -121,6 +128,9 @@ fn expand(
                 format!("include cycle: {} (SPEC §10.5)", chain.join(" -> ")),
             );
         }
+        if !deps.contains(&id) {
+            deps.push(id.clone());
+        }
         // Always the template path: includes only exist behind render/js
         // compilation (`--no-templates` rejects `include` before resolution
         // runs). `policy` is the same global override for every file; each
@@ -131,7 +141,7 @@ fn expand(
             warnings.push(format!("`{display}`:{w}"));
         }
         stack.push((id, display.clone()));
-        let mut idoc = expand(idoc, &target, policy, stack, warnings).map_err(|e| {
+        let mut idoc = expand(idoc, &target, policy, stack, warnings, deps).map_err(|e| {
             // A nested failure already names its own file; re-anchor its
             // position (a line in `target`) to this include site.
             at_include(line, &display, e)

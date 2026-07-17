@@ -7,8 +7,11 @@ postinstall step, no dependencies; the package is ~100 lines of ESM glue
 plus a **261 KB** `fhtml.wasm` (the zero-dependency Rust core; soft
 budget ≤ 500 KB).
 
-> Package name and publishing are pending; `private` is
-> set until then. Build the artifact locally with the command below.
+## Install
+
+```sh
+npm install @fhtml/core
+```
 
 ## Use
 
@@ -53,8 +56,8 @@ Where the default loader can't reach the file (no `file:` URL, no
 `fetch` for assets), pass the bytes or a compiled module yourself:
 
 ```js
-import wasm from "./fhtml.wasm"; // Workers-style native wasm import
-await init(wasm);                // also accepts raw bytes
+import wasm from "@fhtml/core/fhtml.wasm"; // Workers-style native wasm import
+await init(wasm);                          // also accepts raw bytes
 ```
 
 ## Build from source
@@ -74,3 +77,11 @@ Requires the `wasm32-unknown-unknown` target
 parity gate: over every corpus file, wasm output must be byte-identical
 to the native CLI for `render` (min and pretty), `compileToJs`, and
 `format`.
+
+## Release
+
+`./release.sh` — checks version parity (package == core crate == wasm
+crate), runs the full test gate, `npm pack`s and cold-start-smokes the
+tarball in a scratch project (both loaders), then publishes. The
+artifact is built here, at release time — never on install.
+`--dry-run` stops before the publish.

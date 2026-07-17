@@ -191,6 +191,25 @@ source to canonical form; the `_full` variants also return warnings. `render_ful
 string-only entry points reject it (no base path). The `_opts_from` variants take
 `Options` for the shorthand policy (SPEC §3.2) and output mode.
 
+## Use from JavaScript
+
+[`integrations/npm/`](integrations/npm/) ships **`@fhtml/core`** — the same compiler as
+WebAssembly (a 261 KB `fhtml.wasm` plus ~100 lines of dependency-free ESM glue), for
+Node, browsers, and edge runtimes where a native binary can't go:
+
+```js
+import { init, render, compileToJs, format, analyze } from "@fhtml/core";
+
+await init();
+const { html } = render('div grid\n  span rounded "hi"\n');
+```
+
+`render` takes a source string or a `{name: source}` file map (includes resolve against
+the map); `compileToJs` emits the same self-contained `--target=js` module, so the
+request-time render path carries no wasm; `analyze` returns the LSP's diagnostics and
+symbols for browser editors. Output is byte-identical to the native CLI — that parity is
+the package's release gate.
+
 ## Vite integration
 
 [`integrations/vite/`](integrations/vite/) ships `vite-plugin-fhtml` (dependency-free,

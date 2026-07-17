@@ -1,0 +1,9 @@
+{
+  "name": "vite-plugin-fhtml-test",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "vite-plugin-fhtml": "file:.."
+  }
+}

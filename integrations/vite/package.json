@@ -1,0 +1,29 @@
+{
+  "name": "vite-plugin-fhtml",
+  "version": "0.1.0",
+  "description": "Import .fhtml files in Vite: default import is a render function (data, ctx) => string, `?html` imports the static HTML string. HMR-aware across includes.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nft/fhtml",
+    "directory": "integrations/vite"
+  },
+  "keywords": [
+    "vite-plugin",
+    "fhtml",
+    "html",
+    "template",
+    "tailwind"
+  ],
+  "peerDependencies": {
+    "vite": ">=4"
+  }
+}

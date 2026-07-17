@@ -1,0 +1,2 @@
+def footer(year)
+  footer mt-4 "© {year}"

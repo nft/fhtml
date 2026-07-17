@@ -635,6 +635,57 @@ fn deny_warnings_flips_the_exit_code() {
     assert!(denied.stdout.is_empty(), "no output under deny");
 }
 
+#[test]
+fn static_flag_takes_the_static_path() {
+    // `--static` (the `?html` import path): the CLI's default renders
+    // templated files with every name null; `--static` surfaces the library
+    // static-path error instead. Unlike `--no-templates`, the file parses
+    // with full template syntax — *using* it is the error.
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let run = |args: &[&str], src: &str| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_fhtml"))
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(src.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    };
+    let templated = "h2 \"{title}\"\n";
+
+    let plain = run(&["--min"], templated);
+    assert!(plain.status.success(), "default path renders null");
+    assert_eq!(plain.stdout, b"<h2></h2>");
+
+    let stat = run(&["--static", "--min"], templated);
+    assert!(!stat.status.success(), "--static must reject template use");
+    let stderr = String::from_utf8_lossy(&stat.stderr);
+    assert!(
+        stderr.contains("static compilation cannot render it; pass data"),
+        "got: {stderr}"
+    );
+
+    let ok = run(&["--static", "--min"], "p \"just markup\"\n");
+    assert!(ok.status.success());
+    assert_eq!(ok.stdout, b"<p>just markup</p>");
+
+    let conflict = run(&["--static", "--data", "x.json"], "p \"x\"\n");
+    assert!(
+        !conflict.status.success(),
+        "--static + --data must conflict"
+    );
+    let stderr = String::from_utf8_lossy(&conflict.stderr);
+    assert!(stderr.contains("cannot be combined"), "got: {stderr}");
+}
+
 // ------------------------------------------------------------------ fmt
 
 #[test]

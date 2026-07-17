@@ -1,0 +1,3 @@
+section hero py-12
+  h1 text-3xl "fhtml"
+  p tagline "markup, minus the angle brackets"

@@ -4,3 +4,6 @@
 /bench/.tools
 /bench/out
 /tailwindcss
+/integrations/vite/test/node_modules
+/integrations/vite/test/package-lock.json
+/integrations/vite/test/.work

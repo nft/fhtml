@@ -33,6 +33,9 @@ OPTIONS:
                  `(data, ctx = {}) => string` instead of HTML; `build` writes
                  `.js` files in the same tree layout. Static files become a
                  constant function, for uniformity
+  --static       compile as static markup: template constructs (which need
+                 data) are errors pointing at the render path, instead of
+                 rendering with every name null — the `?html` import path
   --no-templates enforce static markup (SPEC §9.2): any template construct —
                  statements, `{…}` interpolation, unescaped `{` — is an error
   --shorthand    decode class shorthand (SPEC §3.2) in every file, directive
@@ -67,6 +70,7 @@ fn run() -> Result<(), String> {
     let mut fmt = false;
     let mut deps = false;
     let mut templates = true;
+    let mut static_only = false;
     let mut shorthand: Option<ShorthandPolicy> = None;
     let mut fmt_shorthand: Option<FmtShorthand> = None;
     let mut js_target = false;
@@ -82,6 +86,7 @@ fn run() -> Result<(), String> {
             "--pretty" => pretty = Some(true),
             "--min" => pretty = Some(false),
             "--no-templates" => templates = false,
+            "--static" => static_only = true,
             s @ ("--shorthand" | "--no-shorthand") => {
                 let p = if s == "--shorthand" {
                     ShorthandPolicy::On
@@ -164,6 +169,20 @@ fn run() -> Result<(), String> {
     if !templates && (data_path.is_some() || ctx_path.is_some()) {
         return Err("`--data`/`--ctx` cannot be combined with `--no-templates`".to_string());
     }
+    if static_only && (data_path.is_some() || ctx_path.is_some()) {
+        return Err(
+            "`--data`/`--ctx` cannot be combined with `--static` — a static compile takes no \
+             data; drop `--static` to render"
+                .to_string(),
+        );
+    }
+    if static_only && js_target {
+        return Err(
+            "`--static` only applies to HTML output — the emitted module is uniform for static \
+             and templated files (`--target=js` alone)"
+                .to_string(),
+        );
+    }
     if js_target && (data_path.is_some() || ctx_path.is_some()) {
         return Err(
             "`--data`/`--ctx` cannot be combined with `--target=js` — the emitted module takes \
@@ -189,6 +208,7 @@ fn run() -> Result<(), String> {
     let ctx = load_json(ctx_path.as_deref())?;
     let job = Job {
         templates,
+        static_only,
         shorthand: shorthand.unwrap_or_default(),
         js_target,
         data,
@@ -263,6 +283,11 @@ fn run() -> Result<(), String> {
 /// JS module with `--target=js`, or static-enforce with `--no-templates`.
 struct Job {
     templates: bool,
+    /// `--static`: compile on the static path — template constructs error
+    /// with a pointer to the render path instead of rendering null. Unlike
+    /// `--no-templates` (static *parse* enforcement, SPEC §9.2), the file parses
+    /// with full template syntax; using any of it is the error.
+    static_only: bool,
     shorthand: ShorthandPolicy,
     js_target: bool,
     data: Value,
@@ -285,7 +310,7 @@ impl Job {
         };
         if self.js_target {
             compile_to_js_opts_from(source, file, &opts)
-        } else if self.templates {
+        } else if self.templates && !self.static_only {
             render_opts_from(source, file, &self.data, &self.ctx, &opts)
         } else {
             compile_opts(source, &opts)

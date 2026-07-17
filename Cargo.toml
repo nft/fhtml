@@ -4,7 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "Compiler for fhtml (Fluid HTML) — a token-cheap, Tailwind-native markup language"
 license = "MIT"
+repository = "https://github.com/nft/fhtml"
+readme = "README.md"
+keywords = ["html", "template", "markup", "tailwind", "compiler"]
+categories = ["template-engine", "web-programming", "command-line-utilities"]
 default-run = "fhtml"
+# Keep the crate lean: benchmark corpus, site, docs, and editor tooling stay in the repo.
+include = ["/src", "/Cargo.toml", "/README.md", "/SPEC.md", "/LICENSE"]
 
 [lib]
 name = "fhtml"

@@ -56,12 +56,40 @@ invalidates every module that includes it.
 ## Tailwind
 
 fhtml writes classes as bare tokens, so Tailwind v4 scans `.fhtml` sources
-as-is:
+as-is — one `@source` line and no other configuration:
 
 ```css
 @import "tailwindcss";
 @source "./src/**/*.fhtml";
 ```
+
+(Verified against the fhtml benchmark corpus: the CSS built from fhtml
+sources covers every utility the equivalent HTML build finds, arbitrary
+values and `data-[…]:` variants included — `bench/tailwind_scan.sh` in the
+main repo.)
+
+One rule keeps that true: **never build a class name from string parts**.
+Tailwind's scanner is static — it can see `bg-blue-600` written out, but not
+the result of `{"bg-" + color}`. The compiler enforces the rule for you:
+
+- an interpolation *glued* to class text (`bg-{color}-100`) is a hard error;
+- a class built with `+` concatenation compiles but **warns** (it's legal
+  output, just invisible to Tailwind) — and the warning shows up right in
+  Vite's console via this plugin.
+
+Write whole class names and switch between them instead:
+
+```
+button {active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"}
+```
+
+`fhtml --deny-warnings` turns the warning into a failure for CI.
+
+## Example
+
+A complete hot-reloading Vite + Tailwind page (templated import, `?html`
+import, an `include`d partial) lives in
+[`example/`](example/) — `npm install && npm run dev`.
 
 ## Non-goals (v1)
 

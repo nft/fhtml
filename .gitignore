@@ -7,3 +7,6 @@
 /integrations/vite/test/node_modules
 /integrations/vite/test/package-lock.json
 /integrations/vite/test/.work
+/integrations/vite/example/node_modules
+/integrations/vite/example/package-lock.json
+/integrations/vite/example/dist

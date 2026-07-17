@@ -191,6 +191,28 @@ source to canonical form; the `_full` variants also return warnings. `render_ful
 string-only entry points reject it (no base path). The `_opts_from` variants take
 `Options` for the shorthand policy (SPEC §3.2) and output mode.
 
+## Vite integration
+
+[`integrations/vite/`](integrations/vite/) ships `vite-plugin-fhtml` (dependency-free,
+usable via a `file:` path — not yet on npm):
+
+```js
+// vite.config.js
+import fhtml from "vite-plugin-fhtml";
+export default { plugins: [fhtml()] };
+```
+
+```js
+import render from "./card.fhtml";      // (data, ctx = {}) => string  — the --target=js module
+import hero from "./hero.fhtml?html";   // the static HTML string      — fhtml --static --min
+```
+
+The plugin shells out to the installed `fhtml` binary (`bin` option → `$FHTML_BIN` →
+`$PATH`). Compile errors surface in Vite's overlay at the `.fhtml` line:column; editing an
+`include`d partial hot-reloads every importer (the watch list comes from `fhtml deps`). A
+complete Vite + Tailwind page lives in
+[`integrations/vite/example/`](integrations/vite/example/).
+
 ## Tailwind integration
 
 Tailwind v4's scanner picks up fhtml classes as-is — they're plain space-separated tokens:
@@ -203,8 +225,17 @@ Verified against tailwindcss v4.3.2 (`bench/tailwind_scan.sh`): CSS built from t
 corpus as fhtml covers every utility the HTML build finds, arbitrary values and `data-[…]:`
 variants included.
 
-One rule: never build class names from expressions (`bg-{color}-100` is invisible to
-Tailwind's static scanner). Interpolate whole class names instead.
+One rule: never build class names from expressions — Tailwind's scanner is static, so a
+class assembled at render time gets no CSS. The compiler enforces it (SPEC §9.1): an
+interpolation glued to class text (`bg-{color}-100`) is a hard error, and a class built by
+`+` concatenation (`{"bg-" + color}`) compiles but warns. Interpolate whole class names
+and switch between them instead:
+
+```
+button {active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"}
+```
+
+`--deny-warnings` makes any warning fail the build, for CI.
 
 ## Editor support
 

@@ -1,0 +1,2 @@
+def badge(label)
+  span inline-block mt-3 px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 "{label}"

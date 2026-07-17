@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* fhtml classes are bare tokens — Tailwind's scanner reads .fhtml as-is. */
+@source "./**/*.fhtml";

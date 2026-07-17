@@ -1,0 +1,3 @@
+header max-w-xl mx-auto pt-12 pb-4 px-4
+  h1 text-3xl font-bold tracking-tight "fhtml + Vite + Tailwind"
+  p mt-2 text-gray-500 "The hero is a `?html` import — static HTML at build time. The cards below are a render function fed with data."

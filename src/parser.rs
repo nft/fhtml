@@ -36,7 +36,8 @@ pub fn is_raw_text(tag: &str) -> bool {
 /// trimmed source text between the braces / after the keyword (`fhtml fmt`
 /// reprints this text — it never re-serializes the AST) and the expression's
 /// 1-based position (line; column of the `{` or of the expression start,
-/// counted within the logical line's content).
+/// counted in chars from the physical line start, indentation included —
+/// SPEC §11).
 #[derive(Debug, Clone)]
 pub struct TplExpr {
     pub src: String,
@@ -581,8 +582,8 @@ impl Parser {
                     let node = self.parse_statement(depth, first_tok, num)?;
                     nodes.push(node);
                 } else {
-                    let (logical, start) = self.join_continuations()?;
-                    let mut cur = Cur::new(&logical, start);
+                    let (logical, start, base) = self.join_continuations()?;
+                    let mut cur = Cur::new(&logical, start, base);
                     let mut el = parse_element(&mut cur, self.templates, self.shorthand)?;
                     self.warn_attr_shaped_classes(&el);
                     self.warn_concat_classes(&el);
@@ -688,7 +689,7 @@ impl Parser {
     /// `def name(param param=default …)` + body (SPEC §10.3). Top level only;
     /// the definition goes to `self.defs`, not the node tree.
     fn parse_def(&mut self, depth: usize) -> Result<()> {
-        let (content, line) = self.join_continuations()?;
+        let (content, line, base) = self.join_continuations()?;
         if depth != 0 {
             return err(
                 line,
@@ -696,7 +697,7 @@ impl Parser {
                 "`def` is allowed only at top level — not nested in elements, statements, or other `def`s (SPEC §10.3)",
             );
         }
-        let mut cur = Cur::at(&content, 3, line);
+        let mut cur = Cur::at(&content, 3, line, base);
         cur.eat_ws();
         let col = cur.col();
         let Some(name) = read_name(&mut cur) else {
@@ -759,7 +760,7 @@ impl Parser {
     /// of the line, kept as written. Indented lines under it hit the
     /// standard "cannot have children" error from `parse_block`.
     fn parse_include(&mut self, depth: usize) -> Result<Node> {
-        let (content, line) = self.join_continuations()?;
+        let (content, line, _) = self.join_continuations()?;
         if depth != 0 {
             return err(
                 line,
@@ -783,7 +784,7 @@ impl Parser {
 
     /// `children`, alone on its line, inside a `def` body only (SPEC §10.3).
     fn parse_children(&mut self) -> Result<Node> {
-        let (content, line) = self.join_continuations()?;
+        let (content, line, _) = self.join_continuations()?;
         if !self.in_def {
             return err(
                 line,
@@ -804,8 +805,8 @@ impl Parser {
     /// `+name(args)` + optional indented block (the component's `children`,
     /// SPEC §10.4). Whether `name` resolves is checked at render time.
     fn parse_call(&mut self, depth: usize) -> Result<Node> {
-        let (content, line) = self.join_continuations()?;
-        let mut cur = Cur::new(&content, line);
+        let (content, line, base) = self.join_continuations()?;
+        let mut cur = Cur::new(&content, line, base);
         cur.bump(); // +
         let col = cur.col();
         let Some(name) = read_name(&mut cur) else {
@@ -850,9 +851,9 @@ impl Parser {
     /// `if expr` + block, then any directly-following `elif`/`else` siblings
     /// at the same indent (SPEC §10.1 — no other siblings between).
     fn parse_if_chain(&mut self, depth: usize) -> Result<Node> {
-        let (content, line) = self.join_continuations()?;
+        let (content, line, base) = self.join_continuations()?;
         let if_line = line;
-        let cond = statement_expr(&content, 2, line, "if")?;
+        let cond = statement_expr(&content, 2, line, base, "if")?;
         let body = self.statement_body(depth, line, "if")?;
         let mut arms = vec![IfArm { cond, body }];
         let mut else_body = None;
@@ -861,14 +862,14 @@ impl Parser {
             match first {
                 "elif" => {
                     self.pos = idx;
-                    let (content, line) = self.join_continuations()?;
-                    let cond = statement_expr(&content, 4, line, "elif")?;
+                    let (content, line, base) = self.join_continuations()?;
+                    let cond = statement_expr(&content, 4, line, base, "elif")?;
                     let body = self.statement_body(depth, line, "elif")?;
                     arms.push(IfArm { cond, body });
                 }
                 "else" => {
                     self.pos = idx;
-                    let (content, line) = self.join_continuations()?;
+                    let (content, line, _) = self.join_continuations()?;
                     if content.trim() != "else" {
                         return err(
                             line,
@@ -892,8 +893,8 @@ impl Parser {
     /// `for name[, name] in expr` + block, then an optional directly-following
     /// `empty` sibling at the same indent (SPEC §10.2).
     fn parse_for(&mut self, depth: usize) -> Result<Node> {
-        let (content, line) = self.join_continuations()?;
-        let mut cur = Cur::at(&content, 3, line);
+        let (content, line, base) = self.join_continuations()?;
+        let mut cur = Cur::at(&content, 3, line, base);
         cur.eat_ws();
         let var = loop_name(&mut cur, line, "a loop variable: `for item in items`")?;
         cur.eat_ws();
@@ -913,13 +914,13 @@ impl Parser {
         if read_name(&mut cur).as_deref() != Some("in") {
             return err(line, kw_col, "expected `in`: `for item[, index] in expr`");
         }
-        let iter = statement_expr(&content, cur.i, line, "for")?;
+        let iter = statement_expr(&content, cur.i, line, base, "for")?;
         let body = self.statement_body(depth, line, "for")?;
         let mut empty = None;
         if let Some(idx) = self.peek_sibling(depth)? {
             if self.lines[idx].content.split_whitespace().next() == Some("empty") {
                 self.pos = idx;
-                let (content, eline) = self.join_continuations()?;
+                let (content, eline, _) = self.join_continuations()?;
                 if content.trim() != "empty" {
                     return err(
                         eline,
@@ -1027,7 +1028,8 @@ impl Parser {
             let text = rest.strip_prefix(' ').unwrap_or(rest);
             if let Some(off) = end_tag_hazard(text, tag) {
                 let skipped = content.len() - text.len(); // `|` and its stripped space
-                let col = content[..skipped + off].chars().count() + 1;
+                let base = self.lines[self.pos].indent.chars().count();
+                let col = base + content[..skipped + off].chars().count() + 1;
                 let t = tag.to_ascii_lowercase();
                 return err(
                     num,
@@ -1050,9 +1052,16 @@ impl Parser {
         loop {
             let content = self.lines[self.pos].content.clone();
             let num = self.lines[self.pos].num;
+            let base = self.lines[self.pos].indent.chars().count();
             let rest = &content[1..];
             let skip = if rest.starts_with(' ') { 2 } else { 1 };
-            lines.push(parse_block_text_line(&content, skip, num, self.templates)?);
+            lines.push(parse_block_text_line(
+                &content,
+                skip,
+                num,
+                base,
+                self.templates,
+            )?);
             self.pos += 1;
 
             let mut j = self.pos;
@@ -1073,9 +1082,13 @@ impl Parser {
 
     /// Joins `\`-continued physical lines into one logical line (SPEC §1).
     /// Called for element and statement lines — comments, raw, and text
-    /// blocks never join.
-    fn join_continuations(&mut self) -> Result<(String, usize)> {
+    /// blocks never join. Also returns the char width of the first physical
+    /// line's indentation — the column base for cursors over the content
+    /// (columns on later continued lines inherit it; a joined logical line
+    /// has no exact physical mapping past its first line).
+    fn join_continuations(&mut self) -> Result<(String, usize, usize)> {
         let start = self.lines[self.pos].num;
+        let base = self.lines[self.pos].indent.chars().count();
         let mut s = self.lines[self.pos].content.clone();
         self.pos += 1;
         while s.ends_with('\\') {
@@ -1087,13 +1100,20 @@ impl Parser {
             s = format!("{} {}", s_trimmed, self.lines[self.pos].content);
             self.pos += 1;
         }
-        Ok((s, start))
+        Ok((s, start, base))
     }
 }
 
 /// Parses the expression that trails a statement keyword. `from` is the byte
-/// offset in `content` where the expression region starts (whitespace ok).
-fn statement_expr(content: &str, from: usize, line: usize, kw: &str) -> Result<TplExpr> {
+/// offset in `content` where the expression region starts (whitespace ok);
+/// `base` is the line's indent width in chars (columns are physical, SPEC §11).
+fn statement_expr(
+    content: &str,
+    from: usize,
+    line: usize,
+    base: usize,
+    kw: &str,
+) -> Result<TplExpr> {
     let rest = &content[from..];
     let expr_off = from + (rest.len() - rest.trim_start().len());
     let src = rest.trim();
@@ -1109,11 +1129,11 @@ fn statement_expr(content: &str, from: usize, line: usize, kw: &str) -> Result<T
             src: src.to_string(),
             expr: e,
             line,
-            col: content[..expr_off].chars().count() + 1,
+            col: base + content[..expr_off].chars().count() + 1,
         }),
         Err(pe) => err(
             line,
-            content[..expr_off + pe.offset].chars().count() + 1,
+            base + content[..expr_off + pe.offset].chars().count() + 1,
             pe.msg,
         ),
     }
@@ -1405,21 +1425,30 @@ fn check_void_content(el: &Element) -> Result<()> {
     Ok(())
 }
 
-/// Character cursor over one logical line.
+/// Character cursor over one logical line. `base` is the char width of the
+/// line's indentation, which the stored content strings exclude — cursor
+/// columns add it back so every reported column counts from the start of the
+/// physical source line (SPEC §11).
 struct Cur<'a> {
     s: &'a str,
     i: usize,
     line: usize,
+    base: usize,
 }
 
 impl<'a> Cur<'a> {
-    fn new(s: &'a str, line: usize) -> Self {
-        Cur { s, i: 0, line }
+    fn new(s: &'a str, line: usize, base: usize) -> Self {
+        Cur {
+            s,
+            i: 0,
+            line,
+            base,
+        }
     }
 
     /// A cursor starting mid-line (statement bodies, text-block rests).
-    fn at(s: &'a str, i: usize, line: usize) -> Self {
-        Cur { s, i, line }
+    fn at(s: &'a str, i: usize, line: usize, base: usize) -> Self {
+        Cur { s, i, line, base }
     }
 
     fn peek(&self) -> Option<char> {
@@ -1439,11 +1468,11 @@ impl<'a> Cur<'a> {
     }
 
     fn col(&self) -> usize {
-        self.s[..self.i].chars().count() + 1
+        self.base + self.s[..self.i].chars().count() + 1
     }
 
     fn col_at(&self, byte: usize) -> usize {
-        self.s[..byte].chars().count() + 1
+        self.base + self.s[..byte].chars().count() + 1
     }
 
     fn eat_ws(&mut self) {
@@ -2011,9 +2040,10 @@ fn parse_block_text_line(
     content: &str,
     from: usize,
     line: usize,
+    base: usize,
     templates: bool,
 ) -> Result<Vec<TextPart>> {
-    let mut cur = Cur::at(content, from, line);
+    let mut cur = Cur::at(content, from, line, base);
     let mut parts = Vec::new();
     let mut lit = String::new();
     loop {

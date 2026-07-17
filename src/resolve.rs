@@ -70,6 +70,20 @@ fn canon(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// The file an `include <path>` line in `file` names: `.fhtml` appended if
+/// absent, the idiomatic leading `./` dropped, relative to `file`'s directory
+/// (SPEC §10.5). The single definition of include-path resolution — `expand`
+/// and `analyze` must agree on it.
+pub(crate) fn include_target(file: &Path, path: &str) -> PathBuf {
+    let bare = path.trim_start_matches("./");
+    let rel = if bare.ends_with(".fhtml") {
+        bare.to_string()
+    } else {
+        format!("{bare}.fhtml")
+    };
+    file.parent().unwrap_or(Path::new("")).join(rel)
+}
+
 /// Rewrites an error from inside an included file to the include site,
 /// keeping the inner path and position in the message. Nested includes
 /// compose: each level adds its own `in `…`` prefix.
@@ -99,16 +113,7 @@ fn expand(
             body.push(node);
             continue;
         };
-        // `.fhtml` appended if absent (SPEC §10.5), relative to this file.
-        // The idiomatic leading `./` is dropped so displayed paths (cycle
-        // chains, error prefixes) stay clean.
-        let bare = path.trim_start_matches("./");
-        let rel = if bare.ends_with(".fhtml") {
-            bare.to_string()
-        } else {
-            format!("{bare}.fhtml")
-        };
-        let target = file.parent().unwrap_or(Path::new("")).join(&rel);
+        let target = include_target(file, &path);
         let display = target.display().to_string();
         let src = fs::read_to_string(&target).map_err(|e| Error {
             line,

@@ -301,9 +301,10 @@ mod raw_text {
     fn end_tag_in_body_errors_with_position() {
         let e = error("script\n  | x('</script>');\n");
         assert!(e.contains("would end the `script` element"), "got: {e}");
-        // Columns count within the line's content, indent excluded — the
-        // `<` of `</script>` in `| x('</script>');` sits at column 6.
-        assert!(e.contains("2:6"), "got: {e}");
+        // Columns count from the physical line start, indentation included
+        // (SPEC §11) — the `<` of `</script>` in `  | x('</script>');` sits
+        // at column 8.
+        assert!(e.contains("2:8"), "got: {e}");
     }
 
     #[test]
@@ -1821,10 +1822,10 @@ else
 
     #[test]
     fn render_errors_position_like_parse_errors() {
-        // columns count within the logical line's content (indent excluded),
-        // matching the static parse-error convention
+        // columns count from the physical line start, indentation included
+        // (SPEC §11), matching the static parse-error convention
         let e = render_err("div\n  p \"{1 + true}\"", "{}");
-        assert_eq!((e.line, e.col), (2, 4)); // the `{`
+        assert_eq!((e.line, e.col), (2, 6)); // the `{`
 
         assert!(e.msg.contains("`+`"), "got: {}", e.msg);
     }

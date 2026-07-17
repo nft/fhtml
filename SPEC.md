@@ -502,8 +502,11 @@ include ./partials/head
   `def`) fail at *compile* time for the JS target, with the renderer's messages.
 - **Errors** carry file, line, column, and the offending token; parsing is strict — there
   is no recovery mode that silently guesses (an agent retry loop needs precise, honest
-  errors more than it needs leniency). Non-fatal hazards (uneven indent steps, §2 rule 6)
-  are **warnings** on stderr; the build still succeeds.
+  errors more than it needs leniency). Both are 1-based; columns count *characters*
+  (not bytes) from the start of the physical source line, indentation included. On a
+  `\`-joined logical line (§1) columns past the first physical line count within the
+  joined content — a precise physical mapping doesn't exist there. Non-fatal hazards
+  (uneven indent steps, §2 rule 6) are **warnings** on stderr; the build still succeeds.
 - **Canonical form**: `fhtml fmt` reformats source to 2-space indentation (spaces only),
   `.` for `div`, and minimal quoting. Invariant: formatting never changes the compiled
   output, and formatting twice equals formatting once. Silent `//` comments survive

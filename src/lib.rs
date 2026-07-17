@@ -9,6 +9,7 @@
 //! which passes the source path); the string-only entry points reject
 //! `include` since stdin has no base path.
 
+mod analyze;
 #[cfg(feature = "convert")]
 pub mod convert;
 mod emit;
@@ -21,6 +22,7 @@ mod parser;
 mod resolve;
 pub mod shorthand;
 
+pub use analyze::{analyze, Analysis, ArgSym, CallSym, DefSym, Diag, IncludeSym, ParamSym, Span};
 pub use emit::Mode;
 pub use error::Error;
 pub use expr::Value;

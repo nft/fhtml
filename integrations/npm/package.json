@@ -1,0 +1,25 @@
+{
+  "name": "@fhtml/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The fhtml compiler as WebAssembly — render, compile to JS modules, format, and analyze fhtml anywhere JavaScript runs.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "fhtml.wasm",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

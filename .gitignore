@@ -13,3 +13,4 @@
 /editors/vscode/node_modules
 /editors/vscode/package-lock.json
 /integrations/npm/crate/target
+/integrations/npm/fhtml.wasm

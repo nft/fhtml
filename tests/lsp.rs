@@ -515,6 +515,120 @@ fn document_symbols_outline_defs_params_and_includes() {
     lsp.shutdown();
 }
 
+// ---- definition + completion ------------------------------------
+
+fn pos_params(uri: &str, line: usize, character: usize) -> String {
+    format!(
+        r#"{{"textDocument":{{"uri":{}}},"position":{{"line":{line},"character":{character}}}}}"#,
+        js(uri)
+    )
+}
+
+fn labels(items: &[Value]) -> Vec<&str> {
+    items.iter().filter_map(|i| get_str(i, "label")).collect()
+}
+
+/// Gate: call in A, def in included B — F12 jumps into
+/// the included file; completion sees both files' components.
+#[test]
+fn definition_and_completion_across_a_two_file_include() {
+    let f = Fixture::new();
+    f.write(
+        "partials/lib.fhtml",
+        "def badge(label tone=1)\n  span \"{label}\"\n",
+    );
+    let main = f.write(
+        "main.fhtml",
+        "include ./partials/lib\n\ndef local(x)\n  p \"{x}\"\n\ndiv\n  +badge(label=\"hi\")\n  +local(x=1)\n",
+    );
+    let src = fs::read_to_string(&main).unwrap();
+    let uri = file_uri(&main);
+    let lib_uri = file_uri(&f.root.join("partials/lib.fhtml"));
+
+    let mut lsp = Lsp::start();
+    lsp.open(&uri, &src);
+
+    // Definition on the `badge` call (line 7, inside the name) → the `def`
+    // in the included file, with the name token's range there.
+    let reply = lsp.request("textDocument/definition", &pos_params(&uri, 6, 5));
+    let loc = get(&reply, "result").expect("result");
+    assert_eq!(get_str(loc, "uri"), Some(lib_uri.as_str()));
+    assert_eq!(range_of(loc), ((0.0, 4.0), (0.0, 9.0)));
+
+    // Definition on the `local` call → the same-file def.
+    let reply = lsp.request("textDocument/definition", &pos_params(&uri, 7, 4));
+    let loc = get(&reply, "result").expect("result");
+    assert_eq!(get_str(loc, "uri"), Some(uri.as_str()));
+    assert_eq!(range_of(loc), ((2.0, 4.0), (2.0, 9.0)));
+
+    // Definition on the include path → the included file itself.
+    let reply = lsp.request("textDocument/definition", &pos_params(&uri, 0, 12));
+    let loc = get(&reply, "result").expect("result");
+    assert_eq!(get_str(loc, "uri"), Some(lib_uri.as_str()));
+    assert_eq!(range_of(loc), ((0.0, 0.0), (0.0, 0.0)));
+
+    // Definition elsewhere (plain element text) → null.
+    let reply = lsp.request("textDocument/definition", &pos_params(&uri, 5, 1));
+    assert_eq!(get(&reply, "result"), Some(&Value::Null));
+
+    // Completion right after `+` lists both files' components.
+    let reply = lsp.request("textDocument/completion", &pos_params(&uri, 6, 3));
+    let items = as_list(get(&reply, "result").expect("result"));
+    let names = labels(items);
+    assert!(
+        names.contains(&"badge") && names.contains(&"local"),
+        "{names:?}"
+    );
+    let badge = items
+        .iter()
+        .find(|i| get_str(i, "label") == Some("badge"))
+        .unwrap();
+    assert_eq!(num(get(badge, "kind").expect("kind")), 3.0); // Function
+    assert_eq!(get_str(badge, "detail"), Some("(label tone=1)"));
+
+    // Completion inside `+badge(label="hi")`'s parens, before `)`: only the
+    // unsupplied param remains.
+    let reply = lsp.request("textDocument/completion", &pos_params(&uri, 6, 19));
+    let items = as_list(get(&reply, "result").expect("result"));
+    assert_eq!(labels(items), vec!["tone"], "label is already supplied");
+    assert_eq!(get_str(&items[0], "insertText"), Some("tone="));
+
+    // Mid-keystroke: the buffer breaks (`+b` being typed after an unclosed
+    // string) — included components must still complete via the rescan.
+    lsp.change(&uri, "include ./partials/lib\n\nspan \"unclosed\n\n+b");
+    let reply = lsp.request("textDocument/completion", &pos_params(&uri, 4, 2));
+    let items = as_list(get(&reply, "result").expect("result"));
+    assert!(labels(items).contains(&"badge"), "{:?}", labels(items));
+    lsp.shutdown();
+}
+
+#[test]
+fn completion_at_line_start_offers_keywords_and_tags() {
+    let mut lsp = Lsp::start();
+    let uri = "untitled:Complete-1";
+    lsp.open(uri, "div\n  \n");
+
+    let reply = lsp.request("textDocument/completion", &pos_params(uri, 1, 2));
+    let items = as_list(get(&reply, "result").expect("result"));
+    let names = labels(items);
+    for expected in [
+        "if", "for", "def", "children", "include", "doctype", "div", "span", "section",
+    ] {
+        assert!(names.contains(&expected), "missing `{expected}`");
+    }
+    let kw = items
+        .iter()
+        .find(|i| get_str(i, "label") == Some("for"))
+        .unwrap();
+    assert_eq!(num(get(kw, "kind").expect("kind")), 14.0); // Keyword
+
+    // No context (cursor inside quoted text) → empty list, not tag spam.
+    lsp.change(uri, "div \"hi\"\n");
+    let reply = lsp.request("textDocument/completion", &pos_params(uri, 0, 6));
+    assert_eq!(get(&reply, "result"), Some(&Value::List(vec![])));
+    lsp.shutdown();
+}
+
 // ---- the corpus gate ------------------------------------------------------
 
 #[test]

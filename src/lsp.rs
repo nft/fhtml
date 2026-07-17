@@ -120,6 +120,8 @@ impl<W: Write> Server<W> {
             "initialize" => self.respond(id, initialize_result()),
             "textDocument/formatting" => self.formatting(id, params),
             "textDocument/documentSymbol" => self.document_symbol(id, params),
+            "textDocument/definition" => self.definition(id, params),
+            "textDocument/completion" => self.completion(id, params),
             "shutdown" => {
                 self.shutdown = true;
                 self.respond(id, Value::Null);
@@ -318,6 +320,153 @@ impl<W: Write> Server<W> {
         );
     }
 
+    /// Document text plus the request position as (1-based line, 1-based
+    /// char column) — the compiler's convention, converted from the wire's
+    /// 0-based UTF-16.
+    fn doc_position(&self, params: &Value) -> Option<(String, String, usize, usize)> {
+        let (uri, text) = self.doc_text(params)?;
+        let text = text.clone();
+        let pos = get(params, "position")?;
+        let line = match get(pos, "line") {
+            Some(Value::Number(n)) => *n as usize + 1,
+            _ => return None,
+        };
+        let ch16 = match get(pos, "character") {
+            Some(Value::Number(n)) => *n as usize,
+            _ => return None,
+        };
+        let col = char_index(source_line(&text, line), ch16) + 1;
+        Some((uri, text, line, col))
+    }
+
+    /// `textDocument/definition`: a `+call` name resolves to its `def` —
+    /// same file first, then across resolved includes (the analysis lists
+    /// own-file defs before included ones, so `find` gives that precedence).
+    /// An `include` path resolves to the file itself. Anything else: null.
+    fn definition(&mut self, id: &Value, params: &Value) {
+        let Some((uri, text, line, col)) = self.doc_position(params) else {
+            self.respond(id, Value::Null);
+            return;
+        };
+        let path = uri_to_path(&uri);
+        let a = analyze(&text, path.as_deref());
+        let result = if let Some(call) = a.calls.iter().find(|c| hit(&c.name_span, line, col)) {
+            match a.defs.iter().find(|d| d.name == call.name) {
+                Some(d) => match &d.file {
+                    None => location(&uri, range_value(&text, &d.name_span)),
+                    // Cross-file: the range converts against *that* file's
+                    // text (UTF-16 needs the real line).
+                    Some(f) => match std::fs::read_to_string(f) {
+                        Ok(ftext) => location(&path_to_uri(f), range_value(&ftext, &d.name_span)),
+                        Err(_) => Value::Null,
+                    },
+                },
+                None => Value::Null,
+            }
+        } else if let Some(inc) = a.includes.iter().find(|i| hit(&i.span, line, col)) {
+            match &inc.resolved {
+                Some(f) => location(
+                    &path_to_uri(f),
+                    obj(vec![("start", position(0, 0)), ("end", position(0, 0))]),
+                ),
+                None => Value::Null,
+            }
+        } else {
+            Value::Null
+        };
+        self.respond(id, result);
+    }
+
+    /// `textDocument/completion` — deliberately small (the plan's v1 set):
+    /// component names after `+`; a call's unsupplied parameter names inside
+    /// its `(…)`; statement keywords and a static HTML tag list at line
+    /// start. No per-tag attribute tables, no Tailwind classes (Tailwind
+    /// IntelliSense owns those).
+    fn completion(&mut self, id: &Value, params: &Value) {
+        let Some((uri, text, line, col)) = self.doc_position(params) else {
+            self.respond(id, Value::Null);
+            return;
+        };
+        let chars: Vec<char> = source_line(&text, line).chars().collect();
+        let cursor = (col - 1).min(chars.len());
+        // Start of the identifier being typed (may be empty).
+        let mut word = cursor;
+        while word > 0 && is_ident_char(chars[word - 1]) {
+            word -= 1;
+        }
+        let path = uri_to_path(&uri);
+
+        // After `+`: every component in scope (own defs + included).
+        if word > 0 && chars[word - 1] == '+' {
+            let a = analyze(&text, path.as_deref());
+            let mut seen: Vec<&str> = Vec::new();
+            let mut items = Vec::new();
+            for d in &a.defs {
+                if seen.contains(&d.name.as_str()) {
+                    continue;
+                }
+                seen.push(&d.name);
+                let sig: Vec<String> = d
+                    .params
+                    .iter()
+                    .map(|p| match &p.default {
+                        Some(v) => format!("{}={v}", p.name),
+                        None => p.name.clone(),
+                    })
+                    .collect();
+                items.push(completion_item(
+                    &d.name,
+                    3, // Function
+                    Some(format!("({})", sig.join(" "))),
+                    None,
+                ));
+            }
+            self.respond(id, Value::List(items));
+            return;
+        }
+
+        // Inside a call's parens: that def's parameters not yet supplied.
+        if let Some((call_name, paren)) = enclosing_call(&chars, word) {
+            let a = analyze(&text, path.as_deref());
+            let items = match a.defs.iter().find(|d| d.name == call_name) {
+                Some(d) => {
+                    let supplied = supplied_args(&chars, paren);
+                    d.params
+                        .iter()
+                        .filter(|p| !supplied.contains(&p.name))
+                        .map(|p| {
+                            completion_item(
+                                &p.name,
+                                5, // Field
+                                p.default.as_ref().map(|v| format!("= {v}")),
+                                Some(format!("{}=", p.name)),
+                            )
+                        })
+                        .collect()
+                }
+                None => Vec::new(),
+            };
+            self.respond(id, Value::List(items));
+            return;
+        }
+
+        // At line start (only indentation before the word): statement
+        // keywords and the static tag list.
+        if chars[..word].iter().all(|c| matches!(c, ' ' | '\t')) {
+            let mut items = Vec::new();
+            for kw in KEYWORDS {
+                items.push(completion_item(kw, 14, None, None)); // Keyword
+            }
+            for tag in TAGS {
+                items.push(completion_item(tag, 10, None, None)); // Property
+            }
+            self.respond(id, Value::List(items));
+            return;
+        }
+
+        self.respond(id, Value::List(Vec::new()));
+    }
+
     fn respond(&mut self, id: &Value, result: Value) {
         self.send(obj(vec![
             ("jsonrpc", str_val("2.0")),
@@ -444,6 +593,267 @@ fn end_of(text: &str) -> (usize, usize) {
 
 fn position(line: usize, character: usize) -> Value {
     obj(vec![("line", num(line)), ("character", num(character))])
+}
+
+/// The plan's line-start statement keywords (SPEC §10).
+const KEYWORDS: &[&str] = &[
+    "if", "elif", "else", "for", "empty", "def", "children", "include", "doctype",
+];
+
+/// Static HTML tag list for line-start completion — names only, no per-tag
+/// attribute tables (the plan's explicit non-goal).
+const TAGS: &[&str] = &[
+    "a",
+    "abbr",
+    "address",
+    "area",
+    "article",
+    "aside",
+    "audio",
+    "b",
+    "bdi",
+    "bdo",
+    "blockquote",
+    "body",
+    "br",
+    "button",
+    "canvas",
+    "caption",
+    "cite",
+    "code",
+    "col",
+    "colgroup",
+    "data",
+    "datalist",
+    "dd",
+    "del",
+    "details",
+    "dfn",
+    "dialog",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "embed",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "head",
+    "header",
+    "hgroup",
+    "hr",
+    "html",
+    "i",
+    "iframe",
+    "img",
+    "input",
+    "ins",
+    "kbd",
+    "label",
+    "legend",
+    "li",
+    "link",
+    "main",
+    "map",
+    "mark",
+    "menu",
+    "meta",
+    "meter",
+    "nav",
+    "noscript",
+    "object",
+    "ol",
+    "optgroup",
+    "option",
+    "output",
+    "p",
+    "picture",
+    "pre",
+    "progress",
+    "q",
+    "rp",
+    "rt",
+    "ruby",
+    "s",
+    "samp",
+    "script",
+    "search",
+    "section",
+    "select",
+    "slot",
+    "small",
+    "source",
+    "span",
+    "strong",
+    "style",
+    "sub",
+    "summary",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "template",
+    "textarea",
+    "tfoot",
+    "th",
+    "thead",
+    "time",
+    "title",
+    "tr",
+    "track",
+    "u",
+    "ul",
+    "var",
+    "video",
+    "wbr",
+];
+
+/// Does the (1-based line, 1-based char col) position sit on the span?
+/// The end is inclusive — a cursor at the end of a word still hits it.
+fn hit(span: &fhtml::Span, line: usize, col: usize) -> bool {
+    span.line == line && col >= span.col && col <= span.col + span.len
+}
+
+/// 0-based char index for a 0-based UTF-16 offset into `line` (clamped).
+fn char_index(line: &str, utf16: usize) -> usize {
+    let mut units = 0;
+    let mut idx = 0;
+    for c in line.chars() {
+        if units >= utf16 {
+            break;
+        }
+        units += c.len_utf16();
+        idx += 1;
+    }
+    idx
+}
+
+/// Identifier chars, matching the language's name grammar (SPEC §10.3).
+fn is_ident_char(c: char) -> bool {
+    c == '_' || c.is_ascii_alphanumeric()
+}
+
+/// If the cursor (char index `upto`) sits inside a `+name(…)` argument
+/// list, the call's name and the index of its opening paren. Walks the line
+/// quote-aware, keeping a stack of unclosed parens; the innermost one
+/// directly preceded by `+name` wins (parens deeper in are expression
+/// grouping).
+fn enclosing_call(chars: &[char], upto: usize) -> Option<(String, usize)> {
+    let mut open: Vec<usize> = Vec::new();
+    let mut quote: Option<char> = None;
+    for (i, &c) in chars.iter().enumerate().take(upto) {
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' => quote = Some(c),
+                '(' => open.push(i),
+                ')' => {
+                    open.pop();
+                }
+                _ => {}
+            },
+        }
+    }
+    for &paren in open.iter().rev() {
+        let mut start = paren;
+        while start > 0 && is_ident_char(chars[start - 1]) {
+            start -= 1;
+        }
+        if start < paren && start > 0 && chars[start - 1] == '+' {
+            return Some((chars[start..paren].iter().collect(), paren));
+        }
+    }
+    None
+}
+
+/// Argument names already written inside the call parens opened at `paren`:
+/// identifiers directly followed by a single `=`, at the call's own nesting
+/// level (quote- and brace-aware — `=` inside `{…}` expressions or nested
+/// parens doesn't count).
+fn supplied_args(chars: &[char], paren: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0usize; // braces + nested parens
+    let mut quote: Option<char> = None;
+    let mut i = paren + 1;
+    while i < chars.len() {
+        let c = chars[i];
+        match quote {
+            Some(q) => {
+                if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' => quote = Some(c),
+                '{' | '(' => depth += 1,
+                '}' => depth = depth.saturating_sub(1),
+                ')' if depth == 0 => break,
+                ')' => depth -= 1,
+                _ if depth == 0 && is_ident_char(c) && !c.is_ascii_digit() => {
+                    let start = i;
+                    while i < chars.len() && is_ident_char(chars[i]) {
+                        i += 1;
+                    }
+                    if chars.get(i) == Some(&'=') && chars.get(i + 1) != Some(&'=') {
+                        out.push(chars[start..i].iter().collect());
+                    }
+                    continue;
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    out
+}
+
+fn location(uri: &str, range: Value) -> Value {
+    obj(vec![("uri", str_val(uri)), ("range", range)])
+}
+
+fn completion_item(
+    label: &str,
+    kind: usize,
+    detail: Option<String>,
+    insert: Option<String>,
+) -> Value {
+    let mut pairs = vec![("label", str_val(label)), ("kind", num(kind))];
+    if let Some(d) = &detail {
+        pairs.push(("detail", str_val(d)));
+    }
+    if let Some(t) = &insert {
+        pairs.push(("insertText", str_val(t)));
+    }
+    obj(pairs)
+}
+
+/// Filesystem path → `file://` URI, percent-encoding everything outside the
+/// unreserved set (and `/`). The inverse of [`uri_to_path`].
+fn path_to_uri(path: &std::path::Path) -> String {
+    let mut out = String::from("file://");
+    for b in path.to_string_lossy().bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                out.push(b as char)
+            }
+            _ => {
+                let _ = write!(out, "%{b:02X}");
+            }
+        }
+    }
+    out
 }
 
 /// `file://` URI → filesystem path (percent-decoded, authority dropped).

@@ -7,13 +7,22 @@
 # npm-pack tarball installed into a scratch project and cold-start smoked
 # on both loaders — and only then `npm publish`.
 #
-#   ./release.sh --dry-run   everything except the publish
+#   ./release.sh --dry-run        everything except the publish
+#   ./release.sh --publish-only   skip the gates, publish the built artifact —
+#                                 for finishing a release whose gates just
+#                                 passed. Run it from a real terminal: with a
+#                                 TTY, npm's 2FA opens the browser (passkey)
+#                                 instead of demanding a typed --otp.
 set -eu
 
 cd "$(dirname "$0")"
 
 dry=0
-[ "${1:-}" = "--dry-run" ] && dry=1
+publish_only=0
+case "${1:-}" in
+  --dry-run) dry=1 ;;
+  --publish-only) publish_only=1 ;;
+esac
 
 # ---- version parity: package.json == core crate == wasm crate -------------
 
@@ -25,6 +34,15 @@ if [ "$core" != "$pkg" ] || [ "$core" != "$wasm" ]; then
   exit 1
 fi
 echo "release: @fhtml/core $pkg"
+
+if [ "$publish_only" = 1 ]; then
+  if [ ! -f fhtml.wasm ]; then
+    echo "no fhtml.wasm — run ./release.sh (the full gate) first" >&2
+    exit 1
+  fi
+  npm publish --access public
+  exit 0
+fi
 
 # ---- the full gate (builds the wasm and copies it to ./fhtml.wasm) --------
 

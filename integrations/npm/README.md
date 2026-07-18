@@ -108,4 +108,7 @@ to the native CLI for `render` (min and pretty), `compileToJs`, and
 crate), runs the full test gate, `npm pack`s and cold-start-smokes the
 tarball in a scratch project (both loaders), then publishes. The
 artifact is built here, at release time — never on install.
-`--dry-run` stops before the publish.
+`--dry-run` stops before the publish; `--publish-only` skips straight
+to the publish of an already-gated artifact (run it from a real
+terminal so npm's 2FA can open the browser instead of demanding
+`--otp`).

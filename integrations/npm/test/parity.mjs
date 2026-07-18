@@ -10,6 +10,7 @@ import { basename, join } from "node:path";
 import assert from "node:assert/strict";
 
 import { init, render, compileToJs, format } from "../index.js";
+import { loadFiles } from "../node.js";
 
 const bin = process.env.FHTML_BIN;
 assert.ok(bin, "FHTML_BIN must point at the native CLI");
@@ -43,19 +44,25 @@ let checks = 0;
 for (const path of corpus) {
   const src = readFileSync(path, "utf8");
   const name = basename(path);
-  const files = { [name]: src };
+  // Corpus files may include others (the site pages share a layout) —
+  // loadFiles builds the closure exactly like the compiler resolves it.
+  const { files, entry } = loadFiles(path);
 
   // render, min and pretty — stdout is the exact html (print!, no newline)
-  assert.equal(render(files, { mode: "min" }).html, native([path]), `${name}: min`);
   assert.equal(
-    render(files, { mode: "pretty" }).html,
+    render(files, { entry, mode: "min" }).html,
+    native([path]),
+    `${name}: min`,
+  );
+  assert.equal(
+    render(files, { entry, mode: "pretty" }).html,
     native(["--pretty", path]),
     `${name}: pretty`,
   );
 
   // the JS target
   assert.equal(
-    compileToJs(files, { mode: "min" }).js,
+    compileToJs(files, { entry, mode: "min" }).js,
     native(["--target=js", path]),
     `${name}: js`,
   );

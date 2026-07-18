@@ -11,11 +11,17 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
+    "./node": {
+      "types": "./node.d.ts",
+      "default": "./node.js"
+    },
     "./fhtml.wasm": "./fhtml.wasm"
   },
   "files": [
     "index.js",
     "index.d.ts",
+    "node.js",
+    "node.d.ts",
     "fhtml.wasm",
     "README.md"
   ],

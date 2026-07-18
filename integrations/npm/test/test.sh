@@ -28,4 +28,5 @@ export FHTML_BIN="$repo/target/debug/fhtml"
 
 node raw-abi.mjs
 node api.mjs
+node node-api.mjs
 node parity.mjs

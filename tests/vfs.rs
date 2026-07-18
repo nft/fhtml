@@ -332,6 +332,14 @@ fn corpus_renders_identically_through_a_mem_vfs() {
             let name = path.file_name().unwrap().to_str().unwrap();
             let mut m = MemVfs::new();
             m.add(name, src.as_str());
+            // Corpus files may include others (the site pages share a
+            // layout) — mirror the closure into the map, keyed relative
+            // to the entry's directory.
+            let dir = fs::canonicalize(path.parent().unwrap()).unwrap();
+            for dep in deps_from(&src, Some(&path)).unwrap() {
+                let key = dep.strip_prefix(&dir).unwrap_or(&dep);
+                m.add(key, fs::read_to_string(&dep).unwrap().as_str());
+            }
             for mode in [Mode::Min, Mode::Pretty] {
                 let disk =
                     render_opts_from(&src, Some(&path), &Value::Null, &Value::Null, &opts(mode))

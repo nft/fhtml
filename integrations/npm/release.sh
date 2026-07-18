@@ -65,6 +65,22 @@ try {
 console.log(`smoke (default loader): ok, fhtml ${version()}`);
 EOF
 
+# The node subpath: renderFile builds the include closure from disk.
+cat > "$tmp/smoke-node.mjs" << 'EOF'
+import { mkdirSync, writeFileSync } from "node:fs";
+import assert from "node:assert/strict";
+import { init } from "@fhtml/core";
+import { renderFile } from "@fhtml/core/node";
+
+await init();
+mkdirSync("views", { recursive: true });
+writeFileSync("views/lib.fhtml", 'def badge(label)\n  span rounded "{label}"\n');
+writeFileSync("views/page.fhtml", "include ./lib\n\n+badge(label={name})\n");
+const { html } = renderFile("views/page.fhtml", { data: { name: "hi" } });
+assert.equal(html, '<span class="rounded">hi</span>');
+console.log("smoke (node subpath): ok");
+EOF
+
 # Workers-style: raw bytes into init() — fresh process, no file: loading.
 cat > "$tmp/smoke-bytes.mjs" << 'EOF'
 import { readFile } from "node:fs/promises";
@@ -85,6 +101,7 @@ here=$(pwd)
   cd "$tmp"
   npm install --no-audit --no-fund --silent "$here/$tarball"
   node smoke.mjs
+  node smoke-node.mjs
   node smoke-bytes.mjs
 )
 

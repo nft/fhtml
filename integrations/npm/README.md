@@ -50,6 +50,24 @@ The wasm is a *build-time* compiler. For serving, prefer
 `compileToJs` at build time and run the emitted module — it is plain
 ESM with no runtime dependency on this package.
 
+### On Node: skip the file map
+
+The `@fhtml/core/node` subpath does the map-building for you — it reads
+a file and its transitive `include`s from disk (include discovery runs
+through the compiler's own `analyze`, so path semantics can't drift):
+
+```js
+import { init } from "@fhtml/core";
+import { renderFile, compileFileToJs, analyzeFile, loadFiles } from "@fhtml/core/node";
+
+await init();
+const { html } = renderFile("views/page.fhtml", { data: { user: "Erin" } });
+```
+
+`loadFiles(path)` returns the raw `{files, entry}` pair for custom
+flows. The subpath is Node-only by design — the root export never
+imports `node:*`, so browser and edge bundles stay clean.
+
 ### Edge runtimes
 
 Where the default loader can't reach the file (no `file:` URL, no

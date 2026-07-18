@@ -1,0 +1,132 @@
+// fhtml.dev changelog — written in fhtml, built by `fhtml build` (dogfood).
+// Mirrors CHANGELOG.md at the repo root; keep the two in sync when either changes.
+include _inc/layout
+doctype
+html(lang=en)
+  +page_head(title="fhtml changelog — releases & what shipped" desc="Release history for fhtml: what shipped in each version, from the 0.1.0 initial release onward." path="/changelog.html" repo=repo_url site=site_url)
+  body min-h-screen bg-white text-slate-900 antialiased selection:bg-indigo-200
+    +topnav(active="changelog" repo=repo_url)
+
+    . mx-auto max-w-3xl px-6 py-16
+      header border-b border-slate-200 pb-8
+        p text-sm font-semibold uppercase tracking-wider text-indigo-600 "Releases"
+        h1 mt-2 text-4xl font-bold tracking-tight "Changelog"
+        p mt-4 text-lg leading-8 text-slate-600
+          | Notable changes to fhtml, newest first. The canonical source is
+          |
+          a(href="{repo_url}/blob/main/CHANGELOG.md") font-medium text-indigo-600 hover:text-indigo-500 "CHANGELOG.md"
+          | ; releases follow
+          |
+          a(href="https://keepachangelog.com/en/1.1.0/") font-medium text-indigo-600 hover:text-indigo-500 "Keep a Changelog"
+          |  and semantic versioning.
+
+      . mt-12 space-y-12
+
+        // ── 0.1.0 ──
+        section
+          . flex flex-wrap items-baseline gap-x-3 gap-y-1
+            h2 text-2xl font-semibold tracking-tight "0.1.0"
+            span rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700 "initial release"
+            span text-sm text-slate-400 "2026-07-18"
+          p mt-4 leading-7 text-slate-600
+            | The first public release. The compiler, the template layer, components, the
+            | tooling, and the JavaScript build are all in place; the core stays
+            | zero-dependency.
+
+          h3 mt-8 text-sm font-semibold uppercase tracking-wider text-slate-500 "Added"
+          ul mt-4 space-y-3
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                span font-semibold text-slate-900 "Markup layer"
+                |  — the whitespace language that compiles 1:1 to HTML: nesting by
+                | indentation, bare tokens as classes, attributes in parens,
+                | text and raw passthrough, comments, and doctype.
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                span font-semibold text-slate-900 "Template layer"
+                |  — interpolation over a small closed expression language,
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "if"
+                | /
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "for"
+                | /
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "empty"
+                | , rendered against JSON data.
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                span font-semibold text-slate-900 "Composition"
+                |  —
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "def"
+                |  components with a
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "children"
+                |  slot,
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "+call"
+                |  instantiation, and
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "include"
+                | .
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-slate-800 "--target=js"
+                |  backend — a self-contained
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "(data, ctx) => string"
+                |  ES module per file, byte-identical to the native renderer.
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                span font-semibold text-slate-900 "Tooling"
+                |  —
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "fhtml fmt"
+                | (canonical formatter),
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "html2fhtml"
+                | (reverse converter with round-trip
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "--check"
+                | ), and opt-in class shorthand.
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-slate-800 "@fhtml/core"
+                |  — the compiler as WebAssembly with dependency-free ESM glue, plus
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "vite-plugin-fhtml"
+                | , a language server, and a VS Code extension.
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                span font-semibold text-slate-900 "Tailwind v4"
+                |  — verified
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@source"
+                |  scanning of
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
+                |  directly, and a 48-component benchmark harness.
+
+          h3 mt-8 text-sm font-semibold uppercase tracking-wider text-slate-500 "Benchmarks"
+          dl mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3
+            . rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm
+              dd bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-3xl font-bold text-transparent "−14%"
+              dt mt-1 text-sm text-slate-600 "tokens vs pretty HTML"
+            . rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm
+              dd bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-3xl font-bold text-transparent "48/48"
+              dt mt-1 text-sm text-slate-600 "round-trip DOM fidelity"
+            . rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm
+              dd bg-gradient-to-br from-indigo-600 to-fuchsia-600 bg-clip-text text-3xl font-bold text-transparent "90.6%"
+              dt mt-1 text-sm text-slate-600 "model completions compile"
+          p mt-4 text-sm text-slate-500
+            a(href="{repo_url}/blob/main/bench/RESULTS.md") font-medium text-indigo-600 hover:text-indigo-500 "Full benchmark results →"
+
+    +foot(repo=repo_url)

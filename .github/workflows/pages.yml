@@ -51,11 +51,14 @@ jobs:
         run: ./site/build.sh
 
       - name: Sanity-check output DOM
-        # The page is fhtml's own dogfood; if its compiled DOM doesn't round-trip,
+        # The site is fhtml's own dogfood; if any compiled page doesn't round-trip,
         # fail the deploy rather than publish something broken. Needs the converter.
         run: |
           cargo build --release --features convert --bin html2fhtml
-          ./target/release/html2fhtml --check dist/index.html
+          for page in dist/*.html; do
+            echo "· checking $page"
+            ./target/release/html2fhtml --check "$page"
+          done
 
       - uses: actions/upload-pages-artifact@v3
         with:

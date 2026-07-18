@@ -4,8 +4,10 @@
 
 <p align="center">
   <a href="https://nft.github.io/fhtml/"><b>Website</b></a> ·
+  <a href="https://nft.github.io/fhtml/docs.html">Docs</a> ·
   <a href="SPEC.md">Spec</a> ·
-  <a href="bench/RESULTS.md">Benchmark</a>
+  <a href="bench/RESULTS.md">Benchmark</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 # fhtml — Fluid HTML

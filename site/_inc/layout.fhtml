@@ -1,0 +1,204 @@
+// Shared chrome for every fhtml.dev page — head, top nav, footer, and the
+// reusable code-card / command-row / copy-script components. This file holds
+// ONLY `def`s (no top-level markup), so `include _inc/layout` just adds them to
+// the namespace and the file's own compiled output (dist/_inc/layout.html) is
+// empty — build.sh deletes dist/_inc after the build.
+//
+// `def`s close over nothing (SPEC §10.3): the injected data (site_url, repo_url
+// from site/data.json via --data) is NOT visible inside a def, so every page
+// passes it in explicitly — `+topnav(active="docs" repo=repo_url)`.
+
+// ─── <head> ─────────────────────────────────────────────────────────────────
+// `path` is the page's absolute path under the site (e.g. "/" or "/docs.html"),
+// used only for the canonical + og:url tags; every other asset stays relative so
+// the page works under the /fhtml/ subpath and a future custom domain alike.
+def page_head(title desc path repo site)
+  head
+    meta(charset=utf-8)
+    meta(name=viewport content="width=device-width, initial-scale=1")
+    title "{title}"
+    meta(name=description content="{desc}")
+    link(rel=canonical href="{site}{path}")
+    link(rel=icon type=image/svg+xml href=static/favicon.svg)
+    link(rel=stylesheet href=site.css)
+    meta(property="og:type" content=website)
+    meta(property="og:title" content="{title}")
+    meta(property="og:description" content="{desc}")
+    meta(property="og:url" content="{site}{path}")
+    meta(property="og:image" content="{site}/static/fhtml.png")
+    meta(name="twitter:card" content=summary_large_image)
+    meta(name="twitter:title" content="{title}")
+    meta(name="twitter:description" content="{desc}")
+    meta(name="twitter:image" content="{site}/static/fhtml.png")
+
+// ─── Sticky top nav ─────────────────────────────────────────────────────────
+def topnav(active repo)
+  header sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur
+    . mx-auto flex h-16 max-w-6xl items-center justify-between gap-x-4 px-4 sm:px-6
+      a(href=index.html aria-label="fhtml home") flex shrink-0 items-center gap-2
+        img(src=static/logo.svg alt="" width=31 height=28 aria-hidden=true) h-7 w-auto
+        span font-mono text-lg font-bold tracking-tight text-slate-900 "fhtml"
+      nav flex items-center gap-x-4 text-[13px] font-medium sm:gap-x-6 sm:text-sm
+        a(href=index.html) {active == 'home' ? 'text-indigo-600' : 'text-slate-600 hover:text-slate-900'} "Home"
+        a(href=docs.html) {active == 'docs' ? 'text-indigo-600' : 'text-slate-600 hover:text-slate-900'} "Docs"
+        a(href=install.html) {active == 'install' ? 'text-indigo-600' : 'text-slate-600 hover:text-slate-900'} "Install"
+        a(href=changelog.html) {active == 'changelog' ? 'text-indigo-600' : 'text-slate-600 hover:text-slate-900'} "Changelog"
+        a(href="{repo}" aria-label=GitHub) shrink-0 text-slate-500 hover:text-slate-900
+          svg(viewBox="0 0 16 16" fill=currentColor aria-hidden=true) h-5 w-5 > path(d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z")
+
+// ─── Footer ─────────────────────────────────────────────────────────────────
+def foot(repo)
+  footer border-t border-slate-200 bg-white
+    . mx-auto flex max-w-6xl flex-col items-center gap-4 px-6 py-12 sm:flex-row sm:justify-between
+      p text-sm text-slate-500
+        | fhtml — Fluid Hypertext Markup Language.
+        |
+        span text-slate-400 "MIT licensed."
+      nav flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-medium text-slate-600
+        a(href=docs.html) hover:text-indigo-600 "Docs"
+        a(href=install.html) hover:text-indigo-600 "Install"
+        a(href=changelog.html) hover:text-indigo-600 "Changelog"
+        a(href="{repo}") hover:text-indigo-600 "GitHub"
+        a(href="{repo}/blob/main/SPEC.md") hover:text-indigo-600 "Spec"
+        a(href="{repo}/blob/main/bench/RESULTS.md") hover:text-indigo-600 "Benchmark"
+
+// ─── Reusable code card ─────────────────────────────────────────────────────
+// A dark panel with a filename/lang chrome bar; the call's indented `|` block
+// becomes the code body (children slot). Built with --min so the `|` whitespace
+// is preserved verbatim inside <pre>.
+def code_card(file lang)
+  . overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-sm
+    . flex items-center justify-between border-b border-white/10 px-4 py-2.5
+      span font-mono text-xs font-semibold uppercase tracking-wider text-indigo-300 "{file}"
+      span rounded-full bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-200 "{lang}"
+    pre w-full min-w-0 overflow-x-auto px-4 py-4 font-mono text-[12.5px] leading-relaxed text-slate-100 > code(data-hl="{lang}")
+      children
+
+// ─── Copyable command row ───────────────────────────────────────────────────
+def cmd(text note)
+  . group flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-left font-mono text-sm text-slate-100 shadow-sm
+    span shrink-0 select-none text-slate-500 "$"
+    code min-w-0 flex-1 overflow-x-auto whitespace-nowrap "{text}"
+    span shrink-0 text-xs text-slate-500 "{note}"
+    button(type=button data-copy="{text}" aria-label="Copy command") shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-white/10 hover:text-white
+      svg(viewBox="0 0 24 24" fill=none aria-hidden=true) h-4 w-4 > path(d="M9 9V6a2 2 0 012-2h7a2 2 0 012 2v7a2 2 0 01-2 2h-3M5 9h7a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round)
+
+// ─── Syntax highlighting ────────────────────────────────────────────────────
+// Progressive enhancement: a self-contained highlighter for fhtml's own syntax
+// (and the HTML it compiles to). Every `code[data-hl]` block is tokenized on load
+// and re-rendered with colored spans; without JS the plain monospace still reads.
+// `style`/`script` are raw-text (SPEC §6.3) — `|` lines are verbatim bytes.
+def highlight_script()
+  style
+    | .hl-com{color:#64748b;font-style:italic}
+    | .hl-pipe{color:#64748b}
+    | .hl-tag{color:#7dd3fc}
+    | .hl-kw{color:#f472b6}
+    | .hl-call{color:#fbbf24}
+    | .hl-str{color:#86efac}
+    | .hl-int{color:#e879f9}
+    | .hl-attr{color:#a5b4fc}
+  script
+    | (function () {
+    |   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    |   var KW={def:1,'if':1,'for':1,empty:1,'else':1,'in':1,include:1,doctype:1,children:1};
+    |   function hlText(s){
+    |     var out='',i=0,n=s.length;
+    |     while(i<n){
+    |       if(s[i]==='\\'&&s[i+1]==='{'){out+=esc('\\{');i+=2;continue;}
+    |       if(s[i]==='{'){var j=s.indexOf('}',i);j=j<0?n:j+1;out+='<span class="hl-int">'+esc(s.slice(i,j))+'</span>';i=j;continue;}
+    |       var k=i;while(k<n&&!(s[k]==='{')&&!(s[k]==='\\'&&s[k+1]==='{'))k++;
+    |       out+=esc(s.slice(i,k));i=k;
+    |     }
+    |     return out;
+    |   }
+    |   function hlAttrs(s){
+    |     var inner=s.slice(1,s.length-1),parts=[],buf='',q=false;
+    |     for(var i=0;i<inner.length;i++){var ch=inner[i];
+    |       if(ch==='"'){q=!q;buf+=ch;continue;}
+    |       if(ch===' '&&!q){if(buf){parts.push(buf);buf='';}parts.push(' ');continue;}
+    |       buf+=ch;
+    |     }
+    |     if(buf)parts.push(buf);
+    |     var out='<span class="hl-pipe">(</span>';
+    |     for(var p=0;p<parts.length;p++){var t=parts[p];
+    |       if(t===' '){out+=' ';continue;}
+    |       var eq=t.indexOf('=');
+    |       if(eq<0){out+='<span class="hl-attr">'+esc(t)+'</span>';continue;}
+    |       out+='<span class="hl-attr">'+esc(t.slice(0,eq))+'</span>=<span class="hl-str">'+esc(t.slice(eq+1))+'</span>';
+    |     }
+    |     return out+'<span class="hl-pipe">)</span>';
+    |   }
+    |   function classify(w,first){
+    |     if(w==='>'||w==='\\')return '<span class="hl-pipe">'+esc(w)+'</span>';
+    |     if(KW[w])return '<span class="hl-kw">'+esc(w)+'</span>';
+    |     if(w[0]==='+')return '<span class="hl-call">'+esc(w)+'</span>';
+    |     if(first)return '<span class="hl-tag">'+esc(w)+'</span>';
+    |     return esc(w);
+    |   }
+    |   function hlTokens(s){
+    |     var out='',i=0,n=s.length,first=true;
+    |     while(i<n){var c=s[i];
+    |       if(c===' '){out+=' ';i++;continue;}
+    |       if(c==='"'){var j=i+1;while(j<n){if(s[j]==='\\')j+=2;else if(s[j]==='"'){j++;break;}else j++;}out+='<span class="hl-str">'+esc(s.slice(i,j))+'</span>';i=j;first=false;continue;}
+    |       if(c==='('){var d=1,j=i+1;while(j<n&&d>0){if(s[j]==='(')d++;else if(s[j]===')')d--;j++;}out+=hlAttrs(s.slice(i,j));i=j;first=false;continue;}
+    |       if(c==='{'){var j=s.indexOf('}',i);j=j<0?n:j+1;out+='<span class="hl-int">'+esc(s.slice(i,j))+'</span>';i=j;first=false;continue;}
+    |       var j=i;while(j<n&&' "({'.indexOf(s[j])<0)j++;
+    |       var w=s.slice(i,j);out+=classify(w,first);i=j;first=(w==='>');
+    |     }
+    |     return out;
+    |   }
+    |   function hlTagInner(s){
+    |     var inner=s.slice(1,s.length-1),closing=inner[0]==='/',body=closing?inner.slice(1):inner;
+    |     var mm=/^([a-zA-Z0-9-]+)/.exec(body),name=mm?mm[1]:'';
+    |     var rest=esc(body.slice(name.length));
+    |     rest=rest.replace(/([a-zA-Z-]+)="([^"]*)"/g,function(_,a,v){return '<span class="hl-attr">'+a+'</span>=<span class="hl-str">"'+v+'"</span>';});
+    |     return '<span class="hl-tag">&lt;'+(closing?'/':'')+name+'</span>'+rest+'<span class="hl-tag">&gt;</span>';
+    |   }
+    |   function hlHtml(line){
+    |     var out='',i=0,n=line.length;
+    |     while(i<n){
+    |       var lt=line.indexOf('<',i);
+    |       if(lt<0){out+=esc(line.slice(i));break;}
+    |       out+=esc(line.slice(i,lt));
+    |       var gt=line.indexOf('>',lt);
+    |       if(gt<0){out+=esc(line.slice(lt));break;}
+    |       out+=hlTagInner(line.slice(lt,gt+1));i=gt+1;
+    |     }
+    |     return out;
+    |   }
+    |   function hlFhtml(line){
+    |     var m=/^(\s*)([\s\S]*)$/.exec(line),ind=m[1],rest=m[2];
+    |     if(!rest)return ind;
+    |     if(rest.slice(0,2)==='//')return ind+'<span class="hl-com">'+esc(rest)+'</span>';
+    |     if(rest[0]==='|')return ind+'<span class="hl-pipe">|</span>'+hlText(rest.slice(1));
+    |     if(rest[0]==='<')return ind+hlHtml(rest);
+    |     return ind+hlTokens(rest);
+    |   }
+    |   function run(){
+    |     document.querySelectorAll('code[data-hl="fhtml"],code[data-hl="html"]').forEach(function(el){
+    |       try{
+    |         var mode=el.getAttribute('data-hl'),fn=mode==='html'?hlHtml:hlFhtml;
+    |         el.innerHTML=el.textContent.replace(/\n$/,'').split('\n').map(fn).join('\n');
+    |       }catch(e){}
+    |     });
+    |   }
+    |   if(document.readyState!=='loading')run();else document.addEventListener('DOMContentLoaded',run);
+    | })();
+
+// ─── Copy-to-clipboard enhancement ──────────────────────────────────────────
+// Progressive enhancement for every [data-copy] button (~20 lines, no framework;
+// the page works without it). `script` is raw text (SPEC §6.3) — `|` lines emit
+// verbatim, no escaping, no `{…}` interpolation.
+def copy_script()
+  script
+    | document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    |   btn.addEventListener('click', function () {
+    |     navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+    |       var original = btn.innerHTML;
+    |       btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" class="h-4 w-4"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    |       btn.classList.add('text-green-400');
+    |       setTimeout(function () { btn.innerHTML = original; btn.classList.remove('text-green-400'); }, 1500);
+    |     });
+    |   });
+    | });

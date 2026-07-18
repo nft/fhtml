@@ -1,9 +1,9 @@
-/* Tailwind v4 entry for the fhtml landing page.
+/* Tailwind v4 entry for the fhtml.dev docs site.
  *
- * `source(none)` disables filesystem auto-detection; the single explicit
- * @source below points the scanner straight at the compiled-from source.
- * Tailwind reads class candidates from the .fhtml directly — the same
- * mechanism verified in bench/tailwind_scan.sh — so no HTML intermediate is
- * needed for styling. Build: see site/build.sh. */
+ * `source(none)` disables filesystem auto-detection; the explicit @source below
+ * points the scanner straight at every .fhtml source (pages plus the shared
+ * _inc/ partials). Tailwind reads class candidates from the .fhtml directly —
+ * the same mechanism verified in bench/tailwind_scan.sh — so no HTML
+ * intermediate is needed for styling. Build: see site/build.sh. */
 @import "tailwindcss" source(none);
-@source "./index.fhtml";
+@source "./**/*.fhtml";

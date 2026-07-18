@@ -1,0 +1,136 @@
+// fhtml.dev install — written in fhtml, built by `fhtml build` (dogfood).
+// Shared chrome + the cmd/code_card/copy_script components live in _inc/layout.fhtml.
+include _inc/layout
+doctype
+html(lang=en)
+  +page_head(title="Install fhtml — compiler, npm, Vite, Tailwind & editors" desc="Install the fhtml compiler with cargo, use it from JavaScript via @fhtml/core, wire up the Vite plugin and Tailwind, and set up editor support." path="/install.html" repo=repo_url site=site_url)
+  body min-h-screen bg-white text-slate-900 antialiased selection:bg-indigo-200
+    +topnav(active="install" repo=repo_url)
+
+    . mx-auto max-w-3xl px-6 py-16
+      header border-b border-slate-200 pb-8
+        p text-sm font-semibold uppercase tracking-wider text-indigo-600 "Get started"
+        h1 mt-2 text-4xl font-bold tracking-tight "Install"
+        p mt-4 text-lg leading-8 text-slate-600
+          | A Rust toolchain is the only requirement for the compiler, which pulls in
+          |
+          span font-semibold text-slate-900 "zero dependencies"
+          | . Prefer JavaScript? Skip to
+          |
+          a(href=#javascript) font-medium text-indigo-600 hover:text-indigo-500 "@fhtml/core"
+          | .
+
+      . mt-12 space-y-14
+
+        // ── Compiler ──
+        section(id=compiler) scroll-mt-24
+          h2 text-2xl font-semibold tracking-tight "The compiler"
+          p mt-3 leading-7 text-slate-600
+            | Install straight from the repository with cargo. The second command adds the
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "html2fhtml"
+            |  converter behind its feature flag.
+          . mt-5 space-y-3
+            +cmd(text="cargo install --path ." note="the compiler")
+            +cmd(text="cargo install --path . --features convert" note="+ html2fhtml")
+          p mt-4 text-sm leading-6 text-slate-500
+            | Verify it:
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "echo 'p \"hi\"' | fhtml"
+            |  should print
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "<p>hi</p>"
+            | .
+
+        // ── First build ──
+        section(id=first-build) scroll-mt-24
+          h2 text-2xl font-semibold tracking-tight "Your first build"
+          p mt-3 leading-7 text-slate-600
+            | Write a
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
+            |  file and compile it. See the
+            |
+            a(href=docs.html) font-medium text-indigo-600 hover:text-indigo-500 "docs"
+            |  for the whole language.
+          . mt-5
+            +code_card(file="terminal" lang="sh")
+              | echo 'section p-8 > h1 text-2xl font-bold "Hello"' > hello.fhtml
+              | fhtml hello.fhtml
+              | # → <section class="p-8"><h1 class="text-2xl font-bold">Hello</h1></section>
+
+        // ── JavaScript ──
+        section(id=javascript) scroll-mt-24
+          h2 text-2xl font-semibold tracking-tight "JavaScript & WASM"
+          p mt-3 leading-7 text-slate-600
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core"
+            |  is the compiler as WebAssembly plus dependency-free ESM glue, for Node,
+            | browsers, and edge runtimes where a native binary can't go.
+          . mt-5
+            +cmd(text="npm install @fhtml/core" note="node · browser · edge")
+          . mt-4
+            +code_card(file="app.js" lang="js")
+              | import \{ init, render } from "@fhtml/core";
+              |
+              | await init();
+              | const \{ html } = render('div grid\n  span rounded "hi"\n');
+
+        // ── Vite ──
+        section(id=vite) scroll-mt-24
+          h2 text-2xl font-semibold tracking-tight "Vite"
+          p mt-3 leading-7 text-slate-600
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "vite-plugin-fhtml"
+            |  lets you import
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
+            |  files directly. It's dependency-free and shells out to the installed
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "fhtml"
+            |  binary.
+          . mt-5
+            +code_card(file="vite.config.js" lang="js")
+              | import fhtml from "vite-plugin-fhtml";
+              | export default \{ plugins: [fhtml()] };
+
+        // ── Tailwind ──
+        section(id=tailwind) scroll-mt-24
+          h2 text-2xl font-semibold tracking-tight "Tailwind"
+          p mt-3 leading-7 text-slate-600
+            | Tailwind v4 scans
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
+            |  sources directly — the classes are plain space-separated tokens. Add one
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@source"
+            |  line to your CSS entry.
+          . mt-5
+            +code_card(file="input.css" lang="css")
+              | @import "tailwindcss";
+              | @source "./src/**/*.fhtml";
+
+        // ── Editors ──
+        section(id=editors) scroll-mt-24
+          h2 text-2xl font-semibold tracking-tight "Editor support"
+          p mt-3 leading-7 text-slate-600
+            | A TextMate grammar and VS Code extension live in
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "editors/vscode/"
+            | (no marketplace listing yet — symlink into
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "~/.vscode/extensions"
+            | , see its README). The grammar covers the full language including the
+            | template layer, and a language server backs diagnostics, formatting,
+            | symbols, definitions, and completion.
+
+      . mt-14 rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center
+        h2 text-xl font-semibold tracking-tight "Installed?"
+        p mt-2 text-slate-600 "Head to the docs to learn the language, or skim what shipped."
+        . mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row
+          a(href=docs.html) inline-flex items-center gap-x-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 "Read the docs"
+          a(href=changelog.html) inline-flex items-center gap-x-2 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 "Changelog"
+
+    +foot(repo=repo_url)
+    +highlight_script()
+    +copy_script()

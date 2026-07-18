@@ -43,12 +43,13 @@ fi
 
 # Guard: the site serves from a /fhtml/ subpath, so every asset reference must
 # be relative. A root-absolute href/src would 404 under the subpath. Real fhtml
-# asset attributes are unquoted barewords (href=site.css); this page also *displays*
+# asset attributes are unquoted barewords (href=site.css); the pages also *display*
 # markup samples containing `href=/…`, but those always sit inside `|` text blocks
 # or "quoted strings" — both stripped here so only genuine attributes are scanned.
 # (og:/canonical URLs are absolute-by-design, built from site_url, and quoted.)
-if grep -vE '^[[:space:]]*\|' site/index.fhtml | sed 's/"[^"]*"//g' | grep -nE '(href|src)=/'; then
-  echo "error: root-absolute asset path in site/index.fhtml (see match above)" >&2
+# Scans every .fhtml under site/ (pages + _inc/ partials).
+if grep -rvE '^[[:space:]]*\|' site --include='*.fhtml' | sed 's/"[^"]*"//g' | grep -nE '(href|src)=/'; then
+  echo "error: root-absolute asset path in a site/*.fhtml file (see match above)" >&2
   echo "       use a relative path so the page works under the /fhtml/ subpath." >&2
   exit 1
 fi
@@ -56,8 +57,13 @@ fi
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-echo "· fhtml  → $OUT/index.html"
+echo "· fhtml  → $OUT/*.html"
 $FHTML_BIN build site/ -o "$OUT" --min --data site/data.json
+
+# _inc/ holds def-only partials (shared head/nav/footer/components). `fhtml build`
+# compiles every .fhtml it finds, so those emit empty dist/_inc/*.html files that
+# nothing links to — drop them so only real pages ship.
+rm -rf "$OUT/_inc"
 
 echo "· tailwind → $OUT/site.css   ($TW)"
 "$TW" -i site/input.css -o "$OUT/site.css" --minify

@@ -1,0 +1,514 @@
+// fhtml.dev docs — the guide. Written in fhtml, built by `fhtml build` (dogfood).
+// Shared chrome + the code_card component live in _inc/layout.fhtml.
+// Displayed samples that contain template braces escape them as \{…} so they
+// render literally (SPEC §9.1) — this page is compiled with --data.
+include _inc/layout
+doctype
+html(lang=en)
+  +page_head(title="fhtml docs — the whole language, section by section" desc="Reference for the fhtml markup and template language: elements, attributes, text, interpolation, components, includes, the CLI, and the JavaScript build." path="/docs.html" repo=repo_url site=site_url)
+  body min-h-screen bg-white text-slate-900 antialiased selection:bg-indigo-200
+    +topnav(active="docs" repo=repo_url)
+
+    . mx-auto grid max-w-7xl grid-cols-1 gap-10 px-6 py-12 lg:grid-cols-[15rem_minmax(0,1fr)]
+      // ─── Sidebar ─────────────────────────────────────────────────────
+      aside hidden lg:block
+        nav sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto text-sm
+          p px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 "Markup"
+          ul mt-2 space-y-0.5
+            li > a(href=#overview) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Overview"
+            li > a(href=#elements) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Elements & classes"
+            li > a(href=#attributes) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Attributes"
+            li > a(href=#structure) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Div, id & inline child"
+            li > a(href=#text) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Text"
+            li > a(href=#raw) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Raw HTML"
+            li > a(href=#misc) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Comments & doctype"
+          p mt-6 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 "Templates"
+          ul mt-2 space-y-0.5
+            li > a(href=#interpolation) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Interpolation"
+            li > a(href=#control) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Conditionals & loops"
+            li > a(href=#components) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Components"
+            li > a(href=#includes) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Includes"
+          p mt-6 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 "Tooling"
+          ul mt-2 space-y-0.5
+            li > a(href=#cli) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "The CLI"
+            li > a(href=#fmt) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Formatter"
+            li > a(href=#convert) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "html2fhtml"
+            li > a(href=#shorthand) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Class shorthand"
+          p mt-6 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400 "Ecosystem"
+          ul mt-2 space-y-0.5
+            li > a(href=#library) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "As a library"
+            li > a(href=#javascript) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "JavaScript & WASM"
+            li > a(href=#vite) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Vite"
+            li > a(href=#tailwind) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Tailwind"
+            li > a(href=#editors) block rounded px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 "Editors"
+
+      // ─── Content ─────────────────────────────────────────────────────
+      main min-w-0
+        header border-b border-slate-200 pb-8
+          p text-sm font-semibold uppercase tracking-wider text-indigo-600 "Documentation"
+          h1 mt-2 text-4xl font-bold tracking-tight "The fhtml language"
+          p mt-4 max-w-2xl text-lg leading-8 text-slate-600
+            | A whitespace markup language that compiles 1:1 to HTML, with an optional
+            | template layer on top. This page is the practical guide; the
+            |
+            a(href="{repo_url}/blob/main/SPEC.md") font-medium text-indigo-600 hover:text-indigo-500 "SPEC"
+            |  is the normative definition.
+
+        . mt-10 space-y-16
+
+          // ── Overview ──
+          section(id=overview) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Overview"
+            p mt-3 leading-7 text-slate-600
+              | Every line is one element. The shape is
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "tag(attrs) #id classes… \"text\""
+              | , and everything after the tag is optional. Indentation nests exactly
+              | like Python — deeper lines are children — and there are no closing tags.
+              | Bare tokens after the tag are the class list, copied to the output
+              | byte-for-byte; the compiler never looks inside a class token.
+            . mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2
+              +code_card(file="hello.fhtml" lang="fhtml")
+                | section py-10
+                |   h1 text-3xl font-bold "Hello"
+                |   p text-slate-600 "Whitespace nests. No closing tags."
+              +code_card(file="hello.html" lang="html")
+                | <section class="py-10">
+                |   <h1 class="text-3xl font-bold">Hello</h1>
+                |   <p class="text-slate-600">Whitespace nests. No closing tags.</p>
+                | </section>
+
+          // ── Elements & classes ──
+          section(id=elements) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Elements & classes"
+            p mt-3 leading-7 text-slate-600
+              | The first token is the tag name. Every bare token after it is a class,
+              | emitted verbatim — arbitrary values and variants included, with no
+              | escaping. Tailwind's
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "hover:"
+              | ,
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "w-1/2"
+              | , and
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "data-[state=open]:bg-red-500"
+              |  all pass straight through.
+            . mt-5
+              +code_card(file="classes.fhtml" lang="fhtml")
+                | button rounded-full px-4 py-1 text-sm hover:bg-purple-600 hover:text-white "Message"
+                | div w-1/2 data-[state=open]:bg-red-500
+
+          // ── Attributes ──
+          section(id=attributes) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Attributes"
+            p mt-3 leading-7 text-slate-600
+              | Attributes live in parens, butted against the tag with no space. Values
+              | are bare words or quoted strings; a bare
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "name"
+              |  with no value is a boolean attribute. Anything outside the parens is
+              | still a class.
+            . mt-5
+              +code_card(file="attrs.fhtml" lang="fhtml")
+                | a(href=/about target=_blank) text-indigo-600 hover:underline "About"
+                | input(type=email name=email required) w-full rounded border px-3 py-2
+                | img(src=/logo.svg alt="Company logo") h-8
+
+          // ── Structure ──
+          section(id=structure) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Div, id & inline child"
+            p mt-3 leading-7 text-slate-600
+              | A lone
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "."
+              |  means
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "div"
+              | , so a bare class list can hang off it. A
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "#id"
+              |  token sets the element id. And
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ">"
+              |  chains a single inline child on the same line — handy for
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "li > a"
+              |  link lists.
+            . mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2
+              +code_card(file="structure.fhtml" lang="fhtml")
+                | . #hero grid gap-4
+                |   ul divide-y
+                |     li > a(href=/docs) "Docs"
+                |     li > a(href=/install) "Install"
+              +code_card(file="structure.html" lang="html")
+                | <div id="hero" class="grid gap-4">
+                |   <ul class="divide-y">
+                |     <li><a href="/docs">Docs</a></li>
+                |     <li><a href="/install">Install</a></li>
+                |   </ul>
+                | </div>
+
+          // ── Text ──
+          section(id=text) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Text"
+            p mt-3 leading-7 text-slate-600
+              | A quoted string at the end of a line is the element's text, HTML-escaped.
+              | For multi-line prose, use
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "|"
+              |  text lines: each one emits its content, and inline elements can sit
+              | between them to weave markup through a paragraph.
+            . mt-5
+              +code_card(file="text.fhtml" lang="fhtml")
+                | p text-slate-600
+                |   | By
+                |   |
+                |   a(href=/spec) font-medium "the spec"
+                |   | , text is escaped and safe.
+                | blockquote > p "One quoted string is the simplest form."
+
+          // ── Raw HTML ──
+          section(id=raw) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Raw HTML"
+            p mt-3 leading-7 text-slate-600
+              | A line starting with
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "<"
+              |  is passed through verbatim and consumes the deeper-indented block below
+              | it — the escape hatch for anything fhtml can't express natively, like a
+              | hand-tuned
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "<svg>"
+              | . The bodies of
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "script"
+              |  and
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "style"
+              |  are raw text too.
+            . mt-5
+              +code_card(file="raw.fhtml" lang="fhtml")
+                | figure
+                |   <svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>
+                | style
+                |   | .brand \{ color: rebeccapurple; }
+
+          // ── Comments & doctype ──
+          section(id=misc) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Comments, continuation & doctype"
+            p mt-3 leading-7 text-slate-600
+              | Lines starting with
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "//"
+              |  are comments and vanish from the output. A trailing
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "\\"
+              |  continues a long line onto the next. And
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "doctype"
+              |  emits
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "<!DOCTYPE html>"
+              | .
+            . mt-5
+              +code_card(file="page.fhtml" lang="fhtml")
+                | // top-level page shell
+                | doctype
+                | html(lang=en)
+                |   head > title "My page"
+                |   body bg-white \
+                |     text-slate-900 "…"
+
+          // ── Interpolation ──
+          section(id=interpolation) scroll-mt-24
+            p text-sm font-semibold uppercase tracking-wider text-indigo-600 "Template layer"
+            h2 mt-2 text-2xl font-semibold tracking-tight "Interpolation"
+            p mt-3 leading-7 text-slate-600
+              | With
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "--data"
+              | , a JSON object binds names you can drop into text and attributes with
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "\{expr}"
+              | . Expressions are a small closed language — property access, arithmetic,
+              | comparisons, ternaries — not arbitrary JavaScript.
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "\{!expr}"
+              |  skips escaping. In class position an interpolation must be a whole token,
+              | so switch between full class names rather than building them from pieces.
+            . mt-5
+              +code_card(file="profile.fhtml" lang="fhtml")
+                | a(href="/u/\{user.handle}") font-medium "\{user.name}"
+                | span \{user.online ? 'text-green-600' : 'text-slate-400'} "\{user.status}"
+
+          // ── Control ──
+          section(id=control) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Conditionals & loops"
+            p mt-3 leading-7 text-slate-600
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "if"
+              | /
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "elif"
+              | /
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "else"
+              |  branch on an expression;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "for x, i in xs"
+              |  iterates with an optional index, and
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "empty"
+              |  provides a fallback when the collection is empty.
+            . mt-5
+              +code_card(file="list.fhtml" lang="fhtml")
+                | ul divide-y
+                |   for item, i in items
+                |     li py-2 \{i % 2 == 0 ? 'bg-gray-50' : ''} "\{i + 1}. \{item.title}"
+                |   empty
+                |     li text-gray-400 "Nothing here yet."
+
+          // ── Components ──
+          section(id=components) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Components"
+            p mt-3 leading-7 text-slate-600
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "def"
+              |  declares a component (top level, parameters only — it closes over
+              | nothing).
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "+name(args)"
+              |  instantiates it, and the call's indented block becomes
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "children"
+              |  inside the definition. Parameters can carry defaults. (This very page is
+              | built from
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "def"
+              |  components — the nav, footer, and every code card above.)
+            . mt-5
+              +code_card(file="card.fhtml" lang="fhtml")
+                | def card(title wide=false)
+                |   . rounded-xl bg-white p-6 shadow \{wide ? 'col-span-2' : ''}
+                |     h3 text-lg font-semibold "\{title}"
+                |     children
+                |
+                | +card(title="Monthly stats" wide=true)
+                |   p text-sm text-gray-600 "Revenue is up 12%."
+
+          // ── Includes ──
+          section(id=includes) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Includes"
+            p mt-3 leading-7 text-slate-600
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "include ./partials/head"
+              |  splices another file: its
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "def"
+              |  s join the namespace and its markup emits at the include site. Paths are
+              | relative to the including file; cycles and
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "def"
+              |  collisions are errors. Includes are inlined, so emitted JS modules stay
+              | self-contained.
+            . mt-5
+              +code_card(file="page.fhtml" lang="fhtml")
+                | include ./partials/head
+                |
+                | body
+                |   +header(active="home")
+                |   main > p "Shared def, one source of truth."
+
+          // ── CLI ──
+          section(id=cli) scroll-mt-24
+            p text-sm font-semibold uppercase tracking-wider text-indigo-600 "Tooling"
+            h2 mt-2 text-2xl font-semibold tracking-tight "The CLI"
+            p mt-3 leading-7 text-slate-600
+              | Compile a file to stdout, pipe through stdin, write a file, or build a
+              | whole tree. Output is minified on stdout and pretty when writing files;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "--pretty"
+              | /
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "--min"
+              |  override. Errors carry line and column.
+            . mt-5
+              +code_card(file="terminal" lang="sh")
+                | fhtml page.fhtml                 # compile to stdout (minified)
+                | echo 'p "hi"' | fhtml            # stdin → stdout
+                | fhtml page.fhtml -o page.html    # compile to a file (pretty)
+                | fhtml build src/ -o dist/        # compile a directory tree
+                | fhtml build src/ -o dist/ --target=js   # emit ES modules instead
+                | fhtml page.fhtml --data data.json       # render with data
+
+          // ── Formatter ──
+          section(id=fmt) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Formatter"
+            p mt-3 leading-7 text-slate-600
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "fhtml fmt"
+              |  normalizes to 2-space indentation,
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "."
+              |  for
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "div"
+              | , and minimal quoting. Formatting never changes the compiled output — the
+              | recommended workflow is
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "write → fmt → build"
+              | .
+            . mt-5
+              +code_card(file="terminal" lang="sh")
+                | fhtml fmt src/                   # reformat in place, canonical style
+                | fhtml page.fhtml --no-templates  # enforce pure markup (no template layer)
+
+          // ── Converter ──
+          section(id=convert) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "html2fhtml"
+            p mt-3 leading-7 text-slate-600
+              | The reverse direction, for migrating existing markup (needs the
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "convert"
+              |  feature). Output is always canonical, and
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "--check"
+              |  verifies the round-trip produces the same DOM.
+            . mt-5
+              +code_card(file="terminal" lang="sh")
+                | html2fhtml page.html             # HTML → fhtml on stdout
+                | html2fhtml src/ -o out/          # convert a directory tree
+                | html2fhtml --check page.html     # verify HTML → fhtml → same DOM
+                | html2fhtml --convert-svg page.html   # convert <svg> subtrees too
+
+          // ── Shorthand ──
+          section(id=shorthand) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Class shorthand"
+            p mt-3 leading-7 text-slate-600
+              | An opt-in codebook contracts common Tailwind utilities to short codes,
+              | measured at −9% more tokens across the corpus. A file opts in with
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "#!shorthand"
+              |  as its first line; codes decode on compile. It's a write-time
+              | compression for tooling — generate plain classes, then
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "fmt --contract"
+              |  to store.
+            . mt-5
+              +code_card(file="compact.fhtml" lang="fhtml")
+                | #!shorthand
+                | div fx ic g4
+                |   p ti4 "Hello"     // → <p class="text-indigo-400">Hello</p>
+
+          // ── Library ──
+          section(id=library) scroll-mt-24
+            p text-sm font-semibold uppercase tracking-wider text-indigo-600 "Ecosystem"
+            h2 mt-2 text-2xl font-semibold tracking-tight "As a library"
+            p mt-3 leading-7 text-slate-600
+              | The crate exposes the compiler directly.
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "compile"
+              |  is the static path;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "render"
+              |  evaluates the template layer;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "compile_to_js"
+              |  emits the ES-module target. The core is zero-dependency.
+            . mt-5
+              +code_card(file="main.rs" lang="rust")
+                | use fhtml::\{compile, render, json, Mode};
+                |
+                | let html = compile("p text-lg \"Hello\"", Mode::Pretty)?;
+                |
+                | let data = json::parse(r#"\{"name": "Erin"}"#)?;
+                | let html = render("p \"Hi, \{name}\"", &data, Mode::Min)?;
+
+          // ── JavaScript ──
+          section(id=javascript) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "JavaScript & WASM"
+            p mt-3 leading-7 text-slate-600
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core"
+              |  ships the same compiler as WebAssembly plus dependency-free ESM glue, for
+              | Node, browsers, and edge runtimes. Output is byte-identical to the native
+              | CLI — that parity is the release gate.
+            . mt-5
+              +code_card(file="app.js" lang="js")
+                | import \{ init, render, compileToJs, analyze } from "@fhtml/core";
+                |
+                | await init();
+                | const \{ html } = render('div grid\n  span rounded "hi"\n');
+
+          // ── Vite ──
+          section(id=vite) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Vite"
+            p mt-3 leading-7 text-slate-600
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "vite-plugin-fhtml"
+              |  imports a
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
+              |  file as a render function, or
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "?html"
+              |  as a static string. Compile errors surface in Vite's overlay; editing an
+              | included partial hot-reloads every importer.
+            . mt-5
+              +code_card(file="main.js" lang="js")
+                | import render from "./card.fhtml";      // (data, ctx) => string
+                | import hero from "./hero.fhtml?html";   // the static HTML string
+                |
+                | document.body.innerHTML = render(\{ title: "Ship it" });
+
+          // ── Tailwind ──
+          section(id=tailwind) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Tailwind"
+            p mt-3 leading-7 text-slate-600
+              | Tailwind v4's scanner picks up fhtml classes as-is — they're plain
+              | space-separated tokens. Point
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@source"
+              |  at your
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
+              |  files. One rule: never build a class name from an expression — the
+              | scanner is static, so switch between whole class names instead.
+            . mt-5
+              +code_card(file="input.css" lang="css")
+                | @import "tailwindcss";
+                | @source "./src/**/*.fhtml";
+
+          // ── Editors ──
+          section(id=editors) scroll-mt-24
+            h2 text-2xl font-semibold tracking-tight "Editors"
+            p mt-3 leading-7 text-slate-600
+              | A TextMate grammar and VS Code extension ship in
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "editors/vscode/"
+              | , covering the full language including the template layer, with raw
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "<"
+              |  lines highlighted as embedded HTML. A language server backs diagnostics,
+              | formatting, symbols, definitions, and completion. See the
+              |
+              a(href=install.html) font-medium text-indigo-600 hover:text-indigo-500 "install guide"
+              |  for setup.
+
+        // ── next steps ──
+        . mt-16 rounded-2xl border border-slate-200 bg-slate-50 p-8
+          h2 text-xl font-semibold tracking-tight "Keep going"
+          . mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3
+            a(href="{repo_url}/blob/main/SPEC.md") rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-indigo-300
+              h3 font-semibold text-slate-900 "Spec →"
+              p mt-1 text-sm text-slate-600 "The normative language definition."
+            a(href="{repo_url}/blob/main/bench/RESULTS.md") rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-indigo-300
+              h3 font-semibold text-slate-900 "Benchmark →"
+              p mt-1 text-sm text-slate-600 "Token counts and round-trip fidelity."
+            a(href=install.html) rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-indigo-300
+              h3 font-semibold text-slate-900 "Install →"
+              p mt-1 text-sm text-slate-600 "Get the compiler and tooling."
+
+    +foot(repo=repo_url)
+    +highlight_script()

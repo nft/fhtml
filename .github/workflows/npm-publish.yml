@@ -1,0 +1,69 @@
+name: Publish @fhtml/core
+
+# Publishes integrations/npm to npm when a v* tag is pushed, by running the
+# same release.sh a local release uses: version parity (package == core
+# crate == wasm crate), the full test gate (raw ABI, glue API, node subpath,
+# byte-parity vs the native CLI), the pack gate (tarball into a scratch
+# project, cold-start smoke on both loaders), then `npm publish`.
+# workflow_dispatch runs the whole thing as a --dry-run rehearsal.
+#
+# Auth is npm trusted publishing (OIDC) — no token secret to store or
+# rotate. One-time setup:
+#   1. The FIRST publish happens locally (npm only lets you configure a
+#      trusted publisher on a package that already exists):
+#      cd integrations/npm && ./release.sh
+#   2. npmjs.com → @fhtml/core → Settings → Trusted Publisher →
+#      GitHub Actions: repository owner/name of this repo, workflow
+#      npm-publish.yml.
+# From then on, pushing a tag like v0.1.1 (matching the version everywhere)
+# publishes with provenance.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC) + provenance
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            integrations/npm/crate
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; upgrade whatever node ships.
+      - run: npm install -g npm@latest
+
+      - name: Check the tag matches the package version
+        if: github.ref_type == 'tag'
+        run: |
+          pkg=$(node -p "require('./integrations/npm/package.json').version")
+          if [ "v$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package version v$pkg" >&2
+            exit 1
+          fi
+
+      - name: Release (dry run on manual dispatch)
+        working-directory: integrations/npm
+        run: ./release.sh ${{ github.event_name == 'workflow_dispatch' && '--dry-run' || '' }}

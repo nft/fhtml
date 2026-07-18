@@ -209,8 +209,9 @@ const { html } = render('div grid\n  span rounded "hi"\n');
 `render` takes a source string or a `{name: source}` file map (includes resolve against
 the map); `compileToJs` emits the same self-contained `--target=js` module, so the
 request-time render path carries no wasm; `analyze` returns the LSP's diagnostics and
-symbols for browser editors. Output is byte-identical to the native CLI — that parity is
-the package's release gate.
+symbols for browser editors. On Node, the `@fhtml/core/node` subpath skips the file map:
+`renderFile("views/page.fhtml", { data })` reads the file and its `include`s from disk.
+Output is byte-identical to the native CLI — that parity is the package's release gate.
 
 ## Vite integration
 

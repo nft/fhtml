@@ -175,6 +175,16 @@ identical in both directions. Shorthand is a write-time compression for tooling 
 benchmarks show models should never be asked to *emit* codes, so the intended flow
 is: generate plain classes, then `fmt --contract` to store.
 
+### Writing fhtml with agents
+
+[llms.md](llms.md) is the complete language reference in prompt form — paste it into a
+project's `CLAUDE.md`, `AGENTS.md`, or `.cursorrules` and the agent writes correct fhtml.
+Its syntax and component sections are the exact prompts the generation benchmark
+validated across models ([bench/RESULTS.md](bench/RESULTS.md)). The site serves it under
+the `llms.txt` convention:
+[llms.txt](https://nft.github.io/fhtml/llms.txt) ·
+[llms-full.txt](https://nft.github.io/fhtml/llms-full.txt).
+
 ### As a library
 
 ```rust

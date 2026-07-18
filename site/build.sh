@@ -71,4 +71,10 @@ echo "· tailwind → $OUT/site.css   ($TW)"
 echo "· static → $OUT/static/"
 cp -R site/static "$OUT/static"
 
+# llms.txt convention: the index from site/, the full agent reference from
+# the repo-root llms.md (single source of truth — served as llms-full.txt).
+echo "· llms   → $OUT/llms.txt, $OUT/llms-full.txt"
+cp site/llms.txt "$OUT/llms.txt"
+cp llms.md "$OUT/llms-full.txt"
+
 echo "done → $OUT/ ($(wc -c < "$OUT/index.html" | tr -d ' ') B html, $(wc -c < "$OUT/site.css" | tr -d ' ') B css)"

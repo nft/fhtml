@@ -1,0 +1,26 @@
+# fhtml
+
+> A whitespace-based markup language (`.fhtml`) that compiles 1:1 to HTML,
+> built for token-cheap LLM/agent output (14% fewer tokens than pretty HTML
+> on a 48-component Tailwind corpus; no closing tags, no `class="…"`
+> wrappers) and Tailwind-native class handling (bare tokens are the class
+> list, copied byte-for-byte). Zero-dependency Rust compiler with a
+> formatter, LSP, JS/WASM package (`@fhtml/core`), and Vite plugin.
+
+## Docs
+
+- [Agent reference](https://nft.github.io/fhtml/llms-full.txt): the
+  complete syntax, template, and component rules in one prompt-ready file —
+  benchmark-validated for teaching models to write fhtml
+- [Language spec](https://github.com/nft/fhtml/blob/main/SPEC.md):
+  the normative definition
+- [Docs page](https://nft.github.io/fhtml/docs.html): human-oriented
+  walkthrough
+- [README](https://github.com/nft/fhtml/blob/main/README.md):
+  install, CLI usage, JS/Vite/Tailwind integration
+
+## Optional
+
+- [Benchmark results](https://github.com/nft/fhtml/blob/main/bench/RESULTS.md):
+  token-compression and generation-reliability measurements across models
+- [Changelog](https://github.com/nft/fhtml/blob/main/CHANGELOG.md)

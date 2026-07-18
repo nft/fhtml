@@ -197,7 +197,7 @@ string-only entry points reject it (no base path). The `_opts_from` variants tak
 
 [`integrations/npm/`](integrations/npm/) ships **`@fhtml/core`** — the same compiler as
 WebAssembly (a 261 KB `fhtml.wasm` plus ~100 lines of dependency-free ESM glue), for
-Node, browsers, and edge runtimes where a native binary can't go:
+Node, Bun, Deno, browsers, and edge runtimes where a native binary can't go:
 
 ```js
 import { init, render, compileToJs, format, analyze } from "@fhtml/core";

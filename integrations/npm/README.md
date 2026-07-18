@@ -13,6 +13,12 @@ budget ≤ 500 KB).
 npm install @fhtml/core
 ```
 
+Runs on Node ≥ 18, Bun, Deno, Cloudflare Workers, and browsers — the
+glue uses only standard APIs (`WebAssembly`, `TextEncoder`,
+`import.meta.url`, `fetch` / `node:fs`). The test suite runs on Node
+and, when installed, Bun; on Bun the byte-parity sweep against the
+native CLI holds identically.
+
 ## Use
 
 ```js

@@ -30,3 +30,15 @@ node raw-abi.mjs
 node api.mjs
 node node-api.mjs
 node parity.mjs
+
+# The same suite under Bun when it's on the PATH — the package claims
+# every standard-API runtime, so hold it to the claim where we can.
+if command -v bun >/dev/null 2>&1; then
+  echo "--- bun $(bun --version)"
+  bun raw-abi.mjs
+  bun api.mjs
+  bun node-api.mjs
+  bun parity.mjs
+else
+  echo "note: bun not found — bun lane skipped"
+fi

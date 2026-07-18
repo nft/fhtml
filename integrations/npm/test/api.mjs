@@ -4,6 +4,10 @@
 // Run via test.sh (needs ../fhtml.wasm built and copied).
 
 import { readFile } from "node:fs/promises";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 
 import {
@@ -75,13 +79,20 @@ const files = {
 {
   const { js } = compileToJs(files, { entry: "main.fhtml" });
   assert.match(js, /export default/);
-  const mod = await import(
-    "data:text/javascript," + encodeURIComponent(js)
-  );
-  assert.equal(
-    mod.default({ name: "hi" }, { who: "us" }),
-    '<div class="grid"><span class="rounded">hi</span><p>us</p></div>',
-  );
+  // Imported from a real file — the production path, and it works on
+  // Node and Bun alike (Bun 1.3 cannot import data: URLs).
+  const dir = mkdtempSync(join(tmpdir(), "fhtml-api-"));
+  try {
+    const out = join(dir, "emitted.mjs");
+    writeFileSync(out, js);
+    const mod = await import(pathToFileURL(out).href);
+    assert.equal(
+      mod.default({ name: "hi" }, { who: "us" }),
+      '<div class="grid"><span class="rounded">hi</span><p>us</p></div>',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 // ---- format ---------------------------------------------------------------

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="fhtml.png" alt="fhtml — Fluid Hypertext Markup Language" width="480">
+  <img src="site/static/fhtml.png" alt="fhtml — Fluid Hypertext Markup Language" width="480">
 </p>
 
 <p align="center">

@@ -4,6 +4,29 @@ All notable changes to fhtml are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-07-19
+
+Framework adapters for the JavaScript package. Both are subpaths of
+`@fhtml/core` and neither imports its framework — the package stays
+dependency-free.
+
+### Added
+
+- **`@fhtml/core/express`** — an Express view engine:
+  `app.engine("fhtml", engine())`, then `res.render("page", locals)`. `init()`
+  runs lazily on first render, Express's bookkeeping keys are filtered out of
+  the template data, and with view caching on (production) each view's include
+  closure is read from disk once.
+- **`@fhtml/core/hono`** — a Hono renderer middleware:
+  `c.render(name, data, ctx?)` over a bundled `{name: source}` file map, so it
+  works on edge runtimes with no filesystem; Workers pass their native wasm
+  import via the `wasm` option. The `.fhtml` extension may be omitted, like an
+  `include` path.
+
+### Changed
+
+- `@fhtml/core` package metadata now links the repository and homepage.
+
 ## [0.1.0] — 2026-07-18
 
 The first public release. The compiler, the template layer, components, the
@@ -55,4 +78,5 @@ zero-dependency.
 - **90.6%** of model-written fhtml completions compile, versus 44.3% for Pug,
   across four LLMs on the same corpus.
 
+[0.2.0]: https://github.com/nft/fhtml/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nft/fhtml/releases/tag/v0.1.0

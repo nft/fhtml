@@ -1,8 +1,14 @@
 {
   "name": "@fhtml/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The fhtml compiler as WebAssembly — render, compile to JS modules, format, and analyze fhtml anywhere JavaScript runs.",
   "license": "MIT",
+  "homepage": "https://nft.github.io/fhtml/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nft/fhtml.git",
+    "directory": "integrations/npm"
+  },
   "type": "module",
   "main": "index.js",
   "types": "index.d.ts",

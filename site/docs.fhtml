@@ -433,7 +433,16 @@ html(lang=en)
               code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core"
               |  ships the same compiler as WebAssembly plus dependency-free ESM glue, for
               | Node, browsers, and edge runtimes. Output is byte-identical to the native
-              | CLI — that parity is the release gate.
+              | CLI — that parity is the release gate. On Node,
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core/node"
+              |  reads a file and its includes from disk;
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core/express"
+              |  is an Express view engine and
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core/hono"
+              |  a Hono renderer middleware for the edge.
             . mt-5
               +code_card(file="app.js" lang="js")
                 | import \{ init, render, compileToJs, analyze } from "@fhtml/core";

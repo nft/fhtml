@@ -66,7 +66,17 @@ html(lang=en)
             |
             code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core"
             |  is the compiler as WebAssembly plus dependency-free ESM glue, for Node,
-            | browsers, and edge runtimes where a native binary can't go.
+            | browsers, and edge runtimes where a native binary can't go. Subpaths cover
+            | the frameworks:
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "/node"
+            |  reads includes from disk,
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "/express"
+            |  is a view engine,
+            |
+            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "/hono"
+            |  a renderer middleware.
           . mt-5
             +cmd(text="npm install @fhtml/core" note="node · browser · edge")
           . mt-4
@@ -75,6 +85,13 @@ html(lang=en)
               |
               | await init();
               | const \{ html } = render('div grid\n  span rounded "hi"\n');
+          . mt-4
+            +code_card(file="server.js" lang="js")
+              | import \{ engine } from "@fhtml/core/express";
+              |
+              | app.engine("fhtml", engine());
+              | app.set("view engine", "fhtml");
+              | app.get("/", (req, res) => res.render("page", \{ name: "hi" }));
 
         // ── Vite ──
         section(id=vite) scroll-mt-24

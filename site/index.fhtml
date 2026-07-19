@@ -177,7 +177,7 @@ html(lang=en)
             p mt-2 text-sm leading-6 text-slate-600
               |
               code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core"
-              |  for Node, browsers, and the edge, plus a Vite plugin.
+              |  for Node, browsers, and the edge — with Express and Hono adapters, plus a Vite plugin.
           a(href=docs.html#tailwind) group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-indigo-300 hover:shadow-md
             h3 font-semibold text-slate-900 "Tailwind-native"
             p mt-2 text-sm leading-6 text-slate-600

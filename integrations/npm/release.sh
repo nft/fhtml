@@ -89,8 +89,9 @@ EOF
 cat > "$tmp/smoke-node.mjs" << 'EOF'
 import { mkdirSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
 import { init } from "@fhtml/core";
-import { renderFile } from "@fhtml/core/node";
+import { compileFilesToDir, renderFile } from "@fhtml/core/node";
 import { engine } from "@fhtml/core/express";
 import { fhtmlRenderer } from "@fhtml/core/hono";
 
@@ -100,6 +101,10 @@ writeFileSync("views/lib.fhtml", 'def badge(label)\n  span rounded "{label}"\n')
 writeFileSync("views/page.fhtml", "include ./lib\n\n+badge(label={name})\n");
 const { html } = renderFile("views/page.fhtml", { data: { name: "hi" } });
 assert.equal(html, '<span class="rounded">hi</span>');
+
+compileFilesToDir({ entries: ["views/page.fhtml"], outDir: "generated" });
+const { views } = await import(pathToFileURL("generated/index.js"));
+assert.equal(views.page({ name: "hi" }), html);
 
 const viaEngine = await new Promise((res, rej) =>
   engine()("views/page.fhtml", { name: "hi" }, (e, h) => (e ? rej(e) : res(h))));

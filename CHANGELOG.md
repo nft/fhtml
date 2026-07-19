@@ -6,6 +6,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`compileFilesToDir` in `@fhtml/core/node`** — batch-compiles `.fhtml`
+  entries into a directory of ES modules plus an `index.js` registry, with the
+  correctness a dev loop needs baked in: no up-front wipe, temp-file +
+  `rename()` for every output, index swapped last, manifest-tracked pruning
+  that runs after the fresh index is live and only ever touches files the
+  helper emitted, unchanged outputs skipped, and compile errors thrown before
+  any write (`FhtmlError` gains an optional `file`). Emits a
+  `"type": "module"` `package.json` into the output directory so the modules
+  work inside CommonJS projects.
+
 ### Changed
 
 - **Class-position falsiness (the clsx rule, SPEC §9.2)** — in class position

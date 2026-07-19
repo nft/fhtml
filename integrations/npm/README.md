@@ -74,6 +74,50 @@ const { html } = renderFile("views/page.fhtml", { data: { user: "Erin" } });
 flows. The subpath is Node-only by design — the root export never
 imports `node:*`, so browser and edge bundles stay clean.
 
+### Compile a views directory
+
+The build-time path this README recommends, as one call —
+`compileFilesToDir` compiles a set of views into a directory of ES
+modules plus an `index.js` registry, safely for a live dev loop:
+
+```js
+import { init } from "@fhtml/core";
+import { compileFilesToDir } from "@fhtml/core/node";
+
+await init();
+compileFilesToDir({
+  entries: ["views/card.fhtml", "views/page.fhtml"], // or {name: path}
+  outDir: "src/generated",
+});
+```
+
+```js
+import views from "./generated/index.js";
+res.end(views.card({ name: "hi" })); // zero wasm at request time
+```
+
+Its guarantees are the reason it exists in the library instead of in
+every project's build script: the output directory is **never wiped**;
+every file lands via temp-file + `rename()`, so a watcher (`bun --hot`,
+Vite, tsx) can never observe a missing or half-written module;
+`index.js` — the completion signal — is swapped **last**, after every
+module it imports exists; pruning of removed views is tracked in a
+`.fhtml-manifest.json` and runs only after the fresh index is live, and
+only ever deletes files the helper itself emitted; unchanged outputs
+are skipped, so watchers of `outDir` don't rebuild in a loop; a compile
+error throws (a `FhtmlError` with `.file` set) **before any write**. A
+`package.json` with `"type": "module"` is emitted into `outDir`, so the
+generated modules work inside CommonJS projects too. Options:
+`mode`, `emitIndex`, `emitDts`, `prune` (all defaulting on); returns
+`{written, unchanged, pruned, warnings}`.
+
+Scope, stated plainly: one writer per `outDir` at a time; atomicity is
+per file, on ordinary local filesystems (no fsync — not a durability
+guarantee); a reader still holding an older index is not protected from
+pruning; files at generated output paths get replaced (untracked files
+are never *pruned*, though). No watch mode by design — atomic writes
+are what make *your* watcher safe.
+
 ### Express
 
 A view engine, one registration away (`express` itself is never

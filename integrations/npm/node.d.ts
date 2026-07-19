@@ -33,3 +33,44 @@ export function compileFileToJs(
 
 /** `analyze`, but from a file on disk. */
 export function analyzeFile(path: string): Analysis;
+
+export interface CompileDirOptions {
+  /** `.fhtml` paths (view name = filename stem), or a `{name: path}` map. */
+  entries: string[] | Record<string, string>;
+  /** Created if missing; never wiped. Treat as generated-owned: files at
+   * generated output paths are replaced (untracked files are never
+   * pruned, though). */
+  outDir: string;
+  /** "min" (default) or "pretty". */
+  mode?: "min" | "pretty";
+  /** Write the `index.js` + `index.d.ts` registry (default true). */
+  emitIndex?: boolean;
+  /** Write per-view `.d.ts` shims (default true; `index.d.ts` is governed
+   * by `emitIndex`). */
+  emitDts?: boolean;
+  /** Remove outputs of since-removed views (default true). Only files
+   * this helper previously emitted — tracked in `.fhtml-manifest.json` —
+   * are ever deleted. */
+  prune?: boolean;
+}
+
+export interface CompileDirResult {
+  /** Output files (outDir-relative) whose content changed this run. */
+  written: string[];
+  /** Outputs already byte-identical — the swap (and the watcher event)
+   * was skipped. */
+  unchanged: string[];
+  /** Previously-emitted files removed because their view is gone. */
+  pruned: string[];
+  /** Compiler warnings, flattened; `file` is the entry path. */
+  warnings: { file: string; msg: string }[];
+}
+
+/** Compiles `.fhtml` entries into `outDir` as ES modules plus an
+ * `index.js` registry, safely for a live dev loop: no up-front wipe,
+ * temp-file + `rename()` for every output, index swapped last, pruning
+ * manifest-tracked and run after the fresh index is live. A compile
+ * error throws (`FhtmlError` with `file` set) before any write. One
+ * writer per `outDir` at a time; per-file atomicity on ordinary local
+ * filesystems. Requires `await init()` first. */
+export function compileFilesToDir(opts: CompileDirOptions): CompileDirResult;

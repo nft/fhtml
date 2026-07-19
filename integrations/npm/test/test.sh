@@ -29,6 +29,7 @@ export FHTML_BIN="$repo/target/debug/fhtml"
 node raw-abi.mjs
 node api.mjs
 node node-api.mjs
+node dir-api.mjs
 node adapters.mjs
 node parity.mjs
 
@@ -39,6 +40,7 @@ if command -v bun >/dev/null 2>&1; then
   bun raw-abi.mjs
   bun api.mjs
   bun node-api.mjs
+  bun dir-api.mjs
   bun adapters.mjs
   bun parity.mjs
 else

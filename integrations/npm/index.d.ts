@@ -127,4 +127,7 @@ export function version(): string;
 export class FhtmlError extends Error {
   line: number | null;
   col: number | null;
+  /** The entry path the error came from, when a batch helper
+   * (`compileFilesToDir`) can attribute it; absent otherwise. */
+  file?: string;
 }

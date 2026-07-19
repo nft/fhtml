@@ -171,8 +171,11 @@ fhtml build src/ -o dist --target=js # ES modules: (data, ctx={}) => string
 - From JavaScript: `npm install @fhtml/core` (WebAssembly, runs on
   Node/Bun/Deno/Workers/browsers) — `render`, `compileToJs`, `format`,
   `analyze`; on Node, `@fhtml/core/node` exports `renderFile` and
-  friends; `@fhtml/core/express` is an Express view engine,
-  `@fhtml/core/hono` a Hono renderer middleware. Vite:
-  `vite-plugin-fhtml` imports `.fhtml` files as render functions.
+  friends, plus `compileFilesToDir` (batch-compile views into a
+  directory of ES modules + an index registry, with atomic writes —
+  use it instead of hand-writing a wipe-then-write build script);
+  `@fhtml/core/express` is an Express view engine, `@fhtml/core/hono`
+  a Hono renderer middleware. Vite: `vite-plugin-fhtml` imports
+  `.fhtml` files as render functions.
 - Editor support: `fhtml lsp` (diagnostics, formatting, go-to-def,
   completion) with a VS Code extension under `editors/vscode/`.

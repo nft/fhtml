@@ -172,6 +172,22 @@ html(lang=en)
         Mode::Min,
     );
 
+    // Class-position falsiness (SPEC §9.2): booleans and falsy discard,
+    // truthy strings split, escape hatches and list errors agree.
+    h.assert_parity(
+        "div grid {active && 'bg-indigo-600 text-white'} {n && 'has-items'} {flag} {size || 'text-sm'} {'false'}\ndiv(class=\"a {x && 'b'}\")",
+        r#"{"active": true, "n": 0, "flag": false, "x": false}"#,
+        "{}",
+        Mode::Min,
+    );
+    h.assert_parity(
+        "div {active && 'ring'} {flag}",
+        r#"{"active": false, "flag": true}"#,
+        "{}",
+        Mode::Min,
+    );
+    h.assert_parity("div {items}", r#"{"items": ["a"]}"#, "{}", Mode::Min);
+
     // Render errors carry identical position + message both sides.
     h.assert_parity(r#"p "{items + 1}""#, r#"{"items": []}"#, "{}", Mode::Min);
     h.assert_parity(

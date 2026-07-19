@@ -123,7 +123,7 @@ const $it = v => {
 };
 const $e = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const $ea = s => $e(s).replace(/"/g, "&quot;");
-const $ci = v => $s(v).split(/\s+/).filter(Boolean).map($ea);
+const $ci = v => (typeof v === "boolean" || !$t(v)) ? [] : $s(v).split(/\s+/).filter(Boolean).map($ea);
 const $cj = names => (names.length ? ' class="' + names.join(" ") + '"' : "");
 const $at = (l, c, f) => {
   try { return f(); } catch (e) {

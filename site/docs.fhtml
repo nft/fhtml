@@ -484,6 +484,11 @@ html(lang=en)
               code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 ".fhtml"
               |  files. One rule: never build a class name from an expression — the
               | scanner is static, so switch between whole class names instead.
+              | Conditional classes need no helper: booleans and falsy results emit
+              | no classes, so
+              |
+              code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "\{active && 'ring-2'}"
+              |  adds the class or nothing, clsx-style.
             . mt-5
               +code_card(file="input.css" lang="css")
                 | @import "tailwindcss";

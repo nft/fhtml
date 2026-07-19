@@ -88,6 +88,11 @@ else
   compile ERROR; string concatenation (`{"bg-" + color}`) compiles but
   warns. Interpolate whole class names instead:
   `button {active ? "bg-blue-600 text-white" : "bg-gray-100"}`.
+- Conditional classes need no helper: in class position, booleans and
+  falsy results emit no classes (the clsx rule), so
+  `{active && 'bg-indigo-600 text-white'}` adds the classes or nothing,
+  and `{size || 'text-sm'}` supplies a default. Negation needs a space —
+  `{ !done && 'opacity-50'}` — because `{!` means raw interpolation.
 - Inside `{…}`, string literals take single or double quotes:
   `{done ? 'Yes' : "No"}`.
 - A literal `{` in text is escaped `\{`.

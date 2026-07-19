@@ -307,7 +307,18 @@ for CI. (Interpolation *glued* to class text is a hard error — §9.2.)
 | Inline text / text block | `p "Hi, {user.name}"`, `\| total: {n}` | escaped; `{!x}` allowed |
 | Quoted attr value | `title="Profile of {user.name}"` | escaped; `{!x}` forbidden |
 | Unquoted attr value | `href={user.url}` | must be the entire value |
-| Class position | `{active ? 'bg-blue-600' : 'bg-gray-100'}` | whole token starts with `{`; result splits on whitespace into class names |
+| Class position | `{active ? 'bg-blue-600' : 'bg-gray-100'}` | whole token starts with `{`; booleans and falsy results emit no classes; otherwise the result splits on whitespace into class names |
+
+**Class-position falsiness (the `clsx` rule).** In class position — a bare interpolation
+token, or an interpolation inside a `class` attribute value — a result that is a boolean
+(either value) or falsy (§9.4) emits no classes. With `&&`/`||` yielding operand values
+(§9.4), conditional classes read like JSX's `classnames()` with no helper:
+`{active && 'bg-indigo-600 text-white'}` adds the classes or nothing;
+`{count && 'has-items'}` never emits a stray `0`; `{size || 'text-sm'}` supplies a
+default. Negation needs a space or parens — `{ !done && 'opacity-50'}` — because `{!`
+is the raw form (§9.1). This rule is class-position-only; §9.4 stringification is
+unchanged everywhere else. A literal class spelled like a boolean is still writable as a
+bare token (`false` the class token) or a string (`{'false'}`).
 
 Literal `{` in text or quoted values is written `\{`. In static-only files (no template layer),
 `{` has no meaning and needs no escape; the compiler flag `--no-templates` enforces static-only.

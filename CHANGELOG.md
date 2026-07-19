@@ -4,6 +4,20 @@ All notable changes to fhtml are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Class-position falsiness (the clsx rule, SPEC §9.2)** — in class position
+  (a bare interpolation token, or an interpolation inside a `class` attribute
+  value), a result that is a boolean or falsy now emits no classes. With
+  `&&`/`||` already yielding operand values, conditional classes read like
+  JSX's `classnames()` with no helper: `{active && 'bg-indigo-600 text-white'}`
+  adds the classes or nothing — previously a false guard emitted a literal
+  `false` (or `0`) class. Class position only; stringification elsewhere is
+  unchanged, and both backends agree byte-for-byte. Breaking in the narrow
+  case of `{flag}` in class position, which used to emit `true`/`false`.
+
 ## [0.2.0] — 2026-07-19
 
 Framework adapters for the JavaScript package. Both are subpaths of

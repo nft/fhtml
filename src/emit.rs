@@ -266,14 +266,24 @@ impl<'a> R<'a> {
 
     /// The final class-name list: literal tokens byte-for-byte (`"` as
     /// `&quot;`, SPEC §11); interpolation results split on whitespace and
-    /// attribute-escaped (SPEC §9.1).
+    /// attribute-escaped (SPEC §9.1). Booleans and falsy values emit no
+    /// classes (SPEC §9.2) — `{cond && 'cls'}` guards add the class or
+    /// nothing, never a literal `false`/`0`.
     fn class_names(&self, el: &Element) -> Result<Vec<String>> {
         let mut names = Vec::new();
         for item in &el.classes {
             match item {
                 ClassItem::Lit(c) => names.push(c.replace('"', "&quot;")),
                 ClassItem::Interp(t) => {
-                    let s = self.eval_string(t)?;
+                    let v = self.eval(t)?;
+                    if matches!(v, Value::Bool(_)) || !v.truthy() {
+                        continue;
+                    }
+                    let s = expr::stringify(&v).map_err(|e| Error {
+                        line: t.line,
+                        col: t.col,
+                        msg: e.msg,
+                    })?;
                     names.extend(s.split_whitespace().map(|c| esc(c, true)));
                 }
             }

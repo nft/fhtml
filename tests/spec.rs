@@ -1711,6 +1711,45 @@ else
         );
     }
 
+    #[test]
+    fn class_position_discards_booleans_and_falsy() {
+        // the clsx rule: `&&` guards add the classes or nothing
+        let src = "div grid {active && 'bg-indigo-600 text-white'} {n && 'has-items'}";
+        assert_eq!(
+            min_with(src, r#"{"active": false, "n": 0}"#),
+            r#"<div class="grid"></div>"#
+        );
+        assert_eq!(
+            min_with(src, r#"{"active": true, "n": 2}"#),
+            r#"<div class="grid bg-indigo-600 text-white has-items"></div>"#
+        );
+        // a bare boolean is never a class, whichever value
+        assert_eq!(min_with("div {flag}", r#"{"flag": true}"#), "<div></div>");
+        assert_eq!(min_with("div {flag}", r#"{"flag": false}"#), "<div></div>");
+        // the rule reaches interpolations inside class="…" too
+        assert_eq!(
+            min_with(r#"div(class="a {x && 'b'}")"#, r#"{"x": false}"#),
+            r#"<div class="a"></div>"#
+        );
+        // `||` defaults compose with it
+        assert_eq!(
+            min_with("div {size || 'text-sm'}", "{}"),
+            r#"<div class="text-sm"></div>"#
+        );
+    }
+
+    #[test]
+    fn class_position_falsiness_has_escape_hatches() {
+        // spelled-out strings still emit; only real booleans are dropped
+        assert_eq!(
+            min_with("div {'false'}", "{}"),
+            r#"<div class="false"></div>"#
+        );
+        // and a truthy list is still the usual stringification error
+        let e = render_err("div {items}", r#"{"items": ["a"]}"#);
+        assert!(e.msg.contains("list"), "{}", e.msg);
+    }
+
     // ------------------------------------------------- §10.2 for / empty
 
     #[test]

@@ -22,6 +22,39 @@ html(lang=en)
 
       . mt-12 space-y-12
 
+        // ── 0.3.0 ──
+        section
+          . flex flex-wrap items-baseline gap-x-3 gap-y-1
+            h2 text-2xl font-semibold tracking-tight "0.3.0"
+            span text-sm text-slate-400 "2026-07-19"
+          p mt-4 leading-7 text-slate-600
+            | Conditional classes without a helper, and the batch build path as a
+            | library call.
+
+          h3 mt-8 text-sm font-semibold uppercase tracking-wider text-slate-500 "Added"
+          ul mt-4 space-y-3
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] font-semibold text-slate-800 "compileFilesToDir"
+                |  in
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "@fhtml/core/node"
+                |  — compiles views into a directory of ES modules plus an index
+                | registry, race-safe for dev loops: atomic writes, index swapped
+                | last, manifest-tracked pruning, no up-front wipe.
+
+          h3 mt-8 text-sm font-semibold uppercase tracking-wider text-slate-500 "Changed"
+          ul mt-4 space-y-3
+            li flex gap-3
+              span mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500
+              p leading-7 text-slate-600
+                span font-semibold text-slate-900 "Class-position falsiness"
+                |  — booleans and falsy interpolation results emit no classes, so
+                |
+                code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "\{active && 'ring-2'}"
+                |  adds the class or nothing, clsx-style, with no helper.
+
         // ── 0.2.0 ──
         section
           . flex flex-wrap items-baseline gap-x-3 gap-y-1

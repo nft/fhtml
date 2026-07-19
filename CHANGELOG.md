@@ -4,7 +4,10 @@ All notable changes to fhtml are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] — 2026-07-19
+
+Conditional classes without a helper, and the batch build path as a
+library call.
 
 ### Added
 
@@ -104,5 +107,6 @@ zero-dependency.
 - **90.6%** of model-written fhtml completions compile, versus 44.3% for Pug,
   across four LLMs on the same corpus.
 
+[0.3.0]: https://github.com/nft/fhtml/releases/tag/v0.3.0
 [0.2.0]: https://github.com/nft/fhtml/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nft/fhtml/releases/tag/v0.1.0

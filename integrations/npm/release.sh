@@ -84,11 +84,15 @@ console.log(`smoke (default loader): ok, fhtml ${version()}`);
 EOF
 
 # The node subpath: renderFile builds the include closure from disk.
+# Then the framework adapters, driven bare — proves all four subpaths
+# resolve from the packed tarball.
 cat > "$tmp/smoke-node.mjs" << 'EOF'
 import { mkdirSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { init } from "@fhtml/core";
 import { renderFile } from "@fhtml/core/node";
+import { engine } from "@fhtml/core/express";
+import { fhtmlRenderer } from "@fhtml/core/hono";
 
 await init();
 mkdirSync("views", { recursive: true });
@@ -96,7 +100,15 @@ writeFileSync("views/lib.fhtml", 'def badge(label)\n  span rounded "{label}"\n')
 writeFileSync("views/page.fhtml", "include ./lib\n\n+badge(label={name})\n");
 const { html } = renderFile("views/page.fhtml", { data: { name: "hi" } });
 assert.equal(html, '<span class="rounded">hi</span>');
-console.log("smoke (node subpath): ok");
+
+const viaEngine = await new Promise((res, rej) =>
+  engine()("views/page.fhtml", { name: "hi" }, (e, h) => (e ? rej(e) : res(h))));
+assert.equal(viaEngine, html);
+
+const c = { setRenderer(fn) { this.render = fn; }, html: (s) => s };
+await fhtmlRenderer({ "p.fhtml": 'p "edge"\n' })(c, async () => {});
+assert.equal(c.render("p"), "<p>edge</p>");
+console.log("smoke (node subpath + adapters): ok");
 EOF
 
 # Workers-style: raw bytes into init() — fresh process, no file: loading.

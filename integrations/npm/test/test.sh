@@ -29,6 +29,7 @@ export FHTML_BIN="$repo/target/debug/fhtml"
 node raw-abi.mjs
 node api.mjs
 node node-api.mjs
+node adapters.mjs
 node parity.mjs
 
 # The same suite under Bun when it's on the PATH — the package claims
@@ -38,6 +39,7 @@ if command -v bun >/dev/null 2>&1; then
   bun raw-abi.mjs
   bun api.mjs
   bun node-api.mjs
+  bun adapters.mjs
   bun parity.mjs
 else
   echo "note: bun not found — bun lane skipped"

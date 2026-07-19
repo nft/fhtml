@@ -74,6 +74,52 @@ const { html } = renderFile("views/page.fhtml", { data: { user: "Erin" } });
 flows. The subpath is Node-only by design — the root export never
 imports `node:*`, so browser and edge bundles stay clean.
 
+### Express
+
+A view engine, one registration away (`express` itself is never
+imported — the engine is just a callback):
+
+```js
+import express from "express";
+import { engine } from "@fhtml/core/express";
+
+const app = express();
+app.engine("fhtml", engine());
+app.set("view engine", "fhtml");
+
+app.get("/", (req, res) => res.render("page", { name: "hi" }));
+```
+
+Render locals become the template `data`; `engine({ctx, mode,
+onWarnings})` sets the per-app knobs. `init()` runs lazily on the first
+render. When Express enables view caching (`NODE_ENV=production`), each
+view's include closure is read from disk once and reused.
+
+### Hono
+
+A renderer middleware — templates come in as the usual file map, so it
+works on edge runtimes with no filesystem (`hono` itself is never
+imported):
+
+```js
+import { Hono } from "hono";
+import { fhtmlRenderer } from "@fhtml/core/hono";
+import wasm from "@fhtml/core/fhtml.wasm"; // Workers; omit where the default loader works
+
+const app = new Hono();
+app.use(fhtmlRenderer(templates, { wasm }));
+
+app.get("/", (c) => c.render("page", { name: "hi" }));
+```
+
+`c.render(name, data, ctx?)` renders `templates[name]` (the `.fhtml`
+extension may be omitted, like an `include` path) and responds via
+`c.html`. Compile errors throw `FhtmlError` into Hono's `onError`.
+
+For both adapters the render happens in wasm per request — convenient,
+and plenty fast. The zero-wasm-at-request-time path is still build-time
+`compileToJs`.
+
 ### Edge runtimes
 
 Where the default loader can't reach the file (no `file:` URL, no

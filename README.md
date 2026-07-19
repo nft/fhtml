@@ -221,7 +221,10 @@ the map); `compileToJs` emits the same self-contained `--target=js` module, so t
 request-time render path carries no wasm; `analyze` returns the LSP's diagnostics and
 symbols for browser editors. On Node, the `@fhtml/core/node` subpath skips the file map:
 `renderFile("views/page.fhtml", { data })` reads the file and its `include`s from disk.
-Output is byte-identical to the native CLI — that parity is the package's release gate.
+Framework adapters ship as subpaths too: `@fhtml/core/express` (a view engine —
+`app.engine("fhtml", engine())`, then `res.render("page", locals)`) and `@fhtml/core/hono`
+(a renderer middleware for `c.render`, edge-ready). Output is byte-identical to the
+native CLI — that parity is the package's release gate.
 
 ## Vite integration
 

@@ -15,6 +15,14 @@
       "types": "./node.d.ts",
       "default": "./node.js"
     },
+    "./express": {
+      "types": "./express.d.ts",
+      "default": "./express.js"
+    },
+    "./hono": {
+      "types": "./hono.d.ts",
+      "default": "./hono.js"
+    },
     "./fhtml.wasm": "./fhtml.wasm"
   },
   "files": [
@@ -22,6 +30,10 @@
     "index.d.ts",
     "node.js",
     "node.d.ts",
+    "express.js",
+    "express.d.ts",
+    "hono.js",
+    "hono.d.ts",
     "fhtml.wasm",
     "README.md"
   ],

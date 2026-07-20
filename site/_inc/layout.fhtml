@@ -64,6 +64,7 @@ def foot(repo)
         a(href="https://www.npmjs.com/package/@fhtml/core") hover:text-indigo-600 "npm"
         a(href="{repo}/blob/main/SPEC.md") hover:text-indigo-600 "Spec"
         a(href="{repo}/blob/main/bench/RESULTS.md") hover:text-indigo-600 "Benchmark"
+        a(href=llms.txt) hover:text-indigo-600 "llms.txt"
 
 // ─── Reusable code card ─────────────────────────────────────────────────────
 // A dark panel with a filename/lang chrome bar; the call's indented `|` block

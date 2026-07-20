@@ -14,3 +14,4 @@
 /editors/vscode/*.vsix
 /integrations/npm/crate/target
 /integrations/npm/fhtml.wasm
+tmp/

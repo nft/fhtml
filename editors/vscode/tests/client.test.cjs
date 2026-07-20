@@ -1,9 +1,10 @@
 // Smoke test for extension.js in plain Node: `vscode` and
 // `vscode-languageclient/node` are stubbed via the module loader, so this
-// needs neither a VS Code host nor an npm install. Pins the two behaviors
-// the plan gates on: a missing binary means one friendly message and no
-// client (no error spam), a present binary means one client spawning
-// `<bin> lsp`; plus the fhtml.path-change restart.
+// needs neither a VS Code host nor an npm install. Pins the behaviors the
+// plan gates on: an untrusted workspace means no spawn and no message, a
+// missing binary means one friendly message and no client (no error spam),
+// a present binary means one client spawning `<bin> lsp`; plus the
+// fhtml.path-change restart.
 //
 // Run: node tests/client.test.cjs  (from editors/vscode/)
 
@@ -19,16 +20,22 @@ let settings = { path: "" };
 const infoMessages = [];
 const openedSettings = [];
 const configListeners = [];
+const trustListeners = [];
 const clients = [];
 
 const vscodeStub = {
   workspace: {
+    isTrusted: true,
     getConfiguration(section) {
       assert.equal(section, "fhtml");
       return { get: (key) => settings[key] };
     },
     onDidChangeConfiguration(listener) {
       configListeners.push(listener);
+      return { dispose() {} };
+    },
+    onDidGrantWorkspaceTrust(listener) {
+      trustListeners.push(listener);
       return { dispose() {} };
     },
   },
@@ -77,11 +84,20 @@ Module._load = function (request, ...rest) {
 const extension = require(path.join(__dirname, "..", "extension.js"));
 const context = { subscriptions: [] };
 
-// ---- the missing-binary path: one message, a settings link, no client -----
+// ---- an untrusted workspace: no spawn attempt, no message -----------------
 
 (async () => {
   settings = { path: "/nonexistent/fhtml-lsp-smoke-test" };
+  vscodeStub.workspace.isTrusted = false;
   await extension.activate(context);
+  assert.equal(clients.length, 0, "no client while untrusted");
+  assert.equal(infoMessages.length, 0, "silent while untrusted");
+  assert.equal(trustListeners.length, 1, "trust listener registered");
+
+  // ---- trust granted, missing binary: one message, settings link, no client
+
+  vscodeStub.workspace.isTrusted = true;
+  await trustListeners[0]();
   assert.equal(clients.length, 0, "no client for a missing binary");
   assert.equal(infoMessages.length, 1, "exactly one friendly message");
   assert.match(infoMessages[0].message, /not found/);
@@ -91,7 +107,7 @@ const context = { subscriptions: [] };
     ["workbench.action.openSettings", "fhtml.path"],
   ]);
   assert.equal(configListeners.length, 1, "config listener registered");
-  assert.equal(context.subscriptions.length, 1);
+  assert.equal(context.subscriptions.length, 2, "trust + config disposables");
 
   // ---- fhtml.path now points at a real executable: client starts ----------
 

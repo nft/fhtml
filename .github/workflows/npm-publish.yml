@@ -20,7 +20,11 @@ name: Publish @fhtml/core
 
 on:
   push:
-    tags: ['v*']
+    # vscode-v* tags belong to vscode-publish.yml; without the negative
+    # pattern they'd match v* and fail this workflow's version gate.
+    tags:
+      - 'v*'
+      - '!vscode-v*'
   workflow_dispatch:
 
 permissions:

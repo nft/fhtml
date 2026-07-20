@@ -1,6 +1,6 @@
 # fhtml for VS Code
 
-Language support for [fhtml (Fluid HTML)](../../README.md) `.fhtml` files:
+Language support for [fhtml (Fluid HTML)](https://github.com/nft/fhtml) `.fhtml` files:
 syntax highlighting always, and — when the fhtml compiler is installed —
 live diagnostics, formatting, outline, go-to-definition and completion via
 the built-in language server (`fhtml lsp`).
@@ -13,17 +13,20 @@ the template layer — `{expr}` interpolation with the SPEC §9.3 expression
 grammar, `if`/`elif`/`else`, `for`/`empty`, `def`/`children`,
 `+component(calls)`, `include`.
 
-## Install (local — not on the marketplace yet)
+## Install
 
-From this directory:
+Install **fhtml** from the
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fhtml.fhtml)
+(`ext install fhtml.fhtml`) or, for VSCodium/Cursor-family editors, from
+[Open VSX](https://open-vsx.org/extension/fhtml/fhtml).
 
-```sh
-npm install        # fetches vscode-languageclient (the only dependency)
-ln -s "$(pwd)" ~/.vscode/extensions/fhtml-0.1.0
-```
+Indentation-based folding and `//` line comments are configured in
+`language-configuration.json`.
 
-then reload VS Code. Indentation-based folding and `//` line comments are
-configured in `language-configuration.json`.
+From source (contributors): in `editors/vscode/` run
+`npm install` (fetches `vscode-languageclient`, the only runtime
+dependency), then `ln -s "$(pwd)" ~/.vscode/extensions/fhtml-0.1.0` and
+reload VS Code.
 
 ## Language server
 
@@ -42,8 +45,12 @@ language server) for every workspace with `.fhtml` files open. It provides:
 The binary is looked up as `fhtml` on `$PATH`; the `fhtml.path` setting
 overrides that with an explicit path. If it isn't found, the extension says
 so once and stays in highlighting-only mode — install the compiler with
-`cargo install --path .` from the repo root (add `--features convert` if
-you also want `html2fhtml`).
+`cargo install --git https://github.com/nft/fhtml` (or
+`cargo install --path .` from a clone; add `--features convert` if you also
+want `html2fhtml`). Note the compiler is not the `fhtml` crate on crates.io
+(an unrelated project). The server only runs in trusted workspaces: in
+Restricted Mode you get highlighting only, and a workspace-provided
+`fhtml.path` is ignored until you trust the workspace.
 
 ## Tailwind CSS completions
 
@@ -72,12 +79,12 @@ is best-effort by design: after a `>` chain or a `\` continuation the
 capture also covers the continuation tokens, which is harmless — Tailwind
 only completes tokens that look like its own classes.
 
-## Tests
+## Development
 
 ```sh
 node tests/client.test.cjs    # LSP-client smoke test (stubbed VS Code API)
 
-npm install --prefix ../../bench/.tools vscode-tmgrammar-test   # once
+npm install                   # once — vscode-tmgrammar-test is a devDependency
 ./test.sh                     # client test + scope assertions + snapshot
 ./test.sh --updateSnapshot    # after intentional grammar changes
 ```

@@ -5,10 +5,35 @@
   "version": "0.1.0",
   "publisher": "fhtml",
   "license": "MIT",
+  "icon": "icon.png",
   "engines": { "vscode": "^1.82.0" },
-  "categories": ["Programming Languages"],
+  "categories": ["Programming Languages", "Formatters", "Linters"],
+  "keywords": [
+    "fhtml",
+    "html",
+    "markup",
+    "template",
+    "tailwind",
+    "language-server",
+    "syntax-highlighting"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nft/fhtml.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": { "url": "https://github.com/nft/fhtml/issues" },
+  "homepage": "https://nft.github.io/fhtml/",
+  "qna": false,
   "main": "./extension.js",
   "activationEvents": ["onLanguage:fhtml"],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": ["fhtml.path"],
+      "description": "Syntax highlighting works everywhere. The language server (an external fhtml binary) only starts in trusted workspaces, and a workspace-provided fhtml.path is ignored until the workspace is trusted."
+    }
+  },
   "contributes": {
     "languages": [
       {
@@ -37,7 +62,16 @@
       }
     }
   },
+  "scripts": {
+    "test": "./test.sh",
+    "package": "vsce package"
+  },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3",
+    "ovsx": "^1",
+    "vscode-tmgrammar-test": "0.1.3"
   }
 }

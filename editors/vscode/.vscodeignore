@@ -1,0 +1,4 @@
+.vscodeignore
+test.sh
+tests/**
+package-lock.json

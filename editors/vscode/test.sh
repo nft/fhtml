@@ -2,7 +2,7 @@
 # TextMate grammar tests: scope assertions + full-file snapshot.
 # Plus the LSP-client smoke test (stubbed VS Code API — plain node, no setup).
 #
-# Setup (once): npm install --prefix ../../bench/.tools vscode-tmgrammar-test
+# Setup (once): npm install  (vscode-tmgrammar-test is a devDependency)
 # Pass --updateSnapshot to regenerate tests/snap/*.snap after grammar changes.
 set -eu
 
@@ -10,7 +10,10 @@ cd "$(dirname "$0")"
 
 node tests/client.test.cjs
 
-BIN=../../bench/.tools/node_modules/.bin
+# Prefer the lockfile-pinned devDependency (what CI installs); fall back to
+# the shared bench/.tools install some local setups already have.
+BIN=node_modules/.bin
+[ -x "$BIN/vscode-tmgrammar-test" ] || BIN=../../bench/.tools/node_modules/.bin
 [ -x "$BIN/vscode-tmgrammar-test" ] || {
   echo "vscode-tmgrammar-test missing — see setup line in this script"; exit 1;
 }

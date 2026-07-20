@@ -11,6 +11,6 @@
 /integrations/vite/example/package-lock.json
 /integrations/vite/example/dist
 /editors/vscode/node_modules
-/editors/vscode/package-lock.json
+/editors/vscode/*.vsix
 /integrations/npm/crate/target
 /integrations/npm/fhtml.wasm

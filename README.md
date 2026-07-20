@@ -274,8 +274,10 @@ button {active ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"}
 
 ## Editor support
 
-A TextMate grammar and VS Code extension live in [editors/vscode/](editors/vscode/)
-(no marketplace listing yet — symlink into `~/.vscode/extensions`, see its README).
+Install **fhtml** from the
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fhtml.fhtml)
+or [Open VSX](https://open-vsx.org/extension/fhtml/fhtml) (VSCodium, Cursor);
+the source lives in [editors/vscode/](editors/vscode/).
 The grammar covers the full language including the template layer, and raw `<` lines
 are highlighted as embedded HTML.
 

@@ -131,15 +131,16 @@ html(lang=en)
         section(id=editors) scroll-mt-24
           h2 text-2xl font-semibold tracking-tight "Editor support"
           p mt-3 leading-7 text-slate-600
-            | A TextMate grammar and VS Code extension live in
+            | Install the extension from the
             |
-            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "editors/vscode/"
-            | (no marketplace listing yet — symlink into
+            a(href="https://marketplace.visualstudio.com/items?itemName=fhtml.fhtml") font-medium text-indigo-600 hover:text-indigo-500 "VS Code Marketplace"
+            |  or
             |
-            code rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.85em] text-slate-700 "~/.vscode/extensions"
-            | , see its README). The grammar covers the full language including the
-            | template layer, and a language server backs diagnostics, formatting,
-            | symbols, definitions, and completion.
+            a(href="https://open-vsx.org/extension/fhtml/fhtml") font-medium text-indigo-600 hover:text-indigo-500 "Open VSX"
+            |  (VSCodium, Cursor). Syntax highlighting works with zero setup; once
+            | the compiler above is installed, a language server backs diagnostics,
+            | formatting, symbols, definitions, and completion. The grammar covers
+            | the full language including the template layer.
 
       . mt-14 rounded-2xl border border-slate-200 bg-slate-50 p-8 text-center
         h2 text-xl font-semibold tracking-tight "Installed?"

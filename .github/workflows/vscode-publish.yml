@@ -1,0 +1,85 @@
+name: Publish VS Code extension
+
+# Publishes editors/vscode to the VS Code Marketplace and Open VSX when a
+# vscode-v* tag is pushed (vscode-v0.1.0 -> extension version 0.1.0; the
+# prefix is excluded from the v* tags that publish @fhtml/core).
+# Gates: tag/version parity, the LSP-client smoke test and TextMate grammar
+# tests (test.sh), then one `vsce package` whose VSIX goes to both
+# registries and onto a (non-latest) GitHub release. --skip-duplicate makes
+# reruns safe after a partial publish.
+# workflow_dispatch is a PACKAGING rehearsal (tests + vsce package + VSIX
+# artifact); it does not exercise tokens or registry-side checks.
+#
+# One-time setup: Marketplace publisher + VSCE_PAT secret (Azure DevOps PAT,
+# scope Marketplace > Manage). TEMPORARY: global Azure DevOps PATs retire
+# 2026-12-01 — migrate to Entra ID workload identity + `vsce publish
+# --azure-credential` before then. Open VSX namespace (ownership request
+# filed) + OVSX_PAT secret.
+
+on:
+  push:
+    tags: ['vscode-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # attach the .vsix to the GitHub release
+
+concurrency:
+  group: vscode-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check the tag matches the extension version
+        if: github.ref_type == 'tag'
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          if [ "vscode-v$pkg" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match extension version vscode-v$pkg" >&2
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - run: ./test.sh
+
+      - run: npx vsce package # emits fhtml-<version>.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: editors/vscode/*.vsix # upload-artifact ignores defaults.run
+
+      - name: Publish to VS Code Marketplace
+        if: github.ref_type == 'tag'
+        run: npx vsce publish --skip-duplicate --packagePath ./*.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        if: github.ref_type == 'tag'
+        run: npx ovsx publish --skip-duplicate ./*.vsix
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Attach VSIX to GitHub release
+        if: github.ref_type == 'tag'
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "VS Code extension ${GITHUB_REF_NAME#vscode-v}" \
+            --notes "fhtml VS Code extension — Marketplace/Open VSX release." \
+            --latest=false --verify-tag ./*.vsix \
+          || gh release upload "$GITHUB_REF_NAME" --clobber ./*.vsix
+        env:
+          GH_TOKEN: ${{ github.token }}

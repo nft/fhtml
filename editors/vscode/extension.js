@@ -24,6 +24,12 @@ function available(bin) {
 }
 
 async function start() {
+  // Restricted Mode: never spawn the binary (VS Code already ignores a
+  // workspace-provided fhtml.path via restrictedConfigurations, and its own
+  // UI explains the reduced functionality — no message needed from us).
+  if (!vscode.workspace.isTrusted) {
+    return;
+  }
   const bin = binary();
   if (!available(bin)) {
     // Highlighting works without the binary — say so once, quietly, and
@@ -55,6 +61,7 @@ async function start() {
 
 async function activate(context) {
   context.subscriptions.push(
+    vscode.workspace.onDidGrantWorkspaceTrust(() => start()),
     vscode.workspace.onDidChangeConfiguration(async (e) => {
       if (!e.affectsConfiguration("fhtml.path")) {
         return;

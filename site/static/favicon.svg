@@ -1,15 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="fhtml">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#38bdf8"/>
-      <stop offset="0.55" stop-color="#4f46e5"/>
-      <stop offset="1" stop-color="#a21caf"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <g fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M24 22 L15 32 L24 42"/>
-    <path d="M40 22 L49 32 L40 42"/>
-    <path d="M35 19 L29 45"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="fhtml">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2550"/><stop offset="1" stop-color="#3a327f"/></linearGradient>
+  <linearGradient id="leftG" x1="1" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#03c7e8"/>
+    <stop offset="0.45" stop-color="#1768d1"/>
+    <stop offset="1" stop-color="#16bedf"/>
+  </linearGradient>
+  <linearGradient id="rightG" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4c4bd4"/>
+    <stop offset="0.45" stop-color="#6537d6"/>
+    <stop offset="1" stop-color="#145cc6"/>
+  </linearGradient>
+  <linearGradient id="centerG" x1="0.15" y1="1" x2="0.85" y2="0">
+    <stop offset="0" stop-color="#18cee8"/>
+    <stop offset="0.42" stop-color="#1967c8"/>
+    <stop offset="0.72" stop-color="#174bad"/>
+    <stop offset="1" stop-color="#6531ce"/>
+  </linearGradient>
+  <linearGradient id="swooshG" x1="0" y1="0.6" x2="1" y2="0.3">
+    <stop offset="0" stop-color="#073f94"/>
+    <stop offset="0.48" stop-color="#167cbf"/>
+    <stop offset="1" stop-color="#21bddd"/>
+  </linearGradient>
+  <linearGradient id="tailG" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#16d3e8"/>
+    <stop offset="0.55" stop-color="#20b9df"/>
+    <stop offset="1" stop-color="#377aca"/>
+  </linearGradient>
+  <linearGradient id="archG" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#1a66c9"/>
+    <stop offset="0.55" stop-color="#1549ad"/>
+    <stop offset="1" stop-color="#5b27c8"/>
+  </linearGradient>
+  <clipPath id="centerClip">
+    <path d="M214.07 58.22C181 61 172 84 164 111C158 133 159 135 152 139C137 141 128 153 125 175C124 181 126 182 130 176C137 168 147 164 151 168C153 171 150 190 144 202C136 218 122 226 108 224C93 222 84 209 79 201C76 197 78 211 85 225C94 243 112 251 128 250C151 248 166 231 174 208C181 187 181 169 188 162C194 158 204 161 213 149C220 140 224 124 221 120C219 118 216 126 207 130C198 134 191 136 190 129C190 120 197 102 206 94C221 81 244 82 260 105C265 113 263 95 258 84C248 64 231 57 214 58Z"/>
+  </clipPath>
+</defs>
+<circle cx="128" cy="128" r="124" fill="url(#bg)"/>
+<g transform="translate(17.34 33.33) scale(0.6148)">
+<path d="M103.34 105.67C94 109 86 119 76 127L61 138C48 148 46 157 58 167L82 186C94 197 101 205 109 201C118 197 118 190 109 182L84 162C76 155 77 151 84 145L108 127C119 118 117 108 109 105C107 105 105 105 103 106Z" fill="url(#leftG)"/>
+
+<path d="M238.23 105.22C229 109 229 118 237 125L262 145C272 153 270 158 263 163L239 182C229 190 229 198 237 202C243 205 248 199 255 195L283 172C302 157 302 149 285 137L259 116C250 109 245 103 238 105Z" fill="url(#rightG)"/>
+
+<path d="M214.07 58.22C181 61 172 84 164 111C158 133 159 135 152 139C137 141 128 153 125 175C124 181 126 182 130 176C137 168 147 164 151 168C153 171 150 190 144 202C136 218 122 226 108 224C93 222 84 209 79 201C76 197 78 211 85 225C94 243 112 251 128 250C151 248 166 231 174 208C181 187 181 169 188 162C194 158 204 161 213 149C220 140 224 124 221 120C219 118 216 126 207 130C198 134 191 136 190 129C190 120 197 102 206 94C221 81 244 82 260 105C265 113 263 95 258 84C248 64 231 57 214 58Z" fill="url(#centerG)"/>
+
+<g clip-path="url(#centerClip)">
+  <path d="M160 141C162 112 169 79 194 65C210 56 236 57 253 72C231 67 211 76 198 95C188 110 187 126 186 141Z" fill="url(#archG)" opacity="0.95"/>
+  <path d="M185 137C187 106 198 81 218 69C231 62 246 66 258 79C245 74 231 78 220 88C207 100 202 118 201 135Z" fill="#2f2bb4" opacity="0.42"/>
+  <path d="M217 68C239 65 258 81 264 108C257 93 245 84 229 83C219 82 211 85 203 91C206 80 210 73 217 68Z" fill="#6a28cf" opacity="0.72"/>
+
+  <path d="M123 183C127 160 139 146 160 139C179 133 205 140 223 119C222 140 212 154 194 162C173 172 149 161 123 183Z" fill="url(#swooshG)"/>
+  <path d="M143 148C165 141 199 146 220 127C211 145 191 152 168 153C158 153 150 151 143 148Z" fill="#79d8ec" opacity="0.55"/>
+  <path d="M127 178C137 166 151 160 166 158C153 157 139 161 127 169Z" fill="#0a4f9e" opacity="0.75"/>
+
+  <path d="M155 157C160 185 154 216 135 239C149 232 162 218 168 198C173 180 174 167 177 156Z" fill="#62b8df" opacity="0.55"/>
+  <path d="M177 153C177 184 170 222 145 246C165 236 180 214 184 189C187 174 188 161 190 151Z" fill="#0e4ea9" opacity="0.48"/>
+
+  <path d="M77 198C87 220 104 233 126 233C146 233 160 221 168 202C164 230 146 249 119 250C96 248 81 230 77 198Z" fill="url(#tailG)"/>
+  <path d="M91 220C106 236 126 241 146 231C137 244 121 249 107 243C99 239 94 231 91 220Z" fill="#68d8eb" opacity="0.58"/>
+</g>
+
+<path d="M71 148C82 136 94 126 107 116" fill="none" stroke="#45d8ec" stroke-width="4" stroke-linecap="round" opacity="0.35"/>
+<path d="M242 116C258 128 272 141 286 153" fill="none" stroke="#9a66ef" stroke-width="3" stroke-linecap="round" opacity="0.23"/>
+</g>
 </svg>

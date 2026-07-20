@@ -1,5 +1,7 @@
 # fhtml for VS Code
 
+[Website](https://nft.github.io/fhtml/) · [Docs](https://nft.github.io/fhtml/docs.html) · [Repository](https://github.com/nft/fhtml)
+
 Language support for [fhtml (Fluid HTML)](https://github.com/nft/fhtml) `.fhtml` files:
 syntax highlighting always, and — when the fhtml compiler is installed —
 live diagnostics, formatting, outline, go-to-definition and completion via

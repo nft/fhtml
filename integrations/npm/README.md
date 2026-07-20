@@ -1,5 +1,7 @@
 # @fhtml/core
 
+[Website](https://nft.github.io/fhtml/) · [Docs](https://nft.github.io/fhtml/docs.html) · [Repository](https://github.com/nft/fhtml)
+
 The [fhtml](../..) compiler compiled to WebAssembly: render, compile to
 plain JS modules, format, and analyze fhtml anywhere JavaScript runs —
 Node, browsers, Cloudflare Workers, Deno. No native binary, no

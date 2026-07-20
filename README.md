@@ -10,6 +10,11 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@fhtml/core"><img src="https://img.shields.io/npm/v/@fhtml/core.svg?logo=npm&color=cb3837" alt="npm version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/@fhtml/core.svg?color=blue" alt="MIT license"></a>
+</p>
+
 # fhtml — Fluid HTML
 
 A whitespace-based markup language (`.fhtml`) that compiles 1:1 to HTML. Like Pug, but built

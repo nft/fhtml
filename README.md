@@ -190,6 +190,17 @@ the `llms.txt` convention:
 [llms.txt](https://nft.github.io/fhtml/llms.txt) ·
 [llms-full.txt](https://nft.github.io/fhtml/llms-full.txt).
 
+The recommended path is the [`skills/fhtml`](skills/) skill, which adds the practices
+llms.md deliberately leaves out — project structure, partials, when to factor a `def`,
+no inline JS — on top of that reference:
+
+| Agent | Install |
+|---|---|
+| Claude Code | `cp -r skills/fhtml ~/.claude/skills/fhtml` |
+| Codex CLI | append [`skills/fhtml/AGENTS.md`](skills/fhtml/AGENTS.md) to `AGENTS.md` |
+| Gemini CLI | append the same file to `GEMINI.md` |
+| anything else | the same file is self-contained plain markdown ([skill.md](https://nft.github.io/fhtml/skill.md)) |
+
 ### As a library
 
 ```rust

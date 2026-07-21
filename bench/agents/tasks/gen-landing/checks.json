@@ -1,0 +1,23 @@
+{
+  "primary": "index.fhtml",
+  "checks": [
+    {"id": "nav", "kind": "tag_count", "tag": "nav", "op": ">=", "n": 1},
+    {"id": "footer", "kind": "tag_count", "tag": "footer", "op": ">=", "n": 1},
+    {"id": "headline", "kind": "text_contains",
+     "texts": ["Ship faster with fhtml"]},
+    {"id": "features", "kind": "text_contains",
+     "texts": ["Zero config", "Token cheap", "Tailwind native"]},
+    {"id": "feature-cards", "kind": "tag_count", "tag": "article",
+     "op": ">=", "n": 3},
+    {"id": "cta", "kind": "attr_present", "tag": "a",
+     "attr": "href", "value": "/signup"},
+    {"id": "menu-script", "kind": "tag_count", "tag": "script",
+     "attr": "src", "value": "/js/menu.js", "op": ">=", "n": 1}
+  ],
+  "quality": {
+    "no_inline_js": true,
+    "fmt_clean": true,
+    "def_usage": true,
+    "repetition_max": 0.5
+  }
+}

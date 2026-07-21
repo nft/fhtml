@@ -95,8 +95,11 @@ compile-fail analog; `tokens_out` counts the whole JSON. No target gets any
 repair beyond fence-stripping — grading symmetry. All new records carry the
 run date and the response's `api_model`/`api_provider` strings.
 
-Not yet measured (needs a separate task design): free-form generation from a
-visual/text brief, and exact-match *edit* tasks on existing fhtml files.
+Free-form generation from a text brief and exact-match *edit* tasks on
+existing fhtml files are measured by the separate **agent harness** in
+[agents/](agents/) — it runs local CLI coding agents (Claude Code, Codex,
+Gemini CLI) end-to-end in throwaway workspaces, with and without the
+[fhtml skill](../skills/) installed.
 
 ## Tailwind `@source` scanning: `tailwind_scan.sh`
 

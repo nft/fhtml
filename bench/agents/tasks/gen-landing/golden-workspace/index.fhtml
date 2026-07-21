@@ -1,0 +1,42 @@
+def feature(title)
+  article rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200
+    h3 text-lg font-semibold text-slate-900 "{title}"
+    p mt-2 text-sm text-slate-600
+      children
+doctype
+html(lang=en)
+  head
+    meta(charset=utf-8)
+    meta(name=viewport content="width=device-width, initial-scale=1")
+    title "fhtml — ship faster"
+  body bg-slate-50 text-slate-900 antialiased
+    nav mx-auto flex max-w-6xl items-center justify-between px-6 py-4
+      a(href=/) text-lg font-bold tracking-tight "fhtml"
+      . hidden items-center gap-6 text-sm font-medium sm:flex
+        a(href=/) hover:text-indigo-600 "Home"
+        a(href=/features) hover:text-indigo-600 "Features"
+        a(href=/pricing) hover:text-indigo-600 "Pricing"
+      button(type=button aria-expanded=false aria-controls=mobile-menu) #menu-toggle rounded-md p-2 hover:bg-slate-100 sm:hidden
+        span sr-only "Open menu"
+        span "☰"
+    .(hidden) #mobile-menu border-t border-slate-200 px-6 py-4 sm:hidden
+      a(href=/) block py-1 "Home"
+      a(href=/features) block py-1 "Features"
+      a(href=/pricing) block py-1 "Pricing"
+    main
+      section mx-auto max-w-6xl px-6 py-24 text-center
+        h1 text-5xl font-bold tracking-tight "Ship faster with fhtml"
+        p mx-auto mt-6 max-w-2xl text-lg text-slate-600
+          | Indentation-based markup that compiles 1:1 to HTML — no closing tags, no angle brackets, every Tailwind class unquoted.
+        a(href=/signup) mt-10 inline-block rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:bg-indigo-500 "Get started free"
+      section mx-auto max-w-6xl px-6 pb-24
+        . grid grid-cols-1 gap-6 sm:grid-cols-3
+          +feature(title="Zero config")
+            | One binary compiles files or whole trees — no bundler, no plugins.
+          +feature(title="Token cheap")
+            | Markup that is dramatically cheaper for models to write than HTML.
+          +feature(title="Tailwind native")
+            | Bare tokens are the class list; every utility works unquoted.
+    footer border-t border-slate-200 py-10 text-center text-sm text-slate-500
+      p "© 2026 fhtml. All rights reserved."
+    script(src=/js/menu.js defer)

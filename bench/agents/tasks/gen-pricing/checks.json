@@ -1,0 +1,21 @@
+{
+  "primary": "index.fhtml",
+  "checks": [
+    {"id": "tier-names", "kind": "text_contains",
+     "texts": ["Starter", "Growth", "Enterprise"]},
+    {"id": "prices", "kind": "text_contains", "texts": ["$19", "$49"]},
+    {"id": "ctas", "kind": "tag_count", "tag": "a",
+     "attr": "href", "value": "/signup", "op": ">=", "n": 3},
+    {"id": "highlight", "kind": "class_present",
+     "classes": ["ring-2", "ring-indigo-600"]},
+    {"id": "feature-lists", "kind": "tag_count", "tag": "ul",
+     "op": ">=", "n": 3}
+  ],
+  "quality": {
+    "no_inline_js": true,
+    "fmt_clean": true,
+    "def_usage": true,
+    "require_defs": {"min_defs": 1, "min_calls": 3},
+    "repetition_max": 0.5
+  }
+}

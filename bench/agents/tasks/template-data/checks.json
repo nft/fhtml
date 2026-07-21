@@ -1,0 +1,20 @@
+{
+  "primary": "team.fhtml",
+  "data": "data.json",
+  "checks": [
+    {"id": "members", "kind": "tag_count", "tag": "li", "op": ">=", "n": 3},
+    {"id": "names", "kind": "text_contains",
+     "texts": ["Ava Chen", "Rui Costa", "Lena Fischer", "Design Lead"]},
+    {"id": "avatars", "kind": "tag_count", "tag": "img",
+     "op": ">=", "n": 3},
+    {"id": "alt-team", "kind": "alt_data", "data": "data.alt.json",
+     "texts": ["Noah Berg", "Priya Nair", "Data Scientist"]},
+    {"id": "empty-state", "kind": "alt_data", "data": "data.empty.json",
+     "texts": ["No team members yet."]}
+  ],
+  "quality": {
+    "no_inline_js": true,
+    "fmt_clean": true,
+    "def_usage": true
+  }
+}

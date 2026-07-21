@@ -1,0 +1,14 @@
+{
+  "primary": "index.fhtml",
+  "checks": [
+    {"id": "dom", "kind": "dom_eq", "golden": "golden/index.html"},
+    {"id": "changelog-links", "kind": "tag_count", "tag": "a",
+     "attr": "href", "value": "/changelog", "op": "==", "n": 2},
+    {"id": "cta-text", "kind": "text_contains", "texts": ["Start for free"]}
+  ],
+  "quality": {
+    "no_inline_js": true,
+    "fmt_clean": true,
+    "def_usage": true
+  }
+}

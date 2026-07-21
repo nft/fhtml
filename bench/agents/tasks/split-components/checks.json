@@ -1,0 +1,13 @@
+{
+  "primary": "index.fhtml",
+  "checks": [
+    {"id": "dom", "kind": "dom_eq", "golden": "golden/index.html"},
+    {"id": "includes", "kind": "deps_count", "min": 3}
+  ],
+  "quality": {
+    "no_inline_js": false,
+    "fmt_clean": true,
+    "def_usage": true,
+    "min_fhtml_files": 4
+  }
+}

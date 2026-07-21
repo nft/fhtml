@@ -1,0 +1,8 @@
+{
+  "heading": "Our team",
+  "team": [
+    {"name": "Ava Chen", "role": "Design Lead", "avatar": "/img/team/ava.jpg"},
+    {"name": "Rui Costa", "role": "Firmware Engineer", "avatar": "/img/team/rui.jpg"},
+    {"name": "Lena Fischer", "role": "Product Manager", "avatar": "/img/team/lena.jpg"}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "heading": "Our team",
+  "team": [
+    {"name": "Noah Berg", "role": "Support Engineer", "avatar": "/img/team/noah.jpg"},
+    {"name": "Priya Nair", "role": "Data Scientist", "avatar": "/img/team/priya.jpg"}
+  ]
+}

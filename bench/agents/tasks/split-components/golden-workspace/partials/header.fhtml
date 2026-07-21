@@ -1,0 +1,7 @@
+def site_header
+  header sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80 > nav mx-auto flex max-w-6xl items-center justify-between px-4 py-3
+    a(href=/) text-lg font-bold tracking-tight "Acme"
+    ul flex items-center gap-6 text-sm font-medium
+      li > a(href=/features) hover:text-indigo-600 "Features"
+      li > a(href=/pricing) hover:text-indigo-600 "Pricing"
+      li > a(href=/docs) hover:text-indigo-600 "Docs"

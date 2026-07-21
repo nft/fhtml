@@ -1,0 +1,28 @@
+def tier(name price period=null highlight=false cta_text={"Get started"})
+  . flex flex-col rounded-3xl bg-white p-8 shadow-sm {highlight && 'ring-2 ring-indigo-600'} { !highlight && 'ring-1 ring-slate-200'}
+    h3 text-lg font-semibold text-slate-900 "{name}"
+    p mt-4 flex items-baseline gap-x-1
+      span text-4xl font-semibold tracking-tight text-slate-900 "{price}"
+      if period
+        span text-sm font-semibold text-slate-600 "{period}"
+    a(href=/signup) mt-6 block rounded-md bg-indigo-600 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-indigo-500 "{cta_text}"
+    ul mt-8 space-y-3 text-sm text-slate-600
+      children
+section bg-slate-50 py-24
+  . mx-auto max-w-7xl px-6
+    . mx-auto max-w-2xl text-center
+      h2 text-base font-semibold text-indigo-600 "Pricing"
+      p mt-2 text-4xl font-semibold tracking-tight text-slate-900 "Plans for every team"
+    . mx-auto mt-16 grid max-w-md grid-cols-1 gap-8 lg:max-w-none lg:grid-cols-3
+      +tier(name="Starter" price="$19" period="/mo")
+        li "Up to 3 projects"
+        li "Community support"
+        li "Weekly backups"
+      +tier(name="Growth" price="$49" period="/mo" highlight=true cta_text="Start free trial")
+        li "Unlimited projects"
+        li "Priority support"
+        li "Daily backups"
+      +tier(name="Enterprise" price="Custom" cta_text="Talk to sales")
+        li "SSO and audit logs"
+        li "Dedicated success engineer"
+        li "Custom data residency"

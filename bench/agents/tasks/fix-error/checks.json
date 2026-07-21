@@ -1,0 +1,11 @@
+{
+  "primary": "index.fhtml",
+  "checks": [
+    {"id": "dom", "kind": "dom_eq", "golden": "golden/index.html"}
+  ],
+  "quality": {
+    "no_inline_js": true,
+    "fmt_clean": true,
+    "def_usage": true
+  }
+}

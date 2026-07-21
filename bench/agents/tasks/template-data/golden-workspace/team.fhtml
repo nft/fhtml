@@ -1,0 +1,11 @@
+section mx-auto max-w-4xl px-6 py-16
+  h2 text-2xl font-semibold tracking-tight text-slate-900 "{heading}"
+  ul mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3
+    for member in team
+      li flex items-center gap-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200
+        img(src={member.avatar} alt="") h-12 w-12 rounded-full bg-slate-200 object-cover
+        .
+          p text-sm font-semibold text-slate-900 "{member.name}"
+          p text-sm text-slate-500 "{member.role}"
+    empty
+      li text-sm text-slate-400 "No team members yet."

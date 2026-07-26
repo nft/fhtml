@@ -1,0 +1,38 @@
+// SYNTAX TEST "source.fhtml" "raw-text bodies (SPEC §6.3)"
+
+script
+// <- entity.name.tag.fhtml
+  const answer = 40 + 2;
+// <- meta.embedded.block.javascript
+//^^^^^^^^^^^^^^^^^^^^^^ meta.embedded.block.javascript
+
+  done();
+// <- meta.embedded.block.javascript
+
+style
+// <- entity.name.tag.fhtml
+  .brand { color: rebeccapurple; }
+// <- meta.embedded.block.css
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.embedded.block.css
+
+script(type=module defer)
+// <- entity.name.tag.fhtml
+//    ^ punctuation.section.attributes.begin.fhtml
+//     ^^^^ entity.other.attribute-name.fhtml
+  import { x } from './m.js';
+// <- meta.embedded.block.javascript
+
+script(type=application/json)
+// <- entity.name.tag.fhtml
+  { "answer": 42 }
+// <- meta.embedded.block.json
+//^^^^^^^^^^^^^^^^ meta.embedded.block.json
+
+SCRIPT
+// <- entity.name.tag.fhtml
+  caseInsensitive();
+// <- meta.embedded.block.javascript
+
+div mt-2
+// <- entity.name.tag.fhtml
+//  ^^^^ entity.other.attribute-name.class.fhtml

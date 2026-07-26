@@ -18,11 +18,16 @@ BIN=node_modules/.bin
   echo "vscode-tmgrammar-test missing — see setup line in this script"; exit 1;
 }
 
-# tests/html-stub.tmLanguage.json stands in for VS Code's built-in
-# text.html.basic so the raw-passthrough include resolves outside an editor.
+# tests/*-stub.tmLanguage.json stand in for VS Code's built-in grammars
+# (text.html.basic, source.js/css/json) so the raw-passthrough and raw-text
+# includes resolve outside an editor. Stubs are not cosmetic: an include of
+# an unregistered scope silently disables its whole rule in vscode-textmate,
+# so without them the raw-text rules never fire in tests.
+STUBS="-g tests/html-stub.tmLanguage.json -g tests/js-stub.tmLanguage.json \
+  -g tests/css-stub.tmLanguage.json -g tests/json-stub.tmLanguage.json"
 "$BIN/vscode-tmgrammar-test" \
-  -g syntaxes/fhtml.tmLanguage.json -g tests/html-stub.tmLanguage.json \
+  -g syntaxes/fhtml.tmLanguage.json $STUBS \
   "tests/*.test.fhtml"
 "$BIN/vscode-tmgrammar-snap" -s source.fhtml \
-  -g syntaxes/fhtml.tmLanguage.json -g tests/html-stub.tmLanguage.json \
+  -g syntaxes/fhtml.tmLanguage.json $STUBS \
   "tests/snap/*.fhtml" "$@"

@@ -336,6 +336,9 @@
         "3": {
           "patterns": [
             {
+              "include": "#raw-text-attrs"
+            },
+            {
               "include": "#element-content"
             }
           ]
@@ -359,6 +362,9 @@
         "3": {
           "patterns": [
             {
+              "include": "#raw-text-attrs"
+            },
+            {
               "include": "#element-content"
             }
           ]
@@ -381,6 +387,9 @@
         },
         "3": {
           "patterns": [
+            {
+              "include": "#raw-text-attrs"
+            },
             {
               "include": "#element-content"
             }
@@ -647,6 +656,48 @@
           "include": "#interpolation"
         }
       ]
+    },
+    "raw-text-attrs": {
+      "name": "meta.attributes.fhtml",
+      "begin": "\\(",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.attributes.begin.fhtml"
+        }
+      },
+      "end": "\\)|(?<!\\\\)(?=\\n)",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.attributes.end.fhtml"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#string-double"
+        },
+        {
+          "include": "#string-single"
+        },
+        {
+          "include": "#interpolation"
+        },
+        {
+          "match": "(?<==)[^\\s)]+",
+          "name": "string.unquoted.attribute-value.fhtml"
+        },
+        {
+          "match": "=",
+          "name": "punctuation.separator.key-value.fhtml"
+        },
+        {
+          "include": "#line-continuation"
+        },
+        {
+          "match": "[^\\s=)]+",
+          "name": "entity.other.attribute-name.fhtml"
+        }
+      ],
+      "comment": "#attrs anchored with \\G cannot match inside a beginCaptures region (no anchor position there) — this clone opens on a plain `(` and is used only for raw-text tag lines."
     }
   }
 }

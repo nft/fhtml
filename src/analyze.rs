@@ -491,8 +491,9 @@ fn warning_diag(w: &str, lines: &[&str]) -> Diag {
 // A line-prefix scan, deliberately not a recovering parser (SPEC §11): it
 // recognizes the three top-level symbol shapes and can misread free text
 // that happens to share them (a `| def x` text-block line is skipped, but a
-// raw-passthrough body line starting `+x` is not). Good enough for "the
-// buffer is mid-keystroke" — the parse error is shown alongside.
+// raw-passthrough or bare raw-text body line starting `+x` or `def ` is
+// not). Good enough for "the buffer is mid-keystroke" — the parse error is
+// shown alongside.
 
 fn rescan(lines: &[&str], file: Option<&Path>, vfs: &dyn Vfs) -> Analysis {
     let mut a = Analysis {

@@ -1,0 +1,20 @@
+doctype
+html(lang=en)
+  head
+    title "Raw text bare bodies"
+    style
+      .card { color: #333; }
+
+      .card:hover {
+        color: #000;
+      }
+  body
+    div p-4 > script
+      go();
+    SCRIPT(type=module)
+      import { x } from './m.js';
+
+      if (a < b) {
+        run(`tpl
+        continued`);
+      }

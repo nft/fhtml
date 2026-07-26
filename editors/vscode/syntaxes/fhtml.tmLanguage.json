@@ -28,6 +28,15 @@
       "include": "#component-call"
     },
     {
+      "include": "#raw-text-json"
+    },
+    {
+      "include": "#raw-text-script"
+    },
+    {
+      "include": "#raw-text-style"
+    },
+    {
       "include": "#element"
     }
   ],
@@ -314,6 +323,75 @@
         {
           "match": "[A-Za-z_][A-Za-z0-9_]*",
           "name": "variable.parameter.fhtml"
+        }
+      ]
+    },
+    "raw-text-json": {
+      "comment": "A script tag whose type is a JSON flavor (JSON island, import map): the raw-text body (SPEC §6.3) is data, not JavaScript. Must precede #raw-text-script.",
+      "begin": "^(\\s*)((?i:script))(?=\\s|\\(|$)(?=.*\\btype=[\"']?(?:application/(?:json|ld\\+json)|importmap|speculationrules))(.*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.fhtml"
+        },
+        "3": {
+          "patterns": [
+            {
+              "include": "#element-content"
+            }
+          ]
+        }
+      },
+      "while": "^(?=\\1[ \\t]|\\s*$)",
+      "contentName": "meta.embedded.block.json",
+      "patterns": [
+        {
+          "include": "source.json"
+        }
+      ]
+    },
+    "raw-text-script": {
+      "comment": "Raw-text element (SPEC §6.3): indented body lines are verbatim JavaScript. Tag matched case-insensitively, like the compiler. Chained forms (`div > script`) fall back to #element.",
+      "begin": "^(\\s*)((?i:script))(?=\\s|\\(|$)(.*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.fhtml"
+        },
+        "3": {
+          "patterns": [
+            {
+              "include": "#element-content"
+            }
+          ]
+        }
+      },
+      "while": "^(?=\\1[ \\t]|\\s*$)",
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "raw-text-style": {
+      "comment": "Raw-text element (SPEC §6.3): indented body lines are verbatim CSS.",
+      "begin": "^(\\s*)((?i:style))(?=\\s|\\(|$)(.*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "entity.name.tag.fhtml"
+        },
+        "3": {
+          "patterns": [
+            {
+              "include": "#element-content"
+            }
+          ]
+        }
+      },
+      "while": "^(?=\\1[ \\t]|\\s*$)",
+      "contentName": "meta.embedded.block.css",
+      "patterns": [
+        {
+          "include": "source.css"
         }
       ]
     },

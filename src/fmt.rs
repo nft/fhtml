@@ -154,14 +154,29 @@ fn fmt_node(out: &mut String, node: &Node, depth: usize, classes: Classes) {
             out.push_str(&format!("{ind}{}\n", element_line(el, classes)));
             let inner = innermost(el);
             if let Some(body) = &inner.raw_body {
-                // Raw-text body (SPEC §6.3): content bytes reprint verbatim —
-                // no reindent inside the `|`, no escape rewriting.
+                // Raw-text body (SPEC §6.3): bytes reprint verbatim, form is
+                // content-driven. A body whose first non-blank line starts
+                // with `|` — or which has no non-blank line at all — can only
+                // be spelled in the deprecated pipe form: printed bare it
+                // would reparse in pipe mode (or vanish) and change output.
+                // Everything else prints bare, which is also what migrates
+                // old pipe sources.
                 let cind = "  ".repeat(depth + 1);
+                let pipe = match body.iter().find(|l| !l.trim().is_empty()) {
+                    None => true,
+                    Some(l) => l.trim_start().starts_with('|'),
+                };
                 for l in body {
-                    if l.is_empty() {
-                        out.push_str(&format!("{cind}|\n"));
+                    if pipe {
+                        if l.is_empty() {
+                            out.push_str(&format!("{cind}|\n"));
+                        } else {
+                            out.push_str(&format!("{cind}| {l}\n"));
+                        }
+                    } else if l.is_empty() {
+                        out.push('\n');
                     } else {
-                        out.push_str(&format!("{cind}| {l}\n"));
+                        out.push_str(&format!("{cind}{l}\n"));
                     }
                 }
             }

@@ -6,6 +6,8 @@ Initial marketplace release.
 
 - TextMate grammar covering the full language: element lines, `|` text blocks,
   comments, raw `<` HTML passthrough (embedded HTML), and the template layer.
+- Raw-text bodies (`script`/`style`, SPEC §6.3) highlight as embedded
+  JavaScript/CSS — and as JSON for JSON islands and import maps.
 - LSP client for the compiler's built-in `fhtml lsp`: diagnostics, formatting,
   outline, go-to-definition, completion. Requires the `fhtml` binary (0.2.0 or
   newer) on $PATH or via the `fhtml.path` setting. Only runs in trusted

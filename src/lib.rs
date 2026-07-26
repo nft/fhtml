@@ -31,6 +31,7 @@ pub use analyze::{
 pub use emit::Mode;
 pub use error::Error;
 pub use expr::Value;
+pub use parser::is_raw_text;
 pub use vfs::{DiskVfs, MemVfs, Vfs};
 
 /// Whether bare class tokens decode through the shorthand codebook

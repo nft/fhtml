@@ -4,6 +4,41 @@ All notable changes to fhtml are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-07-26
+
+Script and style bodies without the pipes.
+
+### Added
+
+- **Bare raw-text bodies (SPEC §6.3)** — every line indented under a
+  `script`/`style` tag is now the element's body, verbatim: no `|` prefix,
+  blank lines and relative indentation preserved, trailing whitespace kept,
+  dedent anchored on the shallowest non-blank line. Interpolation stays off,
+  and the `</script` end-tag hazard is still a compile error — its message now
+  suggests only the `<\/script>` JS-string spelling, since §8 passthrough
+  never rescued a literal end tag in a browser anyway.
+- **Embedded highlighting in the VS Code extension** — raw-text bodies
+  highlight as real JavaScript/CSS; JSON islands and import maps
+  (`script(type=application/json)` and friends) highlight as JSON.
+- **html2fhtml emits raw-text elements** — `<script>`/`<style>` convert to
+  the element form with converted attributes instead of raw passthrough,
+  which remains the fallback for unrepresentable attributes or un-dedentable
+  indentation.
+
+### Changed
+
+- `fhtml fmt` migrates `|`-form script/style bodies to the bare form (the
+  compiled output is byte-identical); LSP completion goes quiet inside
+  raw-text bodies.
+- New public API: `fhtml::is_raw_text`.
+
+### Deprecated
+
+- The `|` form of script/style bodies. It still parses with the pre-0.4
+  semantics — selected when the body's first non-blank line starts with `|` —
+  and remains the only spelling for a body whose first content line itself
+  starts with `|`; `fmt` preserves it there and migrates everything else.
+
 ## [0.3.0] — 2026-07-19
 
 Conditional classes without a helper, and the batch build path as a

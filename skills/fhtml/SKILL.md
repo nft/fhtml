@@ -102,8 +102,10 @@ static/
 
 ## Scripts and styles
 
-`script` and `style` bodies are raw text: `|` lines under them emit verbatim,
-with no escaping and **no interpolation**.
+`script` and `style` bodies are raw text: every line indented under the tag
+emits verbatim (no `|` prefix), with no escaping and **no interpolation**.
+Blank lines and relative indentation inside the body are preserved. (The
+pre-0.4 `|`-line form still parses; `fhtml fmt` migrates it.)
 
 - **Do not write inline JavaScript blocks.** Put behavior in a separate `.js`
   file and reference it: `script(src=/js/menu.js defer)`. Inline `script`

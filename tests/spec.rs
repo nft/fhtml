@@ -279,22 +279,136 @@ mod raw_text {
     }
 
     #[test]
-    fn element_child_errors() {
-        let e = error("script\n  div \"x\"\n");
-        assert!(e.contains("raw text"), "got: {e}");
-        assert!(e.contains("2:1"), "got: {e}");
+    fn bare_body_is_verbatim() {
+        let src = "script\n  const a = 1;\n  go(a);\n";
+        assert_eq!(min(src), "<script>const a = 1;\ngo(a);</script>");
     }
 
     #[test]
-    fn statement_child_errors() {
-        let e = error("script\n  if x\n    | y\n");
-        assert!(e.contains("`if` cannot nest inside `script`"), "got: {e}");
+    fn bare_body_keeps_relative_indent_and_interior_blanks() {
+        let src = "div\n  script\n    if (x) {\n      go();\n    }\n\n    done();\n";
+        assert_eq!(
+            min(src),
+            "<div><script>if (x) {\n  go();\n}\n\ndone();</script></div>"
+        );
     }
 
     #[test]
-    fn call_child_errors() {
-        let e = error("style\n  +card\n");
-        assert!(e.contains("`+card` cannot nest inside `style`"), "got: {e}");
+    fn bare_body_keeps_trailing_whitespace() {
+        // Trailing spaces are meaningful inside a template literal.
+        let src = "script\n  let s = `a  \n  b`;\n";
+        assert_eq!(min(src), "<script>let s = `a  \nb`;</script>");
+    }
+
+    #[test]
+    fn bare_body_bytes_identical_min_and_pretty() {
+        // SPEC §6.3: the body is never reindented — only the tags move.
+        let src = "div\n  script\n    if (x) {\n      go();\n    }\n\n    done();\n";
+        let body = "if (x) {\n  go();\n}\n\ndone();";
+        assert_eq!(min(src), format!("<div><script>{body}</script></div>"));
+        assert_eq!(
+            pretty(src),
+            format!("<div>\n  <script>{body}</script>\n</div>\n")
+        );
+    }
+
+    #[test]
+    fn element_shaped_line_is_content() {
+        // Bare bodies recognize no fhtml constructs — this is JS-shaped bytes.
+        let src = "script\n  div \"x\"\n";
+        assert_eq!(min(src), "<script>div \"x\"</script>");
+    }
+
+    #[test]
+    fn statement_shaped_and_pipe_lines_are_content() {
+        // `if x` selects bare mode; the later `|` line is literal bytes.
+        let src = "script\n  if x\n    | y\n";
+        assert_eq!(min(src), "<script>if x\n  | y</script>");
+    }
+
+    #[test]
+    fn call_shaped_line_is_content() {
+        let src = "style\n  +card\n";
+        assert_eq!(min(src), "<style>+card</style>");
+    }
+
+    #[test]
+    fn or_continuation_mid_body_is_content() {
+        let src = "script\n  x = a\n    || b;\n";
+        assert_eq!(min(src), "<script>x = a\n  || b;</script>");
+    }
+
+    #[test]
+    fn pipe_body_cannot_mix_with_bare_lines() {
+        let e = error("script\n  | a();\n  b();\n");
+        assert!(e.contains("deprecated `|` form"), "got: {e}");
+        assert!(e.contains("3:1"), "got: {e}");
+    }
+
+    #[test]
+    fn bare_body_end_tag_hazard_errors_with_position() {
+        let e = error("script\n  x('</script>');\n");
+        assert!(e.contains("would end the `script` element"), "got: {e}");
+        // Columns count from the physical line start (SPEC §11): the `<`
+        // sits at column 6 of `  x('</script>');`.
+        assert!(e.contains("2:6"), "got: {e}");
+    }
+
+    #[test]
+    fn bare_body_longer_tag_names_are_legal_text() {
+        let src = "script\n  x = '</scripting>' + '</style>';\n";
+        assert_eq!(
+            min(src),
+            "<script>x = '</scripting>' + '</style>';</script>"
+        );
+    }
+
+    #[test]
+    fn uppercase_raw_text_tag_takes_bare_body() {
+        // Case-insensitive raw-text detection; the tag re-emits as authored.
+        let src = "SCRIPT\n  go();\n";
+        assert_eq!(min(src), "<SCRIPT>go();</SCRIPT>");
+    }
+
+    #[test]
+    fn chained_target_script_takes_bare_body() {
+        let src = "div p-4 > script\n  go();\n";
+        assert_eq!(min(src), "<div class=\"p-4\"><script>go();</script></div>");
+    }
+
+    #[test]
+    fn bare_body_dedents_by_shallowest_line() {
+        // The first line is deeper than a later one — dedent anchors on the
+        // shallowest non-blank line, wherever it appears.
+        let src = "script\n    deep();\n  shallow();\n";
+        assert_eq!(min(src), "<script>  deep();\nshallow();</script>");
+    }
+
+    #[test]
+    fn bare_body_inconsistent_indentation_errors() {
+        let e = error("script\n\t a();\n  b();\n");
+        assert!(e.contains("inconsistent indentation"), "got: {e}");
+        assert!(e.contains("3:1"), "got: {e}");
+    }
+
+    #[test]
+    fn bare_body_keeps_whitespace_only_interior_lines() {
+        // A whitespace-only line inside a template literal keeps whatever
+        // extends the dedent prefix.
+        let src = "script\n  let s = `a\n   \n  b`;\n";
+        assert_eq!(min(src), "<script>let s = `a\n \nb`;</script>");
+    }
+
+    #[test]
+    fn bare_body_ends_at_sibling_level() {
+        let src = "div\n  script\n    a();\n  p \"hi\"\n";
+        assert_eq!(min(src), "<div><script>a();</script><p>hi</p></div>");
+    }
+
+    #[test]
+    fn bare_body_trailing_blanks_belong_to_surroundings() {
+        let src = "script\n  a();\n\ndiv\n";
+        assert_eq!(min(src), "<script>a();</script><div></div>");
     }
 
     #[test]
@@ -740,15 +854,48 @@ fn fmt_preserves_silent_comments_and_text_blocks() {
 }
 
 #[test]
-fn fmt_preserves_raw_text_bodies() {
-    // SPEC §6.3 guard: content bytes reprint verbatim — indentation inside
-    // the `|` untouched, no `\{` escape rewriting, blank `|` lines kept.
+fn fmt_migrates_pipe_bodies_to_bare() {
+    // SPEC §6.3: the deprecated `|` form formats to the bare form — content
+    // bytes verbatim (relative indent kept, no `\{` escape rewriting, blank
+    // lines kept), output unchanged.
     let src = "div\n    script\n        | if (a && b < c) { go(); }\n        |   deep(\\{);\n        |\n        | done();\n";
     let formatted = fhtml::format(src).unwrap();
     assert_eq!(
         formatted,
-        ".\n  script\n    | if (a && b < c) { go(); }\n    |   deep(\\{);\n    |\n    | done();\n"
+        ".\n  script\n    if (a && b < c) { go(); }\n      deep(\\{);\n\n    done();\n"
     );
+    assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    assert_eq!(min(&formatted), min(src));
+}
+
+#[test]
+fn fmt_preserves_bare_body_bytes() {
+    // Already-canonical bare bodies reprint byte-identically, trailing
+    // whitespace included.
+    let src = "script\n  let s = `a  \n  b`;\n\n  go();\n";
+    let formatted = fhtml::format(src).unwrap();
+    assert_eq!(formatted, src);
+    assert_eq!(min(&formatted), min(src));
+}
+
+#[test]
+fn fmt_keeps_pipe_form_when_first_content_line_starts_with_pipe() {
+    // `|foo` as first content is only spellable in pipe form — printed bare
+    // it would reparse in pipe mode and change the output.
+    let src = "script\n  | |foo\n";
+    let formatted = fhtml::format(src).unwrap();
+    assert_eq!(formatted, src);
+    assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
+    assert_eq!(min(src), "<script>|foo</script>");
+}
+
+#[test]
+fn fmt_keeps_pipe_form_for_blank_only_bodies() {
+    // A body of only blank lines has no bare spelling (bare parsing drops
+    // edge blanks) — the lone `|` stays.
+    let src = "script\n  |\n";
+    let formatted = fhtml::format(src).unwrap();
+    assert_eq!(formatted, src);
     assert_eq!(fhtml::format(&formatted).unwrap(), formatted);
     assert_eq!(min(&formatted), min(src));
 }

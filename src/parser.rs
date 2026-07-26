@@ -344,6 +344,10 @@ fn describe_indent(s: &str) -> String {
 struct Line {
     indent: String,
     content: String,
+    /// The untrimmed physical line (after CRLF normalization). Only bare
+    /// raw-text bodies (SPEC §6.3) read this — everywhere else trailing
+    /// whitespace is insignificant and `content` is the source of truth.
+    raw: String,
     num: usize,
 }
 
@@ -408,9 +412,9 @@ impl Parser {
         let lines = normalized
             .split('\n')
             .enumerate()
-            .map(|(i, raw)| {
-                let body = raw.trim_start_matches([' ', '\t']);
-                let indent = raw[..raw.len() - body.len()].to_string();
+            .map(|(i, line)| {
+                let body = line.trim_start_matches([' ', '\t']);
+                let indent = line[..line.len() - body.len()].to_string();
                 let content = body.trim_end().to_string();
                 let indent = if content.is_empty() {
                     String::new()
@@ -420,6 +424,7 @@ impl Parser {
                 Line {
                     indent,
                     content,
+                    raw: line.to_string(),
                     num: i + 1,
                 }
             })
@@ -453,6 +458,7 @@ impl Parser {
             return err(first.num, 1, DIRECTIVE_PLACEMENT);
         }
         first.content = String::new();
+        first.raw = String::new();
         Ok(true)
     }
 
@@ -988,12 +994,112 @@ impl Parser {
         out
     }
 
-    /// The body of a raw-text element (SPEC §6.3): `|` lines collected as
-    /// verbatim bytes — no interpolation scan, no source escapes; one leading
-    /// space after `|` is stripped, exactly as §6.2. Every other child form
-    /// is a targeted error, and so is a line HTML would read as the
-    /// element's own end tag. Returns `None` when there are no body lines.
+    /// The body of a raw-text element (SPEC §6.3). Mode is chosen by the
+    /// first non-blank body line: `|` selects the deprecated pipe form
+    /// (`parse_pipe_body`), anything else the bare form — every blank-or-
+    /// deeper line is verbatim bytes with trailing whitespace preserved,
+    /// no construct recognition, no escapes, no joining. Collected by
+    /// indent prefix, not `level_of`: JS/CSS indentation is arbitrary and
+    /// must not open or close fhtml levels. Returns `None` when there are
+    /// no body lines.
     fn parse_raw_body(&mut self, depth: usize, tag: &str) -> Result<Option<Vec<String>>> {
+        let marker = self.stack[depth].clone();
+        let deeper =
+            |l: &Line| l.indent.len() > marker.len() && l.indent.starts_with(marker.as_str());
+
+        let mut j = self.pos;
+        while j < self.lines.len() && self.lines[j].content.is_empty() {
+            j += 1;
+        }
+        if j < self.lines.len() && deeper(&self.lines[j]) && self.lines[j].content.starts_with('|')
+        {
+            return self.parse_pipe_body(depth, tag);
+        }
+
+        let mut idxs = Vec::new();
+        while self.pos < self.lines.len() {
+            let l = &self.lines[self.pos];
+            if l.content.is_empty() || deeper(l) {
+                idxs.push(self.pos);
+                self.pos += 1;
+            } else {
+                break;
+            }
+        }
+        // Leading and trailing blank lines belong to the surroundings, not
+        // the body; interior blanks are content.
+        while idxs
+            .last()
+            .is_some_and(|&i| self.lines[i].content.is_empty())
+        {
+            idxs.pop();
+        }
+        let lead = idxs
+            .iter()
+            .take_while(|&&i| self.lines[i].content.is_empty())
+            .count();
+        idxs.drain(..lead);
+        if idxs.is_empty() {
+            return Ok(None);
+        }
+
+        // Dedent by the shallowest non-blank line; every other non-blank
+        // line must extend that exact indentation (tabs vs spaces included).
+        let prefix = idxs
+            .iter()
+            .filter(|&&i| !self.lines[i].content.is_empty())
+            .map(|&i| self.lines[i].indent.as_str())
+            .min_by_key(|s| s.len())
+            .unwrap()
+            .to_string();
+        let mut body = Vec::new();
+        for &i in &idxs {
+            let l = &self.lines[i];
+            if l.content.is_empty() {
+                // Whitespace-only line: keep whatever extends the dedent
+                // prefix (it may be meaningful inside a template literal).
+                body.push(
+                    l.raw
+                        .strip_prefix(prefix.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                );
+                continue;
+            }
+            if !l.indent.starts_with(prefix.as_str()) {
+                return err(
+                    l.num,
+                    1,
+                    format!(
+                        "inconsistent indentation in `{tag}` body — every line must extend the body's shallowest indentation of {}",
+                        describe_indent(&prefix)
+                    ),
+                );
+            }
+            let text = &l.raw[prefix.len()..];
+            if let Some(off) = end_tag_hazard(text, tag) {
+                let col = prefix.chars().count() + text[..off].chars().count() + 1;
+                let t = tag.to_ascii_lowercase();
+                return err(
+                    l.num,
+                    col,
+                    format!(
+                        "`</{t}` here would end the `{tag}` element — HTML raw text has no escape for it; write `<\\/{t}` in a JS string (SPEC §6.3)"
+                    ),
+                );
+            }
+            body.push(text.to_string());
+        }
+        Ok(Some(body))
+    }
+
+    /// Deprecated pipe form of a raw-text body: `|` lines with the pre-0.4
+    /// semantics — one leading space after `|` stripped, verbatim otherwise
+    /// (but trailing whitespace trimmed), exactly one level deep, blank
+    /// source lines dropped, a bare `|` contributing an empty line. Kept so
+    /// `fhtml fmt` can migrate old sources, and as the only spelling for a
+    /// body whose first content line itself starts with `|` (SPEC §6.3).
+    fn parse_pipe_body(&mut self, depth: usize, tag: &str) -> Result<Option<Vec<String>>> {
         let mut body = Vec::new();
         let mut seen = false;
         while self.pos < self.lines.len() {
@@ -1015,12 +1121,11 @@ impl Parser {
             }
             let content = &self.lines[self.pos].content;
             if !content.starts_with('|') {
-                let first = content.split_whitespace().next().unwrap();
                 return err(
                     num,
                     1,
                     format!(
-                        "`{first}` cannot nest inside `{tag}` — script/style bodies are raw text: use `|` lines, or §8 raw passthrough for the whole element (SPEC §6.3)"
+                        "this `{tag}` body uses the deprecated `|` form, which cannot mix with bare lines — drop the leading `|` from every body line (`fhtml fmt` does this), or prefix this line with `|` too (SPEC §6.3)"
                     ),
                 );
             }
@@ -1035,7 +1140,7 @@ impl Parser {
                     num,
                     col,
                     format!(
-                        "`</{t}` here would end the `{tag}` element — HTML raw text has no escape for it; write `<\\/{t}` in a JS string, or use §8 passthrough (SPEC §6.3)"
+                        "`</{t}` here would end the `{tag}` element — HTML raw text has no escape for it; write `<\\/{t}` in a JS string (SPEC §6.3)"
                     ),
                 );
             }
@@ -1386,7 +1491,7 @@ fn expr_value(cur: &mut Cur, missing: &str, what: &str) -> Result<TplExpr> {
 /// the end of the line (body lines join with `\n`, which is whitespace). A
 /// bare substring check would false-positive on `</scripting>`, which is
 /// legal script text. Returns the byte offset of the `<`.
-fn end_tag_hazard(line: &str, tag: &str) -> Option<usize> {
+pub(crate) fn end_tag_hazard(line: &str, tag: &str) -> Option<usize> {
     let lower = line.to_ascii_lowercase();
     let needle = format!("</{}", tag.to_ascii_lowercase());
     let mut from = 0;
@@ -1687,7 +1792,7 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
                     line,
                     col,
                     format!(
-                        "`{}` takes no inline text — script/style bodies are raw text: use `|` lines under the tag, or §8 raw passthrough (SPEC §6.3)",
+                        "`{}` takes no inline text — script/style bodies are raw text: indent the body under the tag (SPEC §6.3)",
                         el.tag
                     ),
                 );
@@ -1725,7 +1830,7 @@ fn parse_element(cur: &mut Cur, templates: bool, shorthand: bool) -> Result<Elem
                     line,
                     col,
                     format!(
-                        "`{}` cannot chain with `>` — script/style bodies are raw text: use `|` lines under the tag, or §8 raw passthrough (SPEC §6.3)",
+                        "`{}` cannot chain with `>` — script/style bodies are raw text: indent the body under the tag (SPEC §6.3)",
                         el.tag
                     ),
                 );

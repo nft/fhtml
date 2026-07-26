@@ -1,0 +1,8 @@
+div
+  script
+    | (function () {
+    |   legacy();
+    |
+    | })();
+  style
+    | .a > .b { color: red; }

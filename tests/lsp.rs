@@ -629,13 +629,35 @@ fn completion_at_line_start_offers_keywords_and_tags() {
     lsp.shutdown();
 }
 
+#[test]
+fn completion_suppressed_inside_raw_text_bodies() {
+    let mut lsp = Lsp::start();
+    let uri = "untitled:Complete-2";
+    lsp.open(uri, "def card\n  span\nscript\n  co\n  x = a +c\ndiv\n  \n");
+
+    // Line-start context inside the body → nothing (would be tag spam).
+    let reply = lsp.request("textDocument/completion", &pos_params(uri, 3, 4));
+    assert_eq!(get(&reply, "result"), Some(&Value::List(vec![])));
+
+    // `+` on ordinary arithmetic inside the body → nothing (`card` would
+    // otherwise be offered).
+    let reply = lsp.request("textDocument/completion", &pos_params(uri, 4, 10));
+    assert_eq!(get(&reply, "result"), Some(&Value::List(vec![])));
+
+    // Outside the body, line-start completion still works.
+    let reply = lsp.request("textDocument/completion", &pos_params(uri, 6, 2));
+    let items = as_list(get(&reply, "result").expect("result"));
+    assert!(labels(items).contains(&"div"), "{:?}", labels(items));
+    lsp.shutdown();
+}
+
 // ---- the corpus gate ------------------------------------------------------
 
 #[test]
 fn lsp_formatting_matches_fmt_on_every_corpus_file() {
     let mut lsp = Lsp::start();
     let mut checked = 0;
-    for dir in ["bench/out/fhtml", "site"] {
+    for dir in ["bench/out/fhtml", "site", "integrations/npm/test/corpus"] {
         for entry in fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().and_then(|e| e.to_str()) != Some("fhtml") {
@@ -668,7 +690,7 @@ fn lsp_formatting_matches_fmt_on_every_corpus_file() {
             checked += 1;
         }
     }
-    assert!(checked >= 49, "expected the full corpus, checked {checked}");
+    assert!(checked >= 52, "expected the full corpus, checked {checked}");
     lsp.shutdown();
 }
 
@@ -676,7 +698,7 @@ fn lsp_formatting_matches_fmt_on_every_corpus_file() {
 fn full_lifecycle_over_every_corpus_file() {
     let mut lsp = Lsp::start();
     let mut checked = 0;
-    for dir in ["bench/out/fhtml", "site"] {
+    for dir in ["bench/out/fhtml", "site", "integrations/npm/test/corpus"] {
         for entry in fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.extension().and_then(|e| e.to_str()) != Some("fhtml") {
@@ -692,6 +714,6 @@ fn full_lifecycle_over_every_corpus_file() {
             checked += 1;
         }
     }
-    assert!(checked >= 49, "expected the full corpus, checked {checked}");
+    assert!(checked >= 52, "expected the full corpus, checked {checked}");
     lsp.shutdown();
 }

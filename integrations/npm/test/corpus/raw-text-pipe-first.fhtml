@@ -1,0 +1,4 @@
+script
+  | |first| pipe-initial body line stays in pipe form
+style
+  |

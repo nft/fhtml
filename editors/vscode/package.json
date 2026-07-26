@@ -48,7 +48,12 @@
         "language": "fhtml",
         "scopeName": "source.fhtml",
         "path": "./syntaxes/fhtml.tmLanguage.json",
-        "embeddedLanguages": { "meta.embedded.block.html": "html" }
+        "embeddedLanguages": {
+          "meta.embedded.block.html": "html",
+          "meta.embedded.block.javascript": "javascript",
+          "meta.embedded.block.css": "css",
+          "meta.embedded.block.json": "json"
+        }
       }
     ],
     "configuration": {

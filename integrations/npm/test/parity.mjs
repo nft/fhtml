@@ -36,8 +36,14 @@ if (existsSync(benchDir)) {
 for (const f of readdirSync(join(repo, "site")).sort()) {
   if (f.endsWith(".fhtml")) corpus.push(join(repo, "site", f));
 }
+// Checked-in fixtures for syntax the generated corpora may not exercise
+// (raw-text bodies: bare, legacy pipe, pipe-first corner).
+const fixtureDir = join(repo, "integrations/npm/test/corpus");
+for (const f of readdirSync(fixtureDir).sort()) {
+  if (f.endsWith(".fhtml")) corpus.push(join(fixtureDir, f));
+}
 if (existsSync(benchDir)) {
-  assert.ok(corpus.length >= 49, `expected the full corpus, found ${corpus.length}`);
+  assert.ok(corpus.length >= 52, `expected the full corpus, found ${corpus.length}`);
 }
 
 let checks = 0;

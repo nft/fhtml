@@ -387,6 +387,13 @@ impl<W: Write> Server<W> {
             self.respond(id, Value::Null);
             return;
         };
+        // A raw-text body is JS/CSS bytes (SPEC §6.3) — every completion kind
+        // is noise there: the line-start items would fire on each code line,
+        // and the `+` trigger fires on ordinary arithmetic.
+        if in_raw_text_body(&text, line) {
+            self.respond(id, Value::List(Vec::new()));
+            return;
+        }
         let chars: Vec<char> = source_line(&text, line).chars().collect();
         let cursor = (col - 1).min(chars.len());
         // Start of the identifier being typed (may be empty).
@@ -564,6 +571,38 @@ fn range(text: &str, line: usize, col: usize, len: usize) -> Value {
         ("start", position(line - 1, utf16(start))),
         ("end", position(line - 1, utf16(end))),
     ])
+}
+
+/// Whether 1-based `line` sits inside a raw-text element's body (SPEC §6.3):
+/// the nearest non-blank line above with strictly shallower indentation is a
+/// `script`/`style` line (possibly as a `>` chain target). A line-prefix
+/// heuristic in the spirit of analyze's rescan — good enough to keep
+/// completion quiet over JS/CSS bytes.
+fn in_raw_text_body(text: &str, line: usize) -> bool {
+    let indent_len = |l: &str| l.len() - l.trim_start_matches([' ', '\t']).len();
+    let lines: Vec<&str> = text.split('\n').collect();
+    let Some(cur) = lines.get(line - 1) else {
+        return false;
+    };
+    let cur_indent = indent_len(cur);
+    if cur_indent == 0 {
+        return false;
+    }
+    for l in lines[..line - 1].iter().rev() {
+        if l.trim().is_empty() {
+            continue;
+        }
+        if indent_len(l) < cur_indent {
+            // The innermost `>` chain segment owns any body under this line.
+            let seg = l.rsplit('>').next().unwrap_or(l).trim_start();
+            let tag: String = seg
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .collect();
+            return fhtml::is_raw_text(&tag);
+        }
+    }
+    false
 }
 
 fn source_line(text: &str, line: usize) -> &str {

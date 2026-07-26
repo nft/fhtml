@@ -103,8 +103,10 @@ static/
 
 ## Scripts and styles
 
-`script` and `style` bodies are raw text: `|` lines under them emit verbatim,
-with no escaping and **no interpolation**.
+`script` and `style` bodies are raw text: every line indented under the tag
+emits verbatim (no `|` prefix), with no escaping and **no interpolation**.
+Blank lines and relative indentation inside the body are preserved. (The
+pre-0.4 `|`-line form still parses; `fhtml fmt` migrates it.)
 
 - **Do not write inline JavaScript blocks.** Put behavior in a separate `.js`
   file and reference it: `script(src=/js/menu.js defer)`. Inline `script`
@@ -211,8 +213,15 @@ is optional.
 - **A line starting with `<` is raw HTML passthrough**, e.g. an inline `<svg>`:
   its whole indented subtree is emitted verbatim. Continuation lines of one raw
   element are indented 2 extra spaces.
-- **`script`/`style` bodies are raw text**: `|` lines under them emit verbatim —
-  no escaping, no interpolation.
+- **`script`/`style` bodies are raw text**: every line indented under the tag
+  emits verbatim — no `|` prefix, no escaping, no interpolation:
+  ```
+  script
+    if (a < b) {
+      go();
+    }
+  ```
+  (The pre-0.4 `|`-line form still parses; `fhtml fmt` migrates it.)
 - **Mixed inline content** (text with inline elements inside a sentence) is
   written as sibling lines: text as `|` lines, elements as normal lines. An
   empty `|` line preserves a meaningful space between a text line and the

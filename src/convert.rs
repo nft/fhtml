@@ -412,20 +412,6 @@ impl Conv<'_> {
                 out.push(Node::Raw(vec![single_line_raw(handle)]));
                 return;
             }
-            // Raw-text elements: entities don't decode inside them, so these
-            // stay multi-line; re-indentation is safe for CSS/JS except
-            // template literals — hence the backtick warning.
-            "script" | "style" => {
-                let html = serialize_subtree(handle);
-                if text_content(handle).contains('`') {
-                    self.warn(format!(
-                        "<{tag}> contains a backtick — if it's a template literal, \
-                         re-indentation may alter the string"
-                    ));
-                }
-                out.push(raw_multiline(&html));
-                return;
-            }
             _ => {}
         }
 
@@ -436,6 +422,13 @@ impl Conv<'_> {
         // unrepresentable names) become raw open/close tag lines with full
         // fhtml children between them — only the tag lines are raw.
         if self.needs_tag_fallback(&tag, &attr_list) {
+            // Raw-text children are bytes, not markup — the tag-lines-plus-
+            // fhtml-children fallback would escape them, so the whole
+            // element goes through raw instead.
+            if crate::parser::is_raw_text(&tag) {
+                out.push(raw_multiline(&serialize_subtree(handle)));
+                return;
+            }
             let children = self.convert_children(handle, template_contents);
             if children.is_empty() && !crate::parser::is_void(&tag) {
                 out.push(raw_multiline(&format!(
@@ -451,6 +444,32 @@ impl Conv<'_> {
             }
             return;
         }
+
+        // Raw-text elements (SPEC §6.3): the body is the element's text,
+        // verbatim — entities don't decode inside script/style, so the
+        // escaping-based paths would corrupt it. Computed before the Element
+        // so an un-dedentable body can still fall back to passthrough.
+        let raw_body = if crate::parser::is_raw_text(&tag) {
+            let text = text_content(handle);
+            if text.contains('`') {
+                self.warn(format!(
+                    "<{tag}> contains a backtick — if it's a template literal, \
+                     re-indentation may alter the string"
+                ));
+            }
+            match raw_text_body(&text, &tag) {
+                Ok(body) => Some(body),
+                Err(()) => {
+                    self.warn(format!(
+                        "<{tag}> body indentation mixes tabs and spaces — raw passthrough emitted"
+                    ));
+                    out.push(raw_multiline(&serialize_subtree(handle)));
+                    return;
+                }
+            }
+        } else {
+            None
+        };
 
         let mut el = Element {
             tag: tag.clone(),
@@ -489,6 +508,12 @@ impl Conv<'_> {
             }
         }
         drop(attr_list);
+
+        if let Some(body) = raw_body {
+            el.raw_body = body;
+            out.push(Node::Element(el));
+            return;
+        }
 
         let mut children = self.convert_children(handle, template_contents);
 
@@ -689,6 +714,53 @@ fn open_tag_html(tag: &str, attrs: &[Attribute]) -> String {
     }
     s.push('>');
     s
+}
+
+/// Leading spaces/tabs of a line.
+fn leading_ws(l: &str) -> &str {
+    &l[..l.len() - l.trim_start_matches([' ', '\t']).len()]
+}
+
+/// DOM text of a raw-text element → bare body lines (SPEC §6.3): edge blank
+/// lines dropped, every line dedented by the shallowest non-blank line's
+/// indentation. `Err(())` when some line does not extend that indentation
+/// (tabs vs spaces mixed) — such a body would not reparse. Parsed HTML
+/// cannot contain the element's own end tag (the tokenizer would have closed
+/// the element there), so the §6.3 hazard is unreachable here.
+fn raw_text_body(text: &str, tag: &str) -> Result<Option<Vec<String>>, ()> {
+    let mut lines: Vec<&str> = text.split('\n').map(|l| l.trim_end_matches('\r')).collect();
+    while lines.last().is_some_and(|l| l.trim().is_empty()) {
+        lines.pop();
+    }
+    let lead = lines.iter().take_while(|l| l.trim().is_empty()).count();
+    lines.drain(..lead);
+    if lines.is_empty() {
+        return Ok(None);
+    }
+    let prefix = lines
+        .iter()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| leading_ws(l))
+        .min_by_key(|s| s.len())
+        .unwrap()
+        .to_string();
+    let mut body = Vec::new();
+    for l in lines {
+        if l.trim().is_empty() {
+            body.push(l.strip_prefix(prefix.as_str()).unwrap_or("").to_string());
+            continue;
+        }
+        if !leading_ws(l).starts_with(prefix.as_str()) {
+            return Err(());
+        }
+        let line = &l[prefix.len()..];
+        debug_assert!(
+            crate::parser::end_tag_hazard(line, tag).is_none(),
+            "parsed HTML cannot contain its own end tag"
+        );
+        body.push(line.to_string());
+    }
+    Ok(Some(body))
 }
 
 fn text_content(handle: &Handle) -> String {

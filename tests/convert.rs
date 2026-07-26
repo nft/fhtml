@@ -255,13 +255,43 @@ fn pre_leading_newline_survives() {
 }
 
 #[test]
-fn script_stays_multiline() {
+fn script_converts_to_raw_text_element() {
     // (Wrapped in a div — a bare <script> parses into <head>.)
     let html = "<div><script>\nif (a < b) {\n  go()\n}\n</script></div>";
     let out = conv(html);
-    assert!(out.contains("<script>\n"), "{out}");
-    assert!(out.contains("if (a < b)"));
+    assert!(!out.contains("<script"), "{out}");
+    assert!(out.contains("script\n"), "{out}");
+    assert!(out.contains("\n  if (a < b) {"), "{out}");
     assert_roundtrip(html);
+}
+
+#[test]
+fn script_attrs_convert_with_raw_body() {
+    let html = "<div><style media=\"print\">.a { color: red; }</style></div>";
+    let out = conv(html);
+    assert!(out.contains("style("), "{out}");
+    assert!(out.contains(".a { color: red; }"), "{out}");
+    assert_roundtrip(html);
+}
+
+#[test]
+fn script_pipe_first_body_keeps_pipe_spelling() {
+    // A body whose first line starts with `|` is only spellable in the
+    // deprecated pipe form; the printer must not emit it bare.
+    let html = "<div><script>|| init();\nrun();</script></div>";
+    let out = conv(html);
+    assert!(out.contains("| || init();"), "{out}");
+    assert_roundtrip(html);
+}
+
+#[test]
+fn script_unrepresentable_attr_falls_back_to_raw() {
+    // Multi-line attr value holding a `//` comment forces the tag fallback;
+    // for raw-text elements that means the whole element passes through raw.
+    let html = "<div><script x-data=\"a\n// b\">go()</script></div>";
+    let out = conv(html);
+    assert!(out.contains("<script"), "{out}");
+    assert!(out.contains("go()"), "{out}");
 }
 
 #[test]
